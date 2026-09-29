@@ -1,0 +1,6 @@
+{
+  "geoblock": {
+    "enabled": true,
+    "simulateRegion": "allowed"
+  }
+}
