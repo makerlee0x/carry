@@ -2,5 +2,12 @@
   "geoblock": {
     "enabled": true,
     "simulateRegion": "allowed"
+  },
+  "simulate": {
+    "loadingMs": 900,
+    "data": "ok",
+    "network": "ok",
+    "tx": "success",
+    "connect": "success"
   }
 }
