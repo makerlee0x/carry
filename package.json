@@ -4,7 +4,7 @@
   "private": true,
   "description": "Carry marketing site and app prototype (static, hash-routed).",
   "scripts": {
-    "dev": "npx serve public -l 3000",
+    "dev": "npx serve public -l 3000 -s",
     "build": "echo \"Static site, nothing to build\""
   }
 }
