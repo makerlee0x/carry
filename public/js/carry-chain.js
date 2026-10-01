@@ -17,9 +17,9 @@
   const REFRESH_MS = 20000;
 
   let viem, pub, cfg, vaultAbi, provider, chainDef;
-  const S = { ready: false, vault: null, account: null, chainId: null, ui: null, raw: [], analytics: null, error: null };
+  const S = { ready: false, vault: null, account: null, chainId: null, ui: null, raw: [], analytics: null, connectLink: null, error: null };
 
-  const snapshot = () => ({ ready: S.ready, vault: S.vault, account: S.account, chainId: S.chainId, ui: S.ui, analytics: S.analytics, error: S.error });
+  const snapshot = () => ({ ready: S.ready, vault: S.vault, account: S.account, chainId: S.chainId, ui: S.ui, analytics: S.analytics, connectLink: S.connectLink, error: S.error });
   const emit = () => {
     window.CarryChain.last = snapshot();
     window.dispatchEvent(new CustomEvent('carrychain', { detail: window.CarryChain.last }));
@@ -40,14 +40,24 @@
   // the user approves there, and the connection returns to this page. Loaded only when it is needed.
   const SDK_URL = 'https://esm.sh/@metamask/sdk@0.34.0?bundle';   // the ?bundle build; the plain browser builds of the SDK fail to start
   const SDK_FLAG = 'carry_mm_sdk';
-  const isMobile = () => /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent));
+  // A phone, even when the browser asks for the desktop site (its user agent then looks like a computer).
+  const isMobile = () => {
+    const ua = navigator.userAgent || '';
+    if (/Android|iPhone|iPad|iPod|Mobile/i.test(ua)) return true;
+    if (navigator.userAgentData && navigator.userAgentData.mobile) return true;
+    if (navigator.maxTouchPoints > 1 && /Macintosh/.test(ua)) return true;   // iPad asking for the desktop site
+    try { return navigator.maxTouchPoints > 0 && window.matchMedia('(pointer: coarse)').matches; } catch (e) { return false; }
+  };
   const appLink = () => 'https://metamask.app.link/dapp/' + location.host + location.pathname + location.search + location.hash;
   let sdkP = null;
   function mobileProvider() {
     if (!sdkP) {
       sdkP = (async () => {
+        // The connector keeps its session in localStorage, which the test page shares with this site. Start each page load
+        // with a fresh channel so one page never resumes the other's half-finished or stale connection.
+        try { localStorage.removeItem('.sdk-comm'); } catch (e) {}
         const mod = await import(SDK_URL), Ctor = mod.MetaMaskSDK || mod.default;
-        const sdk = new Ctor({ dappMetadata: { name: 'Carry', url: location.origin }, checkInstallationImmediately: false, logging: { sdk: false } });
+        const sdk = new Ctor({ dappMetadata: { name: 'Carry', url: location.origin }, useDeeplink: false, injectProvider: false, checkInstallationImmediately: false, logging: { sdk: false } });
         await sdk.init();
         let pr = sdk.getProvider(); const t0 = Date.now();
         while (!pr && Date.now() - t0 < 6000) { await new Promise((r) => setTimeout(r, 200)); pr = sdk.getProvider(); }
@@ -394,6 +404,18 @@
     await refresh();
   }
 
+  // The SDK opens the app itself, but a browser may block that when it is not a direct result of a tap.
+  // So the connect link is also handed to the UI, which shows it as a button the user can tap.
+  async function publishAppLink(sdk) {
+    try {
+      for (let i = 0; i < 40; i++) {
+        let link = ''; try { link = sdk && sdk.getUniversalLink ? String(sdk.getUniversalLink() || '') : ''; } catch (e) { /* not started yet */ }
+        if (/channelId=/.test(link)) { S.connectLink = link; emit(); return; }
+        await sleep(150);
+      }
+    } catch (e) {}
+  }
+
   async function connect() {
     await readyP;
     if (!S.ready) return { ok: false, code: 'error', message: 'The blockchain library failed to load. Check your connection and reload.' };
@@ -402,16 +424,24 @@
     if (!provider) {
       if (!isMobile()) return { ok: false, code: 'nowallet', message: 'MetaMask not found. Install the MetaMask browser extension and reload.' };
       try { provider = await mobileProvider(); viaApp = true; }
-      catch (e) { location.href = appLink(); return { ok: false, code: 'error', message: 'Opening the MetaMask app…' }; }   // fallback: reopen the site inside MetaMask's own browser
+      catch (e) {   // fallback: the site can be reopened inside MetaMask's own browser (the UI offers this as a button)
+        S.connectLink = null; emit();
+        try { location.href = appLink(); } catch (x) {}
+        return { ok: false, code: 'error', message: 'Could not start the MetaMask connection. Tap "Open this site in MetaMask" below.' };
+      }
     }
     try {
-      const accts = await withTimeout(provider.request({ method: 'eth_requestAccounts' }), 60000, 'no-response');
+      const reqP = withTimeout(provider.request({ method: 'eth_requestAccounts' }), viaApp ? 120000 : 60000, 'no-response');
+      if (viaApp) publishAppLink(provider.__sdk);   // gives the UI a link the user can tap to open the MetaMask app
+      const accts = await reqP;
+      S.connectLink = null;
       if (viaApp) { try { localStorage.setItem(SDK_FLAG, '1'); } catch (e) {} }
       flag(false);
       listen();
       await setAccounts(accts);
       return { ok: true, account: S.account };
     } catch (e) {
+      S.connectLink = null; emit();
       if (e && (e.code === 4001 || /reject|denied/i.test(e.message || ''))) return { ok: false, code: 'rejected', message: 'Connection request was rejected in MetaMask.' };
       if (e && e.code === -32002) return { ok: false, code: 'error', message: 'A connection request is already open in MetaMask. Open the MetaMask app, approve or reject it, then try again.' };
       if (e && e.message === 'no-response') return { ok: false, code: 'error', message: 'MetaMask did not respond. Open the MetaMask app, check for a pending request, then try again.' };
@@ -473,6 +503,7 @@
     S.ready = true;
 
     readyResolve();
+    if (isMobile() && !findMetaMask()) setTimeout(() => { mobileProvider().catch(() => {}); }, 1500);   // warm the phone connector so a tap can launch the app at once
     refresh();   // public vault data does not need a wallet
     await restoreWallet();
     if (S.account) await refresh();
@@ -480,7 +511,7 @@
     document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
   }
 
-  window.CarryChain = { last: snapshot(), connect, disconnect, refresh, afterTx, leftText, deposit, withdraw, mint };
+  window.CarryChain = { last: snapshot(), connect, disconnect, refresh, afterTx, leftText, deposit, withdraw, mint, needsApp: () => isMobile() && !findMetaMask(), appLink };
   const initP = init();
   initP.catch((e) => { S.error = (e && e.message) || String(e); console.warn('[CarryChain]', e); readyResolve(); emit(); });
 })();

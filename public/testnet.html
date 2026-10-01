@@ -241,6 +241,13 @@ const link = (id, addr) => {
 };
 const err = (msg) => { $('errNote').textContent = msg || ''; show('errNote', !!msg); };
 const info = (msg) => { $('infoNote').textContent = msg || ''; show('infoNote', !!msg); };
+function showApp(connectLink, dappLink, lead) {
+  const box = $('infoNote'); box.textContent = (lead || 'Opening MetaMask. Approve the connection in the app, then come back to this page.') + ' ';
+  const add = (href, label) => { const a = document.createElement('a'); a.href = href; a.textContent = label; a.style.cssText = 'display:inline-block;margin:8px 8px 0 0;color:var(--green);'; box.appendChild(a); };
+  if (connectLink) add(connectLink, 'Open MetaMask app');
+  add(dappLink, 'Or open this page inside MetaMask');
+  show('infoNote', true);
+}
 
 async function loadJson(path) {
   const r = await fetch(path, { cache: 'no-store' });
@@ -249,17 +256,23 @@ async function loadJson(path) {
 }
 
 // On phones there is no injected wallet: MetaMask's SDK opens the MetaMask app and returns the connection to this page.
-const isMobile = () => /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent));
+const isMobile = () => {   // a phone, even when the browser asks for the desktop site
+  const ua = navigator.userAgent || '';
+  if (/Android|iPhone|iPad|iPod|Mobile/i.test(ua) || (navigator.userAgentData && navigator.userAgentData.mobile) || (navigator.maxTouchPoints > 1 && /Macintosh/.test(ua))) return true;
+  try { return navigator.maxTouchPoints > 0 && window.matchMedia('(pointer: coarse)').matches; } catch (e) { return false; }
+};
 let sdkP = null;
 function mobileProvider() {
   if (!sdkP) {
     sdkP = (async () => {
+      try { localStorage.removeItem('.sdk-comm'); } catch (e) {}   // fresh channel per page load (storage is shared with the main site)
       const mod = await import('https://esm.sh/@metamask/sdk@0.34.0?bundle'), Ctor = mod.MetaMaskSDK || mod.default;
-      const sdk = new Ctor({ dappMetadata: { name: 'Carry testnet', url: location.origin }, checkInstallationImmediately: false, logging: { sdk: false } });
+      const sdk = new Ctor({ dappMetadata: { name: 'Carry testnet', url: location.origin }, useDeeplink: false, injectProvider: false, checkInstallationImmediately: false, logging: { sdk: false } });
       await sdk.init();
       let pr = sdk.getProvider(); const t0 = Date.now();
       while (!pr && Date.now() - t0 < 6000) { await new Promise((r) => setTimeout(r, 200)); pr = sdk.getProvider(); }
       if (!pr) throw new Error('MetaMask connector did not start.');
+      pr.__sdk = sdk;
       return pr;
     })();
     sdkP.catch(() => { sdkP = null; });
@@ -414,8 +427,11 @@ async function connect() {
   provider = findMetaMask();
   if (!provider) {
     if (!isMobile()) { show('noWallet', true); return; }
-    try { info('Opening MetaMask. Approve the connection in the app, then come back to this page.'); provider = await mobileProvider(); }
-    catch (e) { location.href = 'https://metamask.app.link/dapp/' + location.host + location.pathname; return; }   // fallback: reopen this page inside MetaMask's own browser
+    const dapp = 'https://metamask.app.link/dapp/' + location.host + location.pathname;
+    try { showApp(null, dapp); provider = await mobileProvider(); }
+    catch (e) { showApp(null, dapp, 'Could not start the MetaMask connection.'); return; }
+    // tap-to-open links: a browser can block an app launch that is not a direct result of a tap
+    (async () => { for (let i = 0; i < 40; i++) { let l = ''; try { l = String(provider.__sdk.getUniversalLink() || ''); } catch (x) {} if (/channelId=/.test(l)) { showApp(l, dapp); return; } await new Promise((r) => setTimeout(r, 150)); } })();
   }
   try {
     const accts = await provider.request({ method: 'eth_requestAccounts' });
