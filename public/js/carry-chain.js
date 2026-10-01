@@ -17,7 +17,7 @@
   const REFRESH_MS = 20000;
 
   let viem, pub, cfg, vaultAbi, provider, chainDef;
-  const S = { ready: false, vault: null, account: null, chainId: null, ui: null, error: null };
+  const S = { ready: false, vault: null, account: null, chainId: null, ui: null, raw: [], error: null };
 
   const snapshot = () => ({ ready: S.ready, vault: S.vault, account: S.account, chainId: S.chainId, ui: S.ui, error: S.error });
   const emit = () => {
@@ -65,7 +65,7 @@
 
   // ---- Wallet data ---------------------------------------------------------
   async function readAccount() {
-    if (!S.account) { S.ui = null; return; }
+    if (!S.account) { S.ui = null; S.raw = []; return; }
     const a = S.account;
     const erc = viem.parseAbi(['function balanceOf(address) view returns (uint256)']);
     const rd = (functionName, args) => pub.readContract({ address: cfg.vault, abi: vaultAbi, functionName, args });
@@ -86,6 +86,7 @@
 
     const now = Math.floor(Date.now() / 1000), term = S.vault.termSec, price = S.vault.price;
     const live = raw.filter((r) => !r.settled);
+    S.raw = live;
     const positions = [];
 
     if (live.length) {
@@ -144,6 +145,128 @@
     return refresh();
   }
 
+
+  // ---- Transactions --------------------------------------------------------
+  const REASONS = {
+    Paused: 'The vault is paused by its owner, so new deposits are blocked.',
+    ZeroAmount: 'Amount must be greater than zero.',
+    InsufficientFree: 'That much USDG is still matched with stock deposits. Only idle USDG can be withdrawn until those positions close.',
+    NotJunior: 'This position belongs to a different wallet.',
+    NotMatched: 'This position has not been matched with USDG yet.',
+    AlreadyMatched: 'This position is already matched, so it cannot be withdrawn without an early exit.',
+    AlreadySettled: 'This position is already closed.',
+    TermElapsed: 'The 7-day term has ended. Settle the position instead.',
+    TermNotElapsed: 'The 7-day term has not ended yet.',
+    BadPosition: 'Position not found.',
+    FeeOnTransfer: 'This token takes a fee on transfer, which the vault rejects.',
+  };
+  function nice(e) {
+    if (!e) return 'Transaction failed.';
+    if (e.code === 4001 || /user rejected|user denied|rejected the request/i.test(e.message || '')) return 'You rejected the request in MetaMask. No funds were moved.';
+    const hit = e.walk ? e.walk((x) => x && x.data && x.data.errorName) : null;
+    const name = hit && hit.data && hit.data.errorName;
+    if (name && REASONS[name]) return REASONS[name];
+    if (/insufficient funds/i.test(e.message || '')) return 'Not enough ETH to pay for gas. Get some from the faucet.';
+    return e.shortMessage || e.message || 'Transaction failed.';
+  }
+  const isRejected = (e) => !!e && (e.code === 4001 || /user rejected|user denied|rejected the request/i.test(e.message || ''));
+  const fail = (e) => ({ ok: false, rejected: isRejected(e), error: e && e.userMessage ? e.userMessage : nice(e) });
+  const user = (msg) => Object.assign(new Error(msg), { userMessage: msg });
+
+  function guard() {
+    if (!provider || !S.account) throw user('Connect MetaMask first.');
+    if (S.chainId !== cfg.chainId) throw user('Switch MetaMask to Robinhood Chain Testnet first.');
+  }
+  const wallet = () => viem.createWalletClient({ account: S.account, chain: chainDef, transport: viem.custom(provider) });
+  const ERC20 = () => viem.parseAbi([
+    'function approve(address,uint256) returns (bool)',
+    'function allowance(address,address) view returns (uint256)',
+    'function balanceOf(address) view returns (uint256)',
+    'function mint(address,uint256)',
+  ]);
+  const toWei = (amount) => {
+    const raw = String(amount).trim();
+    if (!/^\d*\.?\d+$/.test(raw)) throw user('Enter a valid amount.');
+    const w = viem.parseUnits(raw, 18);
+    if (w <= 0n) throw user('Amount must be greater than zero.');
+    return w;
+  };
+
+  // Simulate first (gives readable reasons), send, wait for the receipt.
+  async function send(call, step, label) {
+    if (step) step(label);
+    const { request } = await pub.simulateContract({ ...call, account: S.account });
+    const hash = await wallet().writeContract(request);
+    if (step) step('Waiting for confirmation…');
+    const rcpt = await pub.waitForTransactionReceipt({ hash });
+    if (rcpt.status !== 'success') throw user('The transaction reverted on chain.');
+    return hash;
+  }
+
+  async function deposit({ sym, amount, onStep }) {
+    try {
+      guard();
+      const wei = toWei(amount), token = sym === 'USDG' ? cfg.usdg : cfg.mstr, name = sym === 'USDG' ? 'mUSDG' : 'mMSTR';
+      const bal = await pub.readContract({ address: token, abi: ERC20(), functionName: 'balanceOf', args: [S.account] });
+      if (bal < wei) throw user(`Not enough ${name}. You have ${num(bal)}.`);
+      const have = await pub.readContract({ address: token, abi: ERC20(), functionName: 'allowance', args: [S.account, cfg.vault] });
+      if (have < wei) await send({ address: token, abi: ERC20(), functionName: 'approve', args: [cfg.vault, wei] }, onStep, 'Approve ' + name + ' in MetaMask…');
+      const fn = sym === 'USDG' ? 'depositSenior' : 'depositJunior';
+      const hash = await send({ address: cfg.vault, abi: vaultAbi, functionName: fn, args: [wei] }, onStep, 'Confirm the deposit in MetaMask…');
+      await refresh();
+      return { ok: true, hash, msg: sym === 'USDG' ? 'USDG deposited. It matches waiting stock deposits first-in-first-out.' : 'Deposit confirmed. Your position opens once USDG matches it.' };
+    } catch (e) { return fail(e); }
+  }
+
+  async function withdraw({ sym, amount, onStep }) {
+    try {
+      guard();
+      await refresh();
+      if (sym === 'USDG') {
+        let wei = toWei(amount);
+        const free = await pub.readContract({ address: cfg.vault, abi: vaultAbi, functionName: 'freePrincipal', args: [S.account] });
+        if (wei > free && wei - free < 10n ** 15n) wei = free;   // display rounding
+        if (wei > free) throw user(`Only ${num(free).toLocaleString('en-US', { maximumFractionDigits: 4 })} USDG is idle and withdrawable. The rest is matched with stock deposits until those positions close.`);
+        const hash = await send({ address: cfg.vault, abi: vaultAbi, functionName: 'withdrawSenior', args: [wei] }, onStep, 'Confirm the withdrawal in MetaMask…');
+        await refresh();
+        return { ok: true, hash, msg: 'USDG withdrawn, plus any claimable yield.' };
+      }
+      // Stock positions leave whole: the vault has no partial withdrawals.
+      const now = Math.floor(Date.now() / 1000), term = S.vault.termSec;
+      const total = S.raw.reduce((x, r) => x + r.mstr, 0);
+      if (!S.raw.length) throw user('You have no stock positions to withdraw.');
+      if (Math.abs(Number(amount) - total) > 1e-4) throw user(`Stock positions withdraw in full. Use the full amount: ${round(total, 4)} MSTR.`);
+      const open = S.raw.filter((r) => !r.matched), ready = S.raw.filter((r) => r.matched && r.openedAt + term <= now), act = S.raw.filter((r) => r.matched && r.openedAt + term > now);
+      let group, fn, label, msg;
+      if (open.length) { group = open; fn = 'withdrawUnmatched'; label = 'Confirm the withdrawal in MetaMask…'; msg = 'Stock returned to your wallet.'; }
+      else if (ready.length) { group = ready; fn = 'settle'; label = 'Confirm settlement in MetaMask…'; msg = 'Position settled. Stock and fees returned to your wallet.'; }
+      else {
+        group = act; fn = 'earlyExit'; label = 'Confirm the early exit in MetaMask…'; msg = 'Early exit complete. Remaining stock and fees returned to your wallet.';
+        const prev = await Promise.all(group.map((r) => pub.readContract({ address: cfg.vault, abi: vaultAbi, functionName: 'previewEarlyExit', args: [r.id] })));
+        const sum = (k) => prev.reduce((x, p) => x + num(p[k]), 0), f = (n) => n.toLocaleString('en-US', { maximumFractionDigits: 4 });
+        const ok = window.confirm(`Early exit closes ${group.length > 1 ? group.length + ' positions' : 'this position'} before the 7-day term ends.\n\n` +
+          `Coupon owed to the lender: ${f(sum('couponOwed'))} USDG\nPaid from position fees: ${f(sum('fromPositionFees'))} USDG\n` +
+          `Stock sold to cover the rest: ${f(sum('mstrSold'))} MSTR\nStock returned to you: ${f(sum('mstrReturned'))} MSTR\n` +
+          `Fees returned to you: ${f(sum('juniorLeftoverFees'))} USDG\n\nContinue?`);
+        if (!ok) throw user('Early exit cancelled. No funds were moved.');
+      }
+      let hash;
+      for (const r of group) hash = await send({ address: cfg.vault, abi: vaultAbi, functionName: fn, args: [r.id] }, onStep, label);
+      await refresh();
+      const rest = S.raw.length;
+      return { ok: true, hash, msg: rest ? msg + ' You have more positions. Withdraw again to handle them.' : msg };
+    } catch (e) { return fail(e); }
+  }
+
+  async function mint({ sym, amount, onStep }) {
+    try {
+      guard();
+      const token = sym === 'USDG' ? cfg.usdg : cfg.mstr;
+      const hash = await send({ address: token, abi: ERC20(), functionName: 'mint', args: [S.account, toWei(amount)] }, onStep, 'Confirm in MetaMask…');
+      await refresh();
+      return { ok: true, hash, msg: 'Test tokens added to your wallet.' };
+    } catch (e) { return fail(e); }
+  }
 
   // ---- Connect -------------------------------------------------------------
   async function setAccounts(accts) {
@@ -215,7 +338,7 @@
     setInterval(refresh, REFRESH_MS);
   }
 
-  window.CarryChain = { last: snapshot(), connect, disconnect, refresh, afterTx, leftText };
+  window.CarryChain = { last: snapshot(), connect, disconnect, refresh, afterTx, leftText, deposit, withdraw, mint };
   const initP = init();
   initP.catch((e) => { S.error = (e && e.message) || String(e); console.warn('[CarryChain]', e); emit(); });
 })();
