@@ -1,8 +1,8 @@
 {
-  "name": "carry-site",
+  "name": "carry",
   "version": "0.1.0",
   "private": true,
-  "description": "Carry marketing site and app prototype (static, hash-routed).",
+  "description": "Carry app (UI + LeveredLpVault) on Robinhood Chain Testnet",
   "scripts": {
     "dev": "npx serve public -l 3000 -s",
     "build": "echo \"Static site, nothing to build\""

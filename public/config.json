@@ -9,5 +9,20 @@
     "network": "ok",
     "tx": "success",
     "connect": "success"
+  },
+  "chain": {
+    "live": true,
+    "chainId": 46630,
+    "chainIdHex": "0xb626",
+    "chainName": "Robinhood Chain Testnet",
+    "rpcUrl": "https://rpc.testnet.chain.robinhood.com",
+    "explorerUrl": "https://explorer.testnet.chain.robinhood.com",
+    "vault": "0x72A053120f03B10c5506d2325f92F59B0FfC36c8",
+    "mstr": "0x762019309B536bbb89577422FaaFBeC9659f8728",
+    "usdg": "0x25030Bff74764aD72b912276a603717DB1C00644",
+    "oracle": "0xc74Af7E23A2B4b46B5Fe05E5c7c5ec0BB5dbc5B7",
+    "feePool": "0xa4122524aD97Aab05cAC7F99c04Cd060D02F0771",
+    "vaultOwner": "0xcA44F2dbB2D43b93b39F01B88E0f0e2966983c57",
+    "decimals": 18
   }
 }

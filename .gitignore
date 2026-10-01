@@ -1,3 +1,17 @@
 node_modules/
 .vercel/
 .DS_Store
+
+# Secrets — never commit
+.env
+.env.local
+.env.*.local
+.env.carry*
+.dev.vars
+*.pem
+.deployer.key
+.deployer.address
+
+# Foundry build artifacts (source + broadcast run-latest are tracked)
+contracts/cache/
+contracts/out/

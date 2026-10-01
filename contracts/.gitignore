@@ -1,0 +1,8 @@
+cache/
+out/
+broadcast/*/*/dry-run/
+.env
+.env.*
+.deployer.key
+.deployer.address
+*.pem
