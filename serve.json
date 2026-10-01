@@ -1,0 +1,7 @@
+{
+  "cleanUrls": true,
+  "rewrites": [
+    { "source": "/analytics", "destination": "/index.html" },
+    { "source": "/strategy-coin", "destination": "/index.html" }
+  ]
+}

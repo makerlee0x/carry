@@ -4,7 +4,7 @@
   "private": true,
   "description": "Carry app (UI + LeveredLpVault) on Robinhood Chain Testnet",
   "scripts": {
-    "dev": "npx serve public -l 3000 -s",
+    "dev": "npx serve public -l 3000 -c ../serve.json",
     "build": "echo \"Static site, nothing to build\""
   }
 }

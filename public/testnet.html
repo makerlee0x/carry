@@ -1,0 +1,647 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Carry Testnet Wireframe</title>
+<link rel="icon" href="assets/favicon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0b0c0a; --card: #161613; --inset: #22211d;
+    --line: #2f2c27; --line2: #3c372f;
+    --cream: #e6dac0; --muted: #d9ccad; --dim: #a09173;
+    --green: #b7ffae; --deep: #0f2a18; --deepline: #1d5a2a;
+    --up: #3dff5a; --down: #ff2a1a; --amber: #ffc21a;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--cream); font-family: 'Inter Tight', sans-serif; font-size: 15px; line-height: 1.5; }
+  .mono { font-family: 'JetBrains Mono', monospace; }
+  .banner { background: #2a2208; border-bottom: 1px solid var(--amber); color: var(--amber); font: 500 12px 'JetBrains Mono', monospace; text-align: center; padding: 8px 24px; }
+  .wrap { max-width: 1248px; margin: 0 auto; padding: 0 24px 64px; }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 24px 0; flex-wrap: wrap; }
+  header img { height: 26px; display: block; }
+  h1 { font: 700 28px 'JetBrains Mono', monospace; margin: 8px 0 4px; }
+  h2 { font: 700 16px 'JetBrains Mono', monospace; margin: 0; }
+  .eyebrow { font: 500 11px 'JetBrains Mono', monospace; letter-spacing: .08em; text-transform: uppercase; color: var(--dim); }
+  .sub { color: var(--muted); margin: 0 0 24px; max-width: 680px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 20px; }
+  .card.wide { grid-column: 1 / -1; }
+  .card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+  .row { display: flex; justify-content: space-between; gap: 16px; padding: 9px 0; border-top: 1px solid var(--line); }
+  .row:first-of-type { border-top: 0; }
+  .row .k { color: var(--dim); }
+  .row .v { font-family: 'JetBrains Mono', monospace; text-align: right; word-break: break-all; }
+  .row .v a { color: var(--green); text-decoration: none; }
+  .row .v a:hover { text-decoration: underline; }
+  .btn { font: 700 13px 'JetBrains Mono', monospace; border-radius: 4px; padding: 10px 16px; cursor: pointer; border: 1px solid transparent; }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+  .btn.primary { background: var(--green); color: #0b0c0a; }
+  .btn.primary:hover:not(:disabled) { box-shadow: 0 0 18px rgba(183,255,174,.35); }
+  .btn.secondary { background: var(--deep); color: var(--green); border-color: var(--deepline); }
+  .btn.tertiary { background: var(--inset); color: var(--cream); border-color: var(--line2); }
+  .pill { display: inline-block; font: 500 11px 'JetBrains Mono', monospace; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--line2); color: var(--muted); background: var(--inset); }
+  .pill.ok { color: var(--up); border-color: var(--deepline); background: var(--deep); }
+  .pill.warn { color: var(--amber); border-color: var(--amber); background: #2a2208; }
+  .pill.bad { color: var(--down); border-color: var(--down); background: #2a0d0a; }
+  .notice { border: 1px solid var(--amber); background: #2a2208; color: var(--amber); border-radius: 10px; padding: 12px 16px; margin-bottom: 16px; font-size: 14px; }
+  .notice.bad { border-color: var(--down); background: #2a0d0a; color: var(--down); }
+  .notice[hidden] { display: none; }
+  .notice .btn { margin-left: 12px; padding: 6px 12px; }
+  .muted { color: var(--dim); font-size: 13px; }
+  .soon { opacity: .75; }
+  .soon li { margin: 4px 0; }
+  ul { padding-left: 18px; margin: 8px 0 0; color: var(--muted); }
+  .sk { color: var(--dim); }
+  .field { display: flex; gap: 8px; margin: 12px 0 8px; }
+  .field input { flex: 1; min-width: 0; background: var(--inset); border: 1px solid var(--line2); border-radius: 4px; color: var(--cream); font: 500 14px 'JetBrains Mono', monospace; padding: 10px 12px; }
+  .field input:focus { outline: none; border-color: var(--green); }
+  .btnrow { display: flex; gap: 8px; flex-wrap: wrap; }
+  .tx { padding: 8px 0; border-top: 1px solid var(--line); font-size: 14px; display: flex; justify-content: space-between; gap: 12px; }
+  .tx:first-child { border-top: 0; }
+  .tx a { color: var(--green); text-decoration: none; font-family: 'JetBrains Mono', monospace; }
+  @media (prefers-reduced-motion: no-preference) { .loading .v { animation: pulse 1.2s ease-in-out infinite; } }
+  @keyframes pulse { 50% { opacity: .4; } }
+  @media (max-width: 520px) { .grid { grid-template-columns: 1fr; } .row { flex-direction: column; gap: 2px; } .row .v { text-align: left; } }
+</style>
+</head>
+<body>
+<div class="banner">TESTNET WIREFRAME · Robinhood Chain Testnet (46630) · mock tokens, no real value</div>
+<div class="wrap">
+  <header>
+    <img src="assets/carry-logo-white.png" alt="Carry">
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <span id="chainPill" class="pill">network: …</span>
+      <button id="connectBtn" class="btn primary">Connect MetaMask</button>
+    </div>
+  </header>
+
+  <div class="eyebrow">&gt; testnet wireframe</div>
+  <h1>Contract test page</h1>
+  <p class="sub">A standalone page for wiring Carry to the testnet contracts. It is not part of the main site. Wallet, vault data, test tokens, deposits, positions, withdrawals and fees.</p>
+
+  <div id="noWallet" class="notice bad" hidden>MetaMask not found. Install the MetaMask browser extension, then reload this page.</div>
+  <div id="wrongNet" class="notice" hidden>Your wallet is on the wrong network. <button id="switchBtn" class="btn secondary">Switch to Robinhood Testnet</button></div>
+  <div id="pausedNote" class="notice" hidden>The vault is paused. New deposits will revert until the owner unpauses it.</div>
+  <div id="errNote" class="notice bad" hidden></div>
+
+  <div class="grid">
+    <section class="card" id="walletCard">
+      <div class="card-head"><h2>1 · Wallet</h2><span id="walletPill" class="pill">not connected</span></div>
+      <div class="row"><span class="k">Account</span><span class="v" id="acct">—</span></div>
+      <div class="row"><span class="k">Network</span><span class="v" id="net">—</span></div>
+      <div class="row"><span class="k">ETH (gas)</span><span class="v" id="balEth">—</span></div>
+      <div class="row"><span class="k">mMSTR</span><span class="v" id="balMstr">—</span></div>
+      <div class="row"><span class="k">mUSDG</span><span class="v" id="balUsdg">—</span></div>
+      <p class="muted">Need gas? <a id="faucetLink" href="#" target="_blank" rel="noopener" style="color:var(--green)">Testnet faucet</a></p>
+    </section>
+
+    <section class="card" id="vaultCard">
+      <div class="card-head"><h2>2 · Vault (read-only)</h2><span id="vaultPill" class="pill">loading</span></div>
+      <div class="row"><span class="k">Contract</span><span class="v" id="vAddr">—</span></div>
+      <div class="row"><span class="k">Deposits</span><span class="v" id="vPaused">—</span></div>
+      <div class="row"><span class="k">Term</span><span class="v" id="vTerm">—</span></div>
+      <div class="row"><span class="k">Borrow APR</span><span class="v" id="vApr">—</span></div>
+      <div class="row"><span class="k">Protocol cut</span><span class="v" id="vCut">—</span></div>
+      <div class="row"><span class="k">Oracle price (MSTR)</span><span class="v" id="vPrice">—</span></div>
+      <div class="row"><span class="k">Positions created</span><span class="v" id="vPositions">—</span></div>
+      <div class="row"><span class="k">Total senior USDG</span><span class="v" id="vSenior">—</span></div>
+      <div class="row"><span class="k">Matched (reserved)</span><span class="v" id="vReserved">—</span></div>
+      <div class="row"><span class="k">Idle (free)</span><span class="v" id="vFree">—</span></div>
+      <div class="row"><span class="k">Backstop</span><span class="v" id="vBackstop">—</span></div>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><h2>Your lender position</h2><span class="pill">read-only</span></div>
+      <div class="row"><span class="k">USDG lent</span><span class="v" id="mySenior">—</span></div>
+      <div class="row"><span class="k">Withdrawable now</span><span class="v" id="myFree">—</span></div>
+      <div class="row"><span class="k">Claimable yield</span><span class="v" id="myYield">—</span></div>
+      <div class="row"><span class="k">Claimable MSTR</span><span class="v" id="myMstr">—</span></div>
+      <div class="field"><input id="wdSenior" inputmode="decimal" placeholder="USDG to withdraw" aria-label="USDG to withdraw"><button class="btn tertiary" data-act="max-withdraw">Max</button></div>
+      <div class="btnrow"><button class="btn secondary" data-act="withdraw-senior">Withdraw USDG</button></div>
+      <p class="muted" style="margin-bottom:0">7 · Only idle (unmatched) USDG can leave. Matched USDG unlocks when its position closes. Withdrawing also pays out any claimable yield and MSTR.</p>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><h2>Contracts</h2><button id="refreshBtn" class="btn tertiary">Refresh</button></div>
+      <div id="contractRows"></div>
+      <p class="muted" id="updated">Not loaded yet.</p>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><h2>3 · Get test tokens</h2><span class="pill">testnet mint</span></div>
+      <p class="muted" style="margin:0">Anyone can mint the mock tokens. They have no value.</p>
+      <div class="field"><input id="mintMstr" inputmode="decimal" value="100" aria-label="mMSTR amount"><button class="btn secondary" data-act="mint-mstr">Mint mMSTR</button></div>
+      <div class="field"><input id="mintUsdg" inputmode="decimal" value="10000" aria-label="mUSDG amount"><button class="btn secondary" data-act="mint-usdg">Mint mUSDG</button></div>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><h2>4 · Deposit stock</h2><span class="pill">writes to chain</span></div>
+      <p class="muted" style="margin:0">Junior side. Two wallet prompts: approve mMSTR, then deposit. Opens a position that waits for matching USDG.</p>
+      <div class="field"><input id="depMstr" inputmode="decimal" placeholder="mMSTR amount" aria-label="mMSTR to deposit"><button class="btn tertiary" data-act="max-mstr">Max</button></div>
+      <div class="btnrow"><button class="btn primary" data-act="deposit-mstr">Approve &amp; deposit</button></div>
+      <p class="muted" id="depMstrHint" style="margin-bottom:0"></p>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><h2>5 · Lend USDG</h2><span class="pill">writes to chain</span></div>
+      <p class="muted" style="margin:0">Senior side. Two wallet prompts: approve mUSDG, then deposit. Matches waiting stock deposits first-in-first-out.</p>
+      <div class="field"><input id="depUsdg" inputmode="decimal" placeholder="mUSDG amount" aria-label="mUSDG to lend"><button class="btn tertiary" data-act="max-usdg">Max</button></div>
+      <div class="btnrow"><button class="btn primary" data-act="deposit-usdg">Approve &amp; lend</button></div>
+      <p class="muted" id="depUsdgHint" style="margin-bottom:0"></p>
+    </section>
+
+    <section class="card wide">
+      <div class="card-head"><h2>6 · Positions</h2><span id="posPill" class="pill">read-only</span></div>
+      <div id="posList"><p class="muted" style="margin:0">Loading…</p></div>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><h2>Fund backstop</h2><span class="pill">writes to chain</span></div>
+      <p class="muted" style="margin:0">Anyone can add USDG to the vault's backstop, the reserve that covers shortfalls at settlement. Not blocked by the pause.</p>
+      <div class="field"><input id="fundAmt" inputmode="decimal" value="100" aria-label="mUSDG to add to the backstop"><button class="btn secondary" data-act="fund-backstop">Approve &amp; fund</button></div>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><h2>8 · Simulate fees</h2><span class="pill warn">mock only</span></div>
+      <p class="muted" style="margin:0">Stands in for swap fees. Pushes your mUSDG into an Active position through the mock fee pool (20% goes to the backstop, the rest to the position). Needs an Active position.</p>
+      <div class="field"><input id="feePos" inputmode="numeric" placeholder="Position #" aria-label="Position number" style="max-width:130px"><input id="feeAmt" inputmode="decimal" value="10" aria-label="mUSDG fee amount"></div>
+      <div class="btnrow"><button class="btn secondary" data-act="pay-fee">Approve &amp; push fees</button></div>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><h2>Test controls</h2><span class="pill warn">mock only</span></div>
+      <p class="muted" style="margin:0">The mock oracle lets anyone set the MSTR price. On the real system the price comes from a price feed. Changing it affects everyone testing this vault.</p>
+      <div class="field"><input id="oraclePrice" inputmode="decimal" value="100" aria-label="MSTR price in USD"><button class="btn secondary" data-act="set-price">Set price ($)</button></div>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><h2>Transactions</h2><span id="txPill" class="pill">idle</span></div>
+      <div id="txLog"><p class="muted" style="margin:0">Nothing sent yet.</p></div>
+    </section>
+
+    <section class="card wide soon">
+      <div class="card-head"><h2>Not on the contract yet</h2><span class="pill warn">demo only</span></div>
+      <p class="muted" style="margin:0">Demo-only on the main site (no contract behind them yet): Strategy Coin staking and tiers, boosted APY, unstake queue, NVDA and other markets, Morpho idle yield, auto-rollover, separate fee claiming, swap and analytics.</p>
+    </section>
+  </div>
+</div>
+
+<script type="module">
+import { createPublicClient, createWalletClient, custom, http, defineChain, formatUnits, parseUnits, getAddress } from 'https://cdn.jsdelivr.net/npm/viem@2.57.2/+esm';
+
+const $ = (id) => document.getElementById(id);
+const show = (id, on) => { $(id).hidden = !on; };
+const short = (a) => a.slice(0, 6) + '…' + a.slice(-4);
+const NO_AUTO = 'carry-testnet-disconnected';
+
+let cfg, chain, pub, vaultAbi, erc20Abi, oracleAbi, feePoolAbi, provider, account, chainIdNow;
+
+const fmt = (v, d = 18, dp = 4) => {
+  const n = Number(formatUnits(v, d));
+  return n.toLocaleString('en-US', { maximumFractionDigits: dp });
+};
+const pct = (wad) => (Number(formatUnits(wad, 18)) * 100).toLocaleString('en-US', { maximumFractionDigits: 2 }) + '%';
+const days = (s) => { const d = Number(s) / 86400; return d.toLocaleString('en-US', { maximumFractionDigits: 2 }) + (d === 1 ? ' day' : ' days'); };
+const set = (id, t) => { $(id).textContent = t; };
+const link = (id, addr) => {
+  const el = $(id); el.textContent = '';
+  const a = document.createElement('a');
+  a.href = `${cfg.chain.explorer}/address/${addr}`; a.target = '_blank'; a.rel = 'noopener'; a.textContent = short(addr);
+  el.appendChild(a);
+};
+const err = (msg) => { $('errNote').textContent = msg || ''; show('errNote', !!msg); };
+
+async function loadJson(path) {
+  const r = await fetch(path, { cache: 'no-store' });
+  if (!r.ok) throw new Error(`Could not load ${path}`);
+  return r.json();
+}
+
+// Prefer MetaMask when several wallets inject themselves.
+function findMetaMask() {
+  const eth = window.ethereum;
+  if (!eth) return null;
+  if (Array.isArray(eth.providers)) return eth.providers.find((p) => p.isMetaMask && !p.isBraveWallet) || null;
+  return eth.isMetaMask ? eth : null;
+}
+
+function renderWallet() {
+  const onChain = chainIdNow === cfg.chain.id;
+  $('connectBtn').textContent = account ? short(account) : 'Connect MetaMask';
+  $('connectBtn').className = account ? 'btn tertiary' : 'btn primary';
+  set('walletPill', account ? (onChain ? 'connected' : 'wrong network') : 'not connected');
+  $('walletPill').className = 'pill ' + (account ? (onChain ? 'ok' : 'warn') : '');
+  set('chainPill', chainIdNow ? (onChain ? cfg.chain.name : `chain ${chainIdNow}`) : cfg.chain.name);
+  $('chainPill').className = 'pill ' + (chainIdNow ? (onChain ? 'ok' : 'warn') : '');
+  set('acct', account ? account : '—');
+  set('net', chainIdNow ? (onChain ? `${cfg.chain.name} (${chainIdNow})` : `Chain ${chainIdNow} — switch needed`) : '—');
+  show('wrongNet', !!account && !onChain);
+}
+
+async function refreshAccount() {
+  if (!account) {
+    ['balEth', 'balMstr', 'balUsdg', 'mySenior', 'myFree', 'myYield', 'myMstr'].forEach((id) => set(id, '—'));
+    return;
+  }
+  const c = cfg.contracts;
+  try {
+    const [eth, mstr, usdg, senior, free, yld, mstrClaim] = await Promise.all([
+      pub.getBalance({ address: account }),
+      pub.readContract({ address: c.mstr, abi: erc20Abi, functionName: 'balanceOf', args: [account] }),
+      pub.readContract({ address: c.usdg, abi: erc20Abi, functionName: 'balanceOf', args: [account] }),
+      pub.readContract({ address: c.vault, abi: vaultAbi, functionName: 'seniorPrincipal', args: [account] }),
+      pub.readContract({ address: c.vault, abi: vaultAbi, functionName: 'freePrincipal', args: [account] }),
+      pub.readContract({ address: c.vault, abi: vaultAbi, functionName: 'seniorClaimableYield', args: [account] }),
+      pub.readContract({ address: c.vault, abi: vaultAbi, functionName: 'seniorClaimableMstr', args: [account] }),
+    ]);
+    set('balEth', fmt(eth, 18, 5) + ' ETH');
+    set('balMstr', fmt(mstr) + ' mMSTR');
+    set('balUsdg', fmt(usdg) + ' mUSDG');
+    set('mySenior', fmt(senior) + ' USDG');
+    set('myFree', fmt(free) + ' USDG');
+    set('myYield', fmt(yld) + ' USDG');
+    set('myMstr', fmt(mstrClaim) + ' MSTR');
+  } catch (e) {
+    err('Could not read your balances: ' + (e.shortMessage || e.message));
+  }
+}
+
+async function refreshVault() {
+  const c = cfg.contracts;
+  const v = (functionName, args = []) => pub.readContract({ address: c.vault, abi: vaultAbi, functionName, args });
+  $('vaultCard').classList.add('loading');
+  try {
+    const [paused, term, apr, cut, price, next, senior, reserved, free, backstop] = await Promise.all([
+      v('paused'), v('term'), v('borrowAprWad'), v('protocolCutWad'),
+      pub.readContract({ address: c.oracle, abi: oracleAbi, functionName: 'mstrPriceWad' }),
+      v('nextPositionId'), v('totalSeniorPrincipal'), v('reservedSenior'), v('freeSenior'), v('backstop'),
+    ]);
+    link('vAddr', c.vault);
+    set('vPaused', paused ? 'Paused' : 'Open');
+    set('vTerm', days(term));
+    set('vApr', pct(apr));
+    set('vCut', pct(cut));
+    set('vPrice', '$' + fmt(price, 18, 2));
+    set('vPositions', (Number(next) - 1).toString());   // ids start at 1
+    set('vSenior', fmt(senior) + ' USDG');
+    set('vReserved', fmt(reserved) + ' USDG');
+    set('vFree', fmt(free) + ' USDG');
+    set('vBackstop', fmt(backstop) + ' USDG');
+    set('vaultPill', paused ? 'paused' : 'live');
+    $('vaultPill').className = 'pill ' + (paused ? 'warn' : 'ok');
+    show('pausedNote', paused);
+    set('updated', 'Updated ' + new Date().toLocaleTimeString());
+    err('');
+  } catch (e) {
+    set('vaultPill', 'error');
+    $('vaultPill').className = 'pill bad';
+    err('Could not read the vault: ' + (e.shortMessage || e.message));
+  } finally {
+    $('vaultCard').classList.remove('loading');
+  }
+}
+
+const STATUS_CLASS = { Open: 'warn', Active: 'ok', Settled: '' };
+async function refreshPositions() {
+  const c = cfg.contracts;
+  const box = $('posList');
+  try {
+    const next = Number(await pub.readContract({ address: c.vault, abi: vaultAbi, functionName: 'nextPositionId' }));
+    const term = Number(await pub.readContract({ address: c.vault, abi: vaultAbi, functionName: 'term' }));
+    const ids = [];
+    for (let i = next - 1; i >= 1 && ids.length < 20; i--) ids.push(BigInt(i));  // newest first, max 20
+    if (!ids.length) { box.textContent = ''; const p = document.createElement('p'); p.className = 'muted'; p.style.margin = '0'; p.textContent = 'No positions yet. Deposit stock in step 4 once the vault is unpaused.'; box.appendChild(p); set('posPill', '0 positions'); return; }
+    const rows = await Promise.all(ids.map(async (id) => {
+      const [pos, matched] = await Promise.all([
+        pub.readContract({ address: c.vault, abi: vaultAbi, functionName: 'positions', args: [id] }),
+        pub.readContract({ address: c.vault, abi: vaultAbi, functionName: 'isMatched', args: [id] }),
+      ]);
+      return { id, owner: pos[0], mstr: pos[1], senior: pos[2], fee: pos[4], openedAt: Number(pos[5]), settled: pos[6], matched };
+    }));
+    box.textContent = '';
+    for (const r of rows) {
+      const status = r.settled ? 'Settled' : r.matched ? 'Active' : 'Open';
+      const mine = account && r.owner.toLowerCase() === account.toLowerCase();
+      const row = document.createElement('div'); row.className = 'tx';
+      const left = document.createElement('span');
+      left.textContent = `#${r.id}${mine ? ' (yours)' : ''} · ${short(r.owner)} · ${fmt(r.mstr)} MSTR` + (r.matched ? ` · ${fmt(r.senior)} USDG matched · ${fmt(r.fee)} USDG fees` : '');
+      const right = document.createElement('span');
+      let when = '';
+      if (r.matched && !r.settled) {
+        const left_s = r.openedAt + term - Math.floor(Date.now() / 1000);
+        when = left_s > 0 ? ` · ${days(left_s)} left` : ' · term ended, ready to settle';
+      }
+      const pill = document.createElement('span'); pill.className = 'pill ' + STATUS_CLASS[status]; pill.textContent = status + when;
+      right.appendChild(pill);
+      const btn = (act, label) => { const b = document.createElement('button'); b.className = 'btn tertiary'; b.style.cssText = 'margin-left:8px;padding:5px 10px'; b.dataset.act = act; b.dataset.id = r.id; b.textContent = label; right.appendChild(b); };
+      const ended = r.matched && r.openedAt + term <= Math.floor(Date.now() / 1000);
+      if (!r.settled && !r.matched && mine) btn('pos-withdraw', 'Withdraw');
+      if (!r.settled && r.matched && !ended && mine) btn('pos-early', 'Early exit');
+      if (!r.settled && ended) btn('pos-settle', 'Settle');
+      row.append(left, right); box.appendChild(row);
+    }
+    set('posPill', `${next - 1} total`);
+  } catch (e) {
+    box.textContent = 'Could not read positions: ' + (e.shortMessage || e.message);
+  }
+}
+
+const refreshAll = () => Promise.all([refreshVault(), refreshAccount(), refreshPositions()]);
+
+async function useAccounts(accts) {
+  account = accts && accts[0] ? getAddress(accts[0]) : null;
+  renderWallet();
+  await Promise.all([refreshAccount(), cfg && pub ? refreshPositions() : null]);
+}
+
+async function connect() {
+  err('');
+  if (account) {   // MetaMask cannot be disconnected by a site; forget it locally.
+    try { localStorage.setItem(NO_AUTO, '1'); } catch (e) {}
+    await useAccounts([]);
+    return;
+  }
+  provider = findMetaMask();
+  if (!provider) { show('noWallet', true); return; }
+  try {
+    const accts = await provider.request({ method: 'eth_requestAccounts' });
+    try { localStorage.removeItem(NO_AUTO); } catch (e) {}
+    chainIdNow = parseInt(await provider.request({ method: 'eth_chainId' }), 16);
+    await useAccounts(accts);
+  } catch (e) {
+    err(e.code === 4001 ? 'Connection request was rejected in MetaMask.' : 'Could not connect: ' + (e.message || e));
+  }
+}
+
+async function switchNetwork() {
+  const hexId = '0x' + cfg.chain.id.toString(16);
+  try {
+    await provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: hexId }] });
+  } catch (e) {
+    if (e.code === 4902 || (e.data && e.data.originalError && e.data.originalError.code === 4902)) {
+      try {
+        await provider.request({
+          method: 'wallet_addEthereumChain',
+          params: [{
+            chainId: hexId,
+            chainName: cfg.chain.name,
+            nativeCurrency: cfg.chain.nativeCurrency,
+            rpcUrls: [cfg.chain.rpc],
+            blockExplorerUrls: [cfg.chain.explorer],
+          }],
+        });
+      } catch (e2) { err('Could not add the network: ' + (e2.message || e2)); }
+    } else if (e.code !== 4001) {
+      err('Could not switch network: ' + (e.message || e));
+    }
+  }
+}
+
+function renderContracts() {
+  const box = $('contractRows'); box.textContent = '';
+  const names = { vault: 'Vault', mstr: 'mMSTR', usdg: 'mUSDG', oracle: 'Oracle', feePool: 'Fee pool' };
+  for (const [key, label] of Object.entries(names)) {
+    const row = document.createElement('div'); row.className = 'row';
+    const k = document.createElement('span'); k.className = 'k'; k.textContent = label;
+    const val = document.createElement('span'); val.className = 'v'; val.id = 'c_' + key;
+    row.append(k, val); box.appendChild(row);
+    link('c_' + key, cfg.contracts[key]);
+  }
+}
+
+// ---- Transactions (steps 3-5) -------------------------------------------
+const DEC = 18; // both mock tokens and the vault report 18 decimals
+const ERRORS = {
+  Paused: 'The vault is paused by its owner. Deposits are blocked until it is unpaused.',
+  ZeroAmount: 'Amount must be greater than zero.',
+  FeeOnTransfer: 'This token takes a fee on transfer, which the vault rejects.',
+};
+let busy = false;
+
+function readAmount(id) {
+  const raw = $(id).value.trim();
+  if (!/^\d*\.?\d+$|^\d+\.$/.test(raw)) throw new Error('Enter a valid amount.');
+  const v = parseUnits(raw, DEC);
+  if (v <= 0n) throw new Error('Amount must be greater than zero.');
+  return v;
+}
+const nice = (e) => {
+  if (e.code === 4001 || /user rejected|denied/i.test(e.message || '')) return 'You rejected the request in MetaMask.';
+  const name = e.cause && e.cause.data && e.cause.data.errorName;
+  return ERRORS[name] || e.shortMessage || e.message || String(e);
+};
+
+function logTx(text, hash, state) {
+  const box = $('txLog');
+  if (box.querySelector('p')) box.textContent = '';
+  const row = document.createElement('div'); row.className = 'tx';
+  const t = document.createElement('span'); t.textContent = text;
+  const r = document.createElement('span');
+  r.textContent = state;
+  row.append(t, r); box.prepend(row);
+  return {
+    done(state2, hash2) {
+      r.textContent = '';
+      const a = document.createElement(hash2 ? 'a' : 'span');
+      if (hash2) { a.href = `${cfg.chain.explorer}/tx/${hash2}`; a.target = '_blank'; a.rel = 'noopener'; }
+      a.textContent = state2 + (hash2 ? ' · ' + hash2.slice(0, 10) + '…' : '');
+      r.appendChild(a);
+    },
+  };
+}
+
+// Simulate first (gives readable revert reasons), send, then wait for the receipt.
+async function sendTx(label, call) {
+  const wallet = createWalletClient({ account, chain, transport: custom(provider) });
+  const entry = logTx(label, null, 'confirm in wallet…');
+  try {
+    const { request } = await pub.simulateContract({ ...call, account });
+    const hash = await wallet.writeContract(request);
+    entry.done('pending', hash);
+    const rcpt = await pub.waitForTransactionReceipt({ hash });
+    if (rcpt.status !== 'success') throw new Error('Transaction reverted on chain.');
+    entry.done('confirmed', hash);
+  } catch (e) {
+    entry.done('failed: ' + nice(e));
+    throw e;
+  }
+}
+
+function ready() {
+  if (!provider || !account) { err('Connect MetaMask first.'); return false; }
+  if (chainIdNow !== cfg.chain.id) { err('Switch MetaMask to Robinhood Testnet first.'); return false; }
+  return true;
+}
+
+async function run(btn, fn) {
+  if (busy) return;
+  err('');
+  if (!ready()) return;
+  busy = true; btn.disabled = true; set('txPill', 'working'); $('txPill').className = 'pill warn';
+  let failure = '';
+  try { await fn(); set('txPill', 'done'); $('txPill').className = 'pill ok'; }
+  catch (e) { failure = nice(e); set('txPill', 'failed'); $('txPill').className = 'pill bad'; }
+  finally {
+    busy = false; btn.disabled = false;
+    await refreshAll();
+    if (failure) err(failure);   // the refresh clears errors, so show this one again
+  }
+}
+
+async function approveIfNeeded(token, symbol, amount, spender = cfg.contracts.vault) {
+  const have = await pub.readContract({ address: token, abi: erc20Abi, functionName: 'allowance', args: [account, spender] });
+  if (have >= amount) return;
+  await sendTx(`Approve ${symbol}`, { address: token, abi: erc20Abi, functionName: 'approve', args: [spender, amount] });
+}
+
+async function balanceOf(token) {
+  return pub.readContract({ address: token, abi: erc20Abi, functionName: 'balanceOf', args: [account] });
+}
+
+const actions = {
+  'mint-mstr': (b) => run(b, async () => {
+    const a = readAmount('mintMstr');
+    await sendTx(`Mint ${fmt(a)} mMSTR`, { address: cfg.contracts.mstr, abi: erc20Abi, functionName: 'mint', args: [account, a] });
+  }),
+  'mint-usdg': (b) => run(b, async () => {
+    const a = readAmount('mintUsdg');
+    await sendTx(`Mint ${fmt(a)} mUSDG`, { address: cfg.contracts.usdg, abi: erc20Abi, functionName: 'mint', args: [account, a] });
+  }),
+  'fund-backstop': (b) => run(b, async () => {
+    const a = readAmount('fundAmt');
+    if ((await balanceOf(cfg.contracts.usdg)) < a) throw new Error('Not enough mUSDG. Mint some in step 3.');
+    await approveIfNeeded(cfg.contracts.usdg, 'mUSDG', a);
+    await sendTx(`Fund backstop ${fmt(a)} mUSDG`, { address: cfg.contracts.vault, abi: vaultAbi, functionName: 'fundBackstop', args: [a] });
+  }),
+  'set-price': (b) => run(b, async () => {
+    const a = readAmount('oraclePrice');
+    await sendTx(`Set oracle price to $${fmt(a, 18, 2)}`, { address: cfg.contracts.oracle, abi: oracleAbi, functionName: 'setPrice', args: [a] });
+  }),
+  'max-withdraw': async () => {
+    if (account) $('wdSenior').value = formatUnits(await pub.readContract({ address: cfg.contracts.vault, abi: vaultAbi, functionName: 'freePrincipal', args: [account] }), DEC);
+  },
+  'withdraw-senior': (b) => run(b, async () => {
+    const a = readAmount('wdSenior');
+    const free = await pub.readContract({ address: cfg.contracts.vault, abi: vaultAbi, functionName: 'freePrincipal', args: [account] });
+    if (a > free) throw new Error(`Only ${fmt(free)} USDG is idle and withdrawable right now. The rest is matched.`);
+    await sendTx(`Withdraw ${fmt(a)} USDG`, { address: cfg.contracts.vault, abi: vaultAbi, functionName: 'withdrawSenior', args: [a] });
+  }),
+  'pos-withdraw': (b) => run(b, async () => {
+    await sendTx(`Withdraw unmatched stock, position #${b.dataset.id}`, { address: cfg.contracts.vault, abi: vaultAbi, functionName: 'withdrawUnmatched', args: [BigInt(b.dataset.id)] });
+  }),
+  'pos-early': (b) => run(b, async () => {
+    const id = BigInt(b.dataset.id);
+    const p = await pub.readContract({ address: cfg.contracts.vault, abi: vaultAbi, functionName: 'previewEarlyExit', args: [id] });
+    const ok = window.confirm(
+      `Early exit closes position #${id} now.\n\n` +
+      `Coupon owed to the lender: ${fmt(p.couponOwed)} USDG\n` +
+      `Paid from position fees: ${fmt(p.fromPositionFees)} USDG\n` +
+      `MSTR sold to cover the rest: ${fmt(p.mstrSold)} MSTR\n` +
+      `MSTR returned to you: ${fmt(p.mstrReturned)} MSTR\n` +
+      `Fees returned to you: ${fmt(p.juniorLeftoverFees)} USDG\n\nContinue?`);
+    if (!ok) throw new Error('Early exit cancelled.');
+    await sendTx(`Early exit, position #${id}`, { address: cfg.contracts.vault, abi: vaultAbi, functionName: 'earlyExit', args: [id] });
+  }),
+  'pos-settle': (b) => run(b, async () => {
+    await sendTx(`Settle position #${b.dataset.id}`, { address: cfg.contracts.vault, abi: vaultAbi, functionName: 'settle', args: [BigInt(b.dataset.id)] });
+  }),
+  'pay-fee': (b) => run(b, async () => {
+    const raw = $('feePos').value.trim();
+    if (!/^\d+$/.test(raw) || raw === '0') throw new Error('Enter a position number.');
+    const id = BigInt(raw), a = readAmount('feeAmt');
+    if (!(await pub.readContract({ address: cfg.contracts.vault, abi: vaultAbi, functionName: 'isMatched', args: [id] }))) throw new Error(`Position #${id} is not Active, so it can't earn fees.`);
+    if ((await balanceOf(cfg.contracts.usdg)) < a) throw new Error('Not enough mUSDG. Mint some in step 3.');
+    await approveIfNeeded(cfg.contracts.usdg, 'mUSDG', a, cfg.contracts.feePool);
+    await sendTx(`Push ${fmt(a)} mUSDG fees to #${id}`, { address: cfg.contracts.feePool, abi: feePoolAbi, functionName: 'payFee', args: [cfg.contracts.vault, id, a] });
+  }),
+  'max-mstr': async () => { if (account) $('depMstr').value = formatUnits(await balanceOf(cfg.contracts.mstr), DEC); },
+  'max-usdg': async () => { if (account) $('depUsdg').value = formatUnits(await balanceOf(cfg.contracts.usdg), DEC); },
+  'deposit-mstr': (b) => run(b, async () => {
+    const a = readAmount('depMstr');
+    if ((await balanceOf(cfg.contracts.mstr)) < a) throw new Error('Not enough mMSTR. Mint some in step 3.');
+    await approveIfNeeded(cfg.contracts.mstr, 'mMSTR', a);
+    await sendTx(`Deposit ${fmt(a)} mMSTR`, { address: cfg.contracts.vault, abi: vaultAbi, functionName: 'depositJunior', args: [a] });
+  }),
+  'deposit-usdg': (b) => run(b, async () => {
+    const a = readAmount('depUsdg');
+    if ((await balanceOf(cfg.contracts.usdg)) < a) throw new Error('Not enough mUSDG. Mint some in step 3.');
+    await approveIfNeeded(cfg.contracts.usdg, 'mUSDG', a);
+    await sendTx(`Lend ${fmt(a)} mUSDG`, { address: cfg.contracts.vault, abi: vaultAbi, functionName: 'depositSenior', args: [a] });
+  }),
+};
+document.addEventListener('click', (ev) => {
+  const b = ev.target.closest('button[data-act]');
+  if (b && cfg && actions[b.dataset.act]) actions[b.dataset.act](b);
+});
+
+// Live hint: the USDG needed to match a stock deposit, at the oracle price.
+$('depMstr').addEventListener('input', async () => {
+  try {
+    const a = readAmount('depMstr');
+    const price = await pub.readContract({ address: cfg.contracts.oracle, abi: oracleAbi, functionName: 'mstrPriceWad' });
+    set('depMstrHint', `Needs about ${fmt((a * price) / 10n ** 18n)} USDG from lenders to start earning (at the oracle price).`);
+  } catch (e) { set('depMstrHint', ''); }
+});
+
+async function init() {
+  // Browsers block fetch() on file:// pages, so config and ABIs cannot load that way.
+  const needServer = 'This page must be opened from a web server, not as a file. Run "npm run dev" and open http://localhost:3000/testnet';
+  $('connectBtn').addEventListener('click', () => { if (!cfg) err(location.protocol === 'file:' ? needServer : 'Page is still loading, or failed to load. See the message above.'); });
+  if (location.protocol === 'file:') { err(needServer); return; }
+  try {
+    // Addresses and network come from the shared config.chain block (also used by the main site).
+    const raw = await loadJson('config.json');
+    const k = raw.chain;
+    cfg = {
+      chain: {
+        id: k.chainId, name: k.chainName, rpc: k.rpcUrl, explorer: k.explorerUrl,
+        faucet: k.faucetUrl || 'https://faucet.testnet.chain.robinhood.com',
+        nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+      },
+      contracts: { vault: k.vault, mstr: k.mstr, usdg: k.usdg, oracle: k.oracle, feePool: k.feePool },
+    };
+    [vaultAbi, erc20Abi, oracleAbi, feePoolAbi] = await Promise.all([
+      loadJson('abi/LeveredLpVault.json'), loadJson('abi/ERC20Mock.json'), loadJson('abi/MockOracle.json'), loadJson('abi/MockFeePool.json'),
+    ]);
+  } catch (e) { err(e.message); return; }
+
+  chain = defineChain({
+    id: cfg.chain.id, name: cfg.chain.name, nativeCurrency: cfg.chain.nativeCurrency,
+    rpcUrls: { default: { http: [cfg.chain.rpc] } },
+  });
+  pub = createPublicClient({ chain, transport: http() });
+  $('faucetLink').href = cfg.chain.faucet;
+  renderContracts();
+  renderWallet();
+
+  provider = findMetaMask();
+  if (!provider) show('noWallet', true);
+
+  $('connectBtn').addEventListener('click', () => { if (cfg) connect(); });
+  $('switchBtn').addEventListener('click', switchNetwork);
+  $('refreshBtn').addEventListener('click', refreshAll);
+
+  if (provider) {
+    provider.on('accountsChanged', (a) => useAccounts(a));
+    provider.on('chainChanged', (id) => { chainIdNow = parseInt(id, 16); renderWallet(); refreshAccount(); });
+    // Restore a previous connection without prompting.
+    let skip = false; try { skip = localStorage.getItem(NO_AUTO) === '1'; } catch (e) {}
+    chainIdNow = parseInt(await provider.request({ method: 'eth_chainId' }), 16);
+    if (!skip) {
+      const accts = await provider.request({ method: 'eth_accounts' });
+      await useAccounts(accts);
+    } else renderWallet();
+  }
+
+  await Promise.all([refreshVault(), refreshPositions()]);
+  setInterval(refreshAll, 20000);
+}
+init();
+</script>
+</body>
+</html>
