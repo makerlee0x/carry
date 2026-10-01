@@ -94,11 +94,13 @@
       const rdy = live.filter((r) => r.matched && r.openedAt + term <= now);
       const opn = live.filter((r) => !r.matched);
       const mstrTotal = live.reduce((x, r) => x + r.mstr, 0), fees = live.reduce((x, r) => x + r.fee, 0);
+      const sumOf = (list) => list.reduce((x, r) => x + r.mstr, 0);
+      const matchedShares = sumOf(act) + sumOf(rdy), freeShares = sumOf(opn) + sumOf(rdy), activeShares = sumOf(act);
       let statusTxt, leftTxt, free_, earned = 0, days = 0;
       if (act.length) {
         const soonest = Math.min(...act.map((r) => r.openedAt + term)), first = Math.min(...act.map((r) => r.openedAt));
         statusTxt = 'Active'; free_ = false;
-        leftTxt = leftText(soonest - now) + (opn.length || rdy.length ? ` · ${opn.length + rdy.length} other` : '');
+        leftTxt = leftText(soonest - now);
         earned = Math.min(4, (4 * (now - first)) / term);
         days = Math.floor((now - first) / 86400);
       } else if (rdy.length) {
@@ -107,7 +109,8 @@
       } else {
         statusTxt = 'Open'; free_ = true; leftTxt = 'Waiting for USDG';
       }
-      positions.push({ sym: 'MSTR', shares: round(mstrTotal, 4), fees: round(fees, 4), days, earned: round(earned, 2), auto: false, real: true, statusTxt, leftTxt, free: free_, count: live.length });
+      positions.push({ sym: 'MSTR', shares: round(mstrTotal, 4), fees: round(fees, 4), days, earned: round(earned, 2), auto: false, real: true, statusTxt, leftTxt, free: free_, count: live.length,
+        matchedPct: mstrTotal > 0 ? round((matchedShares / mstrTotal) * 100, 1) : 0, freeShares: round(freeShares, 4), activeShares: round(activeShares, 4) });
     }
 
     const seniorN = num(senior);
@@ -245,30 +248,34 @@
         await settleAfterTx(before);
         return { ok: true, hash, msg: 'USDG withdrawn, plus any claimable yield.' };
       }
-      // Stock positions leave whole: the vault has no partial withdrawals.
+      // Deposits show as one combined position, but the vault closes each deposit whole. Open and
+      // matured deposits leave with no fee; deposits still inside their 7-day term pay the early-exit fee.
       const now = Math.floor(Date.now() / 1000), term = S.vault.termSec;
-      const total = S.raw.reduce((x, r) => x + r.mstr, 0);
       if (!S.raw.length) throw user('You have no stock positions to withdraw.');
-      if (Math.abs(Number(amount) - total) > 1e-4) throw user(`Stock positions withdraw in full. Use the full amount: ${round(total, 4)} MSTR.`);
       const open = S.raw.filter((r) => !r.matched), ready = S.raw.filter((r) => r.matched && r.openedAt + term <= now), act = S.raw.filter((r) => r.matched && r.openedAt + term > now);
-      let group, fn, label, msg;
-      if (open.length) { group = open; fn = 'withdrawUnmatched'; label = 'Confirm the withdrawal in MetaMask…'; msg = 'Stock returned to your wallet.'; }
-      else if (ready.length) { group = ready; fn = 'settle'; label = 'Confirm settlement in MetaMask…'; msg = 'Position settled. Stock and fees returned to your wallet.'; }
-      else {
-        group = act; fn = 'earlyExit'; label = 'Confirm the early exit in MetaMask…'; msg = 'Early exit complete. Remaining stock and fees returned to your wallet.';
-        const prev = await Promise.all(group.map((r) => pub.readContract({ address: cfg.vault, abi: vaultAbi, functionName: 'previewEarlyExit', args: [r.id] })));
-        const sum = (k) => prev.reduce((x, p) => x + num(p[k]), 0), f = (n) => n.toLocaleString('en-US', { maximumFractionDigits: 4 });
-        const ok = window.confirm(`Early exit closes ${group.length > 1 ? group.length + ' positions' : 'this position'} before the 7-day term ends.\n\n` +
-          `Coupon owed to the lender: ${f(sum('couponOwed'))} USDG\nPaid from position fees: ${f(sum('fromPositionFees'))} USDG\n` +
-          `Stock sold to cover the rest: ${f(sum('mstrSold'))} MSTR\nStock returned to you: ${f(sum('mstrReturned'))} MSTR\n` +
-          `Fees returned to you: ${f(sum('juniorLeftoverFees'))} USDG\n\nContinue?`);
+      const tot = (list) => list.reduce((x, r) => x + r.mstr, 0), fx = (n) => n.toLocaleString('en-US', { maximumFractionDigits: 4 });
+      const total = tot(S.raw), freeTotal = tot(open) + tot(ready), want = Number(amount);
+      const all = Math.abs(want - total) <= 1e-4, freeOnly = freeTotal > 0 && Math.abs(want - freeTotal) <= 1e-4;
+      if (!all && !freeOnly) {
+        throw user(act.length && freeTotal > 0
+          ? `Deposits leave as whole positions. You can withdraw ${fx(freeTotal)} MSTR with no fee, or all ${fx(total)} MSTR (the early-exit fee applies to the ${fx(tot(act))} MSTR still inside its 7-day term).`
+          : `Stock positions withdraw in full. Use the full amount: ${fx(total)} MSTR.`);
+      }
+      const steps = [[open, 'withdrawUnmatched', 'Confirm the withdrawal in MetaMask…'], [ready, 'settle', 'Confirm settlement in MetaMask…']];
+      if (all && act.length) {
+        const prev = await Promise.all(act.map((r) => pub.readContract({ address: cfg.vault, abi: vaultAbi, functionName: 'previewEarlyExit', args: [r.id] })));
+        const sum = (k) => prev.reduce((x, p) => x + num(p[k]), 0);
+        const ok = window.confirm(`The early-exit fee applies to ${fx(tot(act))} MSTR that is still inside its 7-day term` + (freeTotal > 0 ? `. The other ${fx(freeTotal)} MSTR leaves with no fee.` : '.') + `\n\n` +
+          `Coupon owed to the lender: ${fx(sum('couponOwed'))} USDG\nPaid from position fees: ${fx(sum('fromPositionFees'))} USDG\n` +
+          `Stock sold to cover the rest: ${fx(sum('mstrSold'))} MSTR\nStock returned to you: ${fx(sum('mstrReturned'))} MSTR\n` +
+          `Fees returned to you: ${fx(sum('juniorLeftoverFees'))} USDG\n\nContinue?`);
         if (!ok) throw user('Early exit cancelled. No funds were moved.');
+        steps.push([act, 'earlyExit', 'Confirm the early exit in MetaMask…']);
       }
       let hash;
-      for (const r of group) hash = await send({ address: cfg.vault, abi: vaultAbi, functionName: fn, args: [r.id] }, onStep, label);
+      for (const [group, fn, label] of steps) for (const r of group) hash = await send({ address: cfg.vault, abi: vaultAbi, functionName: fn, args: [r.id] }, onStep, label);
       await settleAfterTx(before);
-      const rest = S.raw.length;
-      return { ok: true, hash, msg: rest ? msg + ' You have more positions. Withdraw again to handle them.' : msg };
+      return { ok: true, hash, msg: all && act.length ? 'Withdrawn. The early-exit fee was applied to the portion still inside its term.' : 'Stock withdrawn to your wallet with no early-exit fee.' };
     } catch (e) { return fail(e); }
   }
 
