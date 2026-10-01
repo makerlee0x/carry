@@ -125,8 +125,8 @@
 
   // ---- Refresh -------------------------------------------------------------
   let busy = null;
-  function refresh() {
-    if (busy) return busy;
+  async function refresh(force) {
+    if (busy) { if (!force) return busy; await busy; }   // forced: wait for the stale one, then read again
     busy = (async () => {
       try {
         await readVault();
@@ -139,10 +139,22 @@
     return busy;
   }
 
+  // The RPC can lag a moment behind a confirmed receipt, so after a transaction we read again
+  // until the wallet numbers differ from what they were before it (up to ~12s).
+  const sig = () => JSON.stringify([S.ui, S.vault && S.vault.tvl]);
+  async function settleAfterTx(before) {
+    for (const wait of [0, 1500, 2500, 3500, 4500]) {
+      if (wait) await new Promise((r) => setTimeout(r, wait));
+      await refresh(true);
+      if (sig() !== before) return;
+    }
+  }
+
   // Wait for a transaction to confirm, then refresh the numbers.
   async function afterTx(hash) {
+    const before = sig();
     try { await pub.waitForTransactionReceipt({ hash, timeout: 60000 }); } catch (e) {}
-    return refresh();
+    return settleAfterTx(before);
   }
 
 
@@ -211,9 +223,10 @@
       if (bal < wei) throw user(`Not enough ${name}. You have ${num(bal)}.`);
       const have = await pub.readContract({ address: token, abi: ERC20(), functionName: 'allowance', args: [S.account, cfg.vault] });
       if (have < wei) await send({ address: token, abi: ERC20(), functionName: 'approve', args: [cfg.vault, wei] }, onStep, 'Approve ' + name + ' in MetaMask…');
+      const before = sig();
       const fn = sym === 'USDG' ? 'depositSenior' : 'depositJunior';
       const hash = await send({ address: cfg.vault, abi: vaultAbi, functionName: fn, args: [wei] }, onStep, 'Confirm the deposit in MetaMask…');
-      await refresh();
+      await settleAfterTx(before);
       return { ok: true, hash, msg: sym === 'USDG' ? 'USDG deposited. It matches waiting stock deposits first-in-first-out.' : 'Deposit confirmed. Your position opens once USDG matches it.' };
     } catch (e) { return fail(e); }
   }
@@ -221,14 +234,15 @@
   async function withdraw({ sym, amount, onStep }) {
     try {
       guard();
-      await refresh();
+      await refresh(true);
+      const before = sig();
       if (sym === 'USDG') {
         let wei = toWei(amount);
         const free = await pub.readContract({ address: cfg.vault, abi: vaultAbi, functionName: 'freePrincipal', args: [S.account] });
         if (wei > free && wei - free < 10n ** 15n) wei = free;   // display rounding
         if (wei > free) throw user(`Only ${num(free).toLocaleString('en-US', { maximumFractionDigits: 4 })} USDG is idle and withdrawable. The rest is matched with stock deposits until those positions close.`);
         const hash = await send({ address: cfg.vault, abi: vaultAbi, functionName: 'withdrawSenior', args: [wei] }, onStep, 'Confirm the withdrawal in MetaMask…');
-        await refresh();
+        await settleAfterTx(before);
         return { ok: true, hash, msg: 'USDG withdrawn, plus any claimable yield.' };
       }
       // Stock positions leave whole: the vault has no partial withdrawals.
@@ -252,7 +266,7 @@
       }
       let hash;
       for (const r of group) hash = await send({ address: cfg.vault, abi: vaultAbi, functionName: fn, args: [r.id] }, onStep, label);
-      await refresh();
+      await settleAfterTx(before);
       const rest = S.raw.length;
       return { ok: true, hash, msg: rest ? msg + ' You have more positions. Withdraw again to handle them.' : msg };
     } catch (e) { return fail(e); }
@@ -261,9 +275,9 @@
   async function mint({ sym, amount, onStep }) {
     try {
       guard();
-      const token = sym === 'USDG' ? cfg.usdg : cfg.mstr;
+      const token = sym === 'USDG' ? cfg.usdg : cfg.mstr, before = sig();
       const hash = await send({ address: token, abi: ERC20(), functionName: 'mint', args: [S.account, toWei(amount)] }, onStep, 'Confirm in MetaMask…');
-      await refresh();
+      await settleAfterTx(before);
       return { ok: true, hash, msg: 'Test tokens added to your wallet.' };
     } catch (e) { return fail(e); }
   }
@@ -335,7 +349,8 @@
       } catch (e) {}
     }
     await refresh();
-    setInterval(refresh, REFRESH_MS);
+    setInterval(() => refresh(), REFRESH_MS);
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
   }
 
   window.CarryChain = { last: snapshot(), connect, disconnect, refresh, afterTx, leftText, deposit, withdraw, mint };
