@@ -35,6 +35,35 @@
     return eth.isMetaMask ? eth : null;
   }
 
+  // ---- MetaMask on phones ---------------------------------------------------
+  // Phone browsers have no injected wallet. MetaMask's SDK launches the MetaMask app through a deep link,
+  // the user approves there, and the connection returns to this page. Loaded only when it is needed.
+  const SDK_URL = 'https://esm.sh/@metamask/sdk@0.34.0?bundle';   // the ?bundle build; the plain browser builds of the SDK fail to start
+  const SDK_FLAG = 'carry_mm_sdk';
+  const isMobile = () => /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent));
+  const appLink = () => 'https://metamask.app.link/dapp/' + location.host + location.pathname + location.search + location.hash;
+  let sdkP = null;
+  function mobileProvider() {
+    if (!sdkP) {
+      sdkP = (async () => {
+        const mod = await import(SDK_URL), Ctor = mod.MetaMaskSDK || mod.default;
+        const sdk = new Ctor({ dappMetadata: { name: 'Carry', url: location.origin }, checkInstallationImmediately: false, logging: { sdk: false } });
+        await sdk.init();
+        let pr = sdk.getProvider(); const t0 = Date.now();
+        while (!pr && Date.now() - t0 < 6000) { await new Promise((r) => setTimeout(r, 200)); pr = sdk.getProvider(); }
+        if (!pr) throw new Error('MetaMask connector did not start.');
+        pr.__sdk = sdk;
+        return pr;
+      })();
+      sdkP.catch(() => { sdkP = null; });
+    }
+    return sdkP;
+  }
+
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const withTimeout = (p, ms, msg) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error(msg || 'timeout')), ms))]);
+  let readyResolve; const readyP = new Promise((r) => { readyResolve = r; });   // resolves once the library and config have loaded
+
   const num = (v, d = 18) => Number(viem.formatUnits(v, d));
   const round = (n, dp) => Number(n.toFixed(dp));
 
@@ -325,18 +354,19 @@
       if (all && act.length) {
         const prev = await Promise.all(act.map((r) => pub.readContract({ address: cfg.vault, abi: vaultAbi, functionName: 'previewEarlyExit', args: [r.id] })));
         const sum = (k) => prev.reduce((x, p) => x + num(p[k]), 0);
-        const intro = `The early-exit fee applies to ${fx(tot(act))} MSTR that is still inside its 7-day term.` + (freeTotal > 0 ? ` The other ${fx(freeTotal)} MSTR leaves with no fee.` : '');
+        const fs = (n) => (n === 0 ? '0' : n < 0.0001 ? n.toFixed(9).replace(/0+$/, '') : fx(n));   // tiny amounts need more decimals to show up
+        const sold = sum('mstrSold');
+        const intro = `The early-exit fee applies to ${fx(tot(act))} MSTR that is still inside its 7-day term.` + (freeTotal > 0 ? ` The other ${fx(freeTotal)} MSTR leaves with no fee.` : '') +
+          (sold > 0 ? " Position fees don't cover the lender's coupon, so a small amount of your stock is sold to pay it. It is not taken from the Assistance Fund." : '');
         const rows = [
-          { k: 'Coupon owed to the lender', v: `${fx(sum('couponOwed'))} USDG` },
-          { k: 'Paid from position fees', v: `${fx(sum('fromPositionFees'))} USDG` },
-          { k: 'Stock sold to cover the rest', v: `${fx(sum('mstrSold'))} MSTR` },
-          { k: 'Stock returned to you', v: `${fx(sum('mstrReturned'))} MSTR` },
-          { k: 'Fees returned to you', v: `${fx(sum('juniorLeftoverFees'))} USDG` },
+          { k: 'Coupon owed to the lender', v: `${fs(sum('couponOwed'))} USDG` },
+          { k: 'Paid from position fees', v: `${fs(sum('fromPositionFees'))} USDG` },
+          { k: 'Stock sold to cover the rest', v: `${fs(sold)} MSTR` + (sold > 0 ? ` (≈ $${fs(sold * S.vault.price)})` : '') },
+          { k: 'Stock returned to you', v: `${fs(sum('mstrReturned'))} MSTR` },
+          { k: 'Fees returned to you', v: `${fs(sum('juniorLeftoverFees'))} USDG` },
         ];
         if (sum('feeShortfallUsdg') > 0) rows.push({ k: 'Fee shortfall', v: `${fx(sum('feeShortfallUsdg'))} USDG` });
-        const ok = confirm
-          ? await confirm({ title: 'Confirm early exit', intro, rows, confirmLabel: 'Confirm early exit' })
-          : window.confirm(intro + '\n\n' + rows.map((r) => `${r.k}: ${r.v}`).join('\n') + '\n\nContinue?');
+        const ok = confirm ? await confirm({ title: 'Confirm early exit', intro, rows, confirmLabel: 'Confirm early exit' }) : false;   // no native dialogs: the site supplies the themed one
         if (!ok) throw user('Early exit cancelled. No funds were moved.');
         steps.push([act, 'earlyExit', 'Confirm the early exit in MetaMask…']);
       }
@@ -360,23 +390,31 @@
   // ---- Connect -------------------------------------------------------------
   async function setAccounts(accts) {
     S.account = accts && accts[0] ? viem.getAddress(accts[0]) : null;
-    if (provider) S.chainId = parseInt(await provider.request({ method: 'eth_chainId' }), 16);
+    if (provider) { try { S.chainId = parseInt(await withTimeout(provider.request({ method: 'eth_chainId' }), 5000), 16); } catch (e) {} }   // keep the last known chain if the wallet is slow
     await refresh();
   }
 
   async function connect() {
-    try { await initP; } catch (e) {}
+    await readyP;
     if (!S.ready) return { ok: false, code: 'error', message: 'The blockchain library failed to load. Check your connection and reload.' };
     provider = findMetaMask();
-    if (!provider) return { ok: false, code: 'nowallet', message: 'MetaMask not found. Install the MetaMask browser extension and reload.' };
+    let viaApp = false;
+    if (!provider) {
+      if (!isMobile()) return { ok: false, code: 'nowallet', message: 'MetaMask not found. Install the MetaMask browser extension and reload.' };
+      try { provider = await mobileProvider(); viaApp = true; }
+      catch (e) { location.href = appLink(); return { ok: false, code: 'error', message: 'Opening the MetaMask app…' }; }   // fallback: reopen the site inside MetaMask's own browser
+    }
     try {
-      const accts = await provider.request({ method: 'eth_requestAccounts' });
+      const accts = await withTimeout(provider.request({ method: 'eth_requestAccounts' }), 60000, 'no-response');
+      if (viaApp) { try { localStorage.setItem(SDK_FLAG, '1'); } catch (e) {} }
       flag(false);
       listen();
       await setAccounts(accts);
       return { ok: true, account: S.account };
     } catch (e) {
       if (e && (e.code === 4001 || /reject|denied/i.test(e.message || ''))) return { ok: false, code: 'rejected', message: 'Connection request was rejected in MetaMask.' };
+      if (e && e.code === -32002) return { ok: false, code: 'error', message: 'A connection request is already open in MetaMask. Open the MetaMask app, approve or reject it, then try again.' };
+      if (e && e.message === 'no-response') return { ok: false, code: 'error', message: 'MetaMask did not respond. Open the MetaMask app, check for a pending request, then try again.' };
       return { ok: false, code: 'error', message: (e && e.message) || 'Could not connect.' };
     }
   }
@@ -397,6 +435,29 @@
   }
 
   // ---- Start ---------------------------------------------------------------
+  // Restore an earlier connection without prompting. Wallets can answer slowly right after a page load,
+  // so each call has a timeout and an empty answer is retried when this browser connected before.
+  async function restoreWallet() {
+    provider = findMetaMask();
+    if (!provider && isMobile() && !flagged()) {   // back from the MetaMask app, the page may have reloaded
+      let had = false; try { had = localStorage.getItem(SDK_FLAG) === '1'; } catch (e) {}
+      if (had) { try { provider = await withTimeout(mobileProvider(), 8000); const live = provider.selectedAddress || (provider.__sdk && provider.__sdk.isAuthorized && await provider.__sdk.isAuthorized()); if (!live) provider = null; } catch (e) { provider = null; } }   // only restore a live session; never redirect on load
+    }
+    if (!provider) return;
+    listen();
+    try { S.chainId = parseInt(await withTimeout(provider.request({ method: 'eth_chainId' }), 4000), 16); } catch (e) {}
+    if (flagged()) return;
+    let before = false; try { before = !!localStorage.getItem('carry_last_wallet'); } catch (e) {}
+    for (const wait of [0, 1200, 2500]) {
+      if (wait) await sleep(wait);
+      try {
+        const accts = await withTimeout(provider.request({ method: 'eth_accounts' }), 4000);
+        if (accts && accts[0]) { S.account = viem.getAddress(accts[0]); try { S.chainId = parseInt(await withTimeout(provider.request({ method: 'eth_chainId' }), 4000), 16); } catch (e) {} return; }
+      } catch (e) {}
+      if (!before) return;
+    }
+  }
+
   async function init() {
     const [mod, conf, abi] = await Promise.all([
       import(VIEM),
@@ -411,24 +472,15 @@
     pub = viem.createPublicClient({ chain: chainDef, transport: viem.http() });
     S.ready = true;
 
-    provider = findMetaMask();
-    if (provider) {
-      listen();
-      try {
-        S.chainId = parseInt(await provider.request({ method: 'eth_chainId' }), 16);
-        // Restore an earlier connection without prompting.
-        if (!flagged()) {
-          const accts = await provider.request({ method: 'eth_accounts' });
-          if (accts && accts[0]) S.account = viem.getAddress(accts[0]);
-        }
-      } catch (e) {}
-    }
-    await refresh();
+    readyResolve();
+    refresh();   // public vault data does not need a wallet
+    await restoreWallet();
+    if (S.account) await refresh();
     setInterval(() => refresh(), REFRESH_MS);
     document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
   }
 
   window.CarryChain = { last: snapshot(), connect, disconnect, refresh, afterTx, leftText, deposit, withdraw, mint };
   const initP = init();
-  initP.catch((e) => { S.error = (e && e.message) || String(e); console.warn('[CarryChain]', e); emit(); });
+  initP.catch((e) => { S.error = (e && e.message) || String(e); console.warn('[CarryChain]', e); readyResolve(); emit(); });
 })();

@@ -57,6 +57,20 @@
   .soon li { margin: 4px 0; }
   ul { padding-left: 18px; margin: 8px 0 0; color: var(--muted); }
   .sk { color: var(--dim); }
+  .dlg-bg { position: fixed; inset: 0; z-index: 50; background: rgba(5,6,5,0.78); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); display: flex; align-items: flex-start; justify-content: center; padding: clamp(16px,6vh,72px) 16px; overflow-y: auto; }
+  .dlg-bg[hidden] { display: none; }
+  .dlg { width: 100%; max-width: 520px; background: var(--card); border: 1px solid var(--green); box-shadow: 0 0 0 1px rgba(183,255,174,0.15), 0 0 28px rgba(61,255,90,0.25); border-radius: 10px; padding: clamp(20px,3vw,28px); display: flex; flex-direction: column; gap: 18px; }
+  .dlg-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+  .dlg-x { width: 40px; height: 40px; border-radius: 4px; border: 1px solid var(--line2); background: var(--inset); color: var(--cream); font-size: 18px; line-height: 1; cursor: pointer; }
+  .dlg-x:hover { border-color: var(--green); color: var(--green); }
+  .dlg-title { font: 500 22px 'JetBrains Mono', monospace; }
+  .dlg-note { border: 1px solid var(--amber); border-radius: 6px; background: var(--inset); color: var(--amber); padding: 12px 14px; font-size: 14px; line-height: 22px; }
+  .dlg-rows { border-top: 1px solid var(--line); }
+  .dlg-row { display: flex; justify-content: space-between; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line); font-size: 15px; }
+  .dlg-row .k { color: var(--muted); }
+  .dlg-row .v { font-family: 'JetBrains Mono', monospace; text-align: right; }
+  .dlg-btns { display: flex; gap: 12px; flex-wrap: wrap; }
+  .dlg-btns .btn { flex: 1 1 140px; height: 48px; font-size: 15px; }
   .field { display: flex; gap: 8px; margin: 12px 0 8px; }
   .field input { flex: 1; min-width: 0; background: var(--inset); border: 1px solid var(--line2); border-radius: 4px; color: var(--cream); font: 500 14px 'JetBrains Mono', monospace; padding: 10px 12px; }
   .field input:focus { outline: none; border-color: var(--green); }
@@ -87,6 +101,7 @@
   <div id="noWallet" class="notice bad" hidden>MetaMask not found. Install the MetaMask browser extension, then reload this page.</div>
   <div id="wrongNet" class="notice" hidden>Your wallet is on the wrong network. <button id="switchBtn" class="btn secondary">Switch to Robinhood Testnet</button></div>
   <div id="pausedNote" class="notice" hidden>The vault is paused. New deposits will revert until the owner unpauses it.</div>
+  <div id="infoNote" class="notice" hidden></div>
   <div id="errNote" class="notice bad" hidden></div>
 
   <div class="grid">
@@ -191,6 +206,16 @@
   </div>
 </div>
 
+<div id="dlg" class="dlg-bg" hidden>
+  <div class="dlg" role="alertdialog" aria-modal="true" aria-labelledby="dlgTitle">
+    <div class="dlg-head"><span class="eyebrow">&gt; <span id="dlgEyebrow">CONFIRM</span></span><button class="dlg-x" id="dlgClose" aria-label="Cancel">✕</button></div>
+    <span class="dlg-title" id="dlgTitle"></span>
+    <div class="dlg-note" id="dlgNote" role="note"></div>
+    <div class="dlg-rows" id="dlgRows"></div>
+    <div class="dlg-btns"><button class="btn tertiary" id="dlgNo">Cancel</button><button class="btn primary" id="dlgYes">Confirm</button></div>
+  </div>
+</div>
+
 <script type="module">
 import { createPublicClient, createWalletClient, custom, http, defineChain, formatUnits, parseUnits, getAddress } from 'https://cdn.jsdelivr.net/npm/viem@2.57.2/+esm';
 
@@ -215,11 +240,31 @@ const link = (id, addr) => {
   el.appendChild(a);
 };
 const err = (msg) => { $('errNote').textContent = msg || ''; show('errNote', !!msg); };
+const info = (msg) => { $('infoNote').textContent = msg || ''; show('infoNote', !!msg); };
 
 async function loadJson(path) {
   const r = await fetch(path, { cache: 'no-store' });
   if (!r.ok) throw new Error(`Could not load ${path}`);
   return r.json();
+}
+
+// On phones there is no injected wallet: MetaMask's SDK opens the MetaMask app and returns the connection to this page.
+const isMobile = () => /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent));
+let sdkP = null;
+function mobileProvider() {
+  if (!sdkP) {
+    sdkP = (async () => {
+      const mod = await import('https://esm.sh/@metamask/sdk@0.34.0?bundle'), Ctor = mod.MetaMaskSDK || mod.default;
+      const sdk = new Ctor({ dappMetadata: { name: 'Carry testnet', url: location.origin }, checkInstallationImmediately: false, logging: { sdk: false } });
+      await sdk.init();
+      let pr = sdk.getProvider(); const t0 = Date.now();
+      while (!pr && Date.now() - t0 < 6000) { await new Promise((r) => setTimeout(r, 200)); pr = sdk.getProvider(); }
+      if (!pr) throw new Error('MetaMask connector did not start.');
+      return pr;
+    })();
+    sdkP.catch(() => { sdkP = null; });
+  }
+  return sdkP;
 }
 
 // Prefer MetaMask when several wallets inject themselves.
@@ -367,13 +412,19 @@ async function connect() {
     return;
   }
   provider = findMetaMask();
-  if (!provider) { show('noWallet', true); return; }
+  if (!provider) {
+    if (!isMobile()) { show('noWallet', true); return; }
+    try { info('Opening MetaMask. Approve the connection in the app, then come back to this page.'); provider = await mobileProvider(); }
+    catch (e) { location.href = 'https://metamask.app.link/dapp/' + location.host + location.pathname; return; }   // fallback: reopen this page inside MetaMask's own browser
+  }
   try {
     const accts = await provider.request({ method: 'eth_requestAccounts' });
+    info(''); err('');
     try { localStorage.removeItem(NO_AUTO); } catch (e) {}
     chainIdNow = parseInt(await provider.request({ method: 'eth_chainId' }), 16);
     await useAccounts(accts);
   } catch (e) {
+    info('');
     err(e.code === 4001 ? 'Connection request was rejected in MetaMask.' : 'Could not connect: ' + (e.message || e));
   }
 }
@@ -413,6 +464,40 @@ function renderContracts() {
     link('c_' + key, cfg.contracts[key]);
   }
 }
+
+// Amount boxes: put the caret at the end when they gain focus, so a user can backspace then type.
+document.addEventListener('focusin', (e) => {
+  const el = e.target;
+  if (el && el.tagName === 'INPUT' && /decimal|numeric/.test(el.getAttribute('inputmode') || '') && typeof el.setSelectionRange === 'function') {
+    const end = () => { try { const n = el.value.length; el.setSelectionRange(n, n); } catch (x) {} };
+    setTimeout(end, 0); setTimeout(end, 90);
+  }
+});
+
+// ---- Themed confirmation dialog (replaces the browser's confirm box) ----
+let dlgDone = null;
+function askConfirm({ eyebrow, title, note, rows, yes }) {
+  $('dlgEyebrow').textContent = eyebrow; $('dlgTitle').textContent = title; $('dlgYes').textContent = yes;
+  $('dlgNote').textContent = note || ''; $('dlgNote').hidden = !note;
+  const box = $('dlgRows'); box.textContent = '';
+  for (const r of rows) {
+    const row = document.createElement('div'); row.className = 'dlg-row';
+    const k = document.createElement('span'); k.className = 'k'; k.textContent = r.k;
+    const v = document.createElement('span'); v.className = 'v'; v.textContent = r.v;
+    row.append(k, v); box.appendChild(row);
+  }
+  $('dlg').hidden = false; $('dlgYes').focus();
+  return new Promise((res) => { dlgDone = res; });
+}
+function closeDlg(ok) { if (!dlgDone) return; $('dlg').hidden = true; const r = dlgDone; dlgDone = null; r(ok); }
+$('dlgYes').addEventListener('click', () => closeDlg(true));
+$('dlgNo').addEventListener('click', () => closeDlg(false));
+$('dlgClose').addEventListener('click', () => closeDlg(false));
+$('dlg').addEventListener('click', (e) => { if (e.target === $('dlg')) closeDlg(false); });
+window.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeDlg(false); });
+
+// Tiny amounts (a few millionths of a token) need more decimals than the usual 4 to show up at all.
+const fmtSmall = (v) => { const n = Number(formatUnits(v, 18)); return n === 0 ? '0' : n < 0.0001 ? n.toFixed(9).replace(/0+$/, '') : n.toLocaleString('en-US', { maximumFractionDigits: 4 }); };
 
 // ---- Transactions (steps 3-5) -------------------------------------------
 const DEC = 18; // both mock tokens and the vault report 18 decimals
@@ -537,13 +622,19 @@ const actions = {
   'pos-early': (b) => run(b, async () => {
     const id = BigInt(b.dataset.id);
     const p = await pub.readContract({ address: cfg.contracts.vault, abi: vaultAbi, functionName: 'previewEarlyExit', args: [id] });
-    const ok = window.confirm(
-      `Early exit closes position #${id} now.\n\n` +
-      `Coupon owed to the lender: ${fmt(p.couponOwed)} USDG\n` +
-      `Paid from position fees: ${fmt(p.fromPositionFees)} USDG\n` +
-      `MSTR sold to cover the rest: ${fmt(p.mstrSold)} MSTR\n` +
-      `MSTR returned to you: ${fmt(p.mstrReturned)} MSTR\n` +
-      `Fees returned to you: ${fmt(p.juniorLeftoverFees)} USDG\n\nContinue?`);
+    const price = await pub.readContract({ address: cfg.contracts.oracle, abi: oracleAbi, functionName: 'mstrPriceWad' });
+    const soldUsd = (p.mstrSold * price) / 10n ** 18n;
+    const ok = await askConfirm({
+      eyebrow: 'EARLY EXIT', title: `Close position #${id} now`, yes: 'Confirm early exit',
+      note: p.mstrSold > 0n ? "Position fees don't cover the lender's coupon, so a small amount of your stock is sold to pay it. It is not taken from the Assistance Fund." : 'Position fees cover the lender coupon. No stock is sold.',
+      rows: [
+        { k: 'Coupon owed to the lender', v: `${fmtSmall(p.couponOwed)} USDG` },
+        { k: 'Paid from position fees', v: `${fmtSmall(p.fromPositionFees)} USDG` },
+        { k: 'MSTR sold to cover the rest', v: `${fmtSmall(p.mstrSold)} MSTR` + (p.mstrSold > 0n ? ` (≈ $${fmtSmall(soldUsd)})` : '') },
+        { k: 'MSTR returned to you', v: `${fmtSmall(p.mstrReturned)} MSTR` },
+        { k: 'Fees returned to you', v: `${fmtSmall(p.juniorLeftoverFees)} USDG` },
+      ],
+    });
     if (!ok) throw new Error('Early exit cancelled.');
     await sendTx(`Early exit, position #${id}`, { address: cfg.contracts.vault, abi: vaultAbi, functionName: 'earlyExit', args: [id] });
   }),
