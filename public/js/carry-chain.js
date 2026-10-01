@@ -49,20 +49,17 @@
     try { return navigator.maxTouchPoints > 0 && window.matchMedia('(pointer: coarse)').matches; } catch (e) { return false; }
   };
   const appLink = () => 'https://metamask.app.link/dapp/' + location.host + location.pathname + location.search + location.hash;
-  let sdkP = null;
+  let sdkP = null, sdkInst = null;
   function mobileProvider() {
     if (!sdkP) {
       sdkP = (async () => {
-        // The connector keeps its session in localStorage, which the test page shares with this site. Start each page load
-        // with a fresh channel so one page never resumes the other's half-finished or stale connection.
-        try { localStorage.removeItem('.sdk-comm'); } catch (e) {}
         const mod = await import(SDK_URL), Ctor = mod.MetaMaskSDK || mod.default;
         const sdk = new Ctor({ dappMetadata: { name: 'Carry', url: location.origin }, checkInstallationImmediately: false, logging: { sdk: false } });
         await sdk.init();
         let pr = sdk.getProvider(); const t0 = Date.now();
         while (!pr && Date.now() - t0 < 6000) { await new Promise((r) => setTimeout(r, 200)); pr = sdk.getProvider(); }
         if (!pr) throw new Error('MetaMask connector did not start.');
-        pr.__sdk = sdk;
+        sdkInst = sdk;
         return pr;
       })();
       sdkP.catch(() => { sdkP = null; });
@@ -424,15 +421,14 @@
     if (!provider) {
       if (!isMobile()) return { ok: false, code: 'nowallet', message: 'MetaMask not found. Install the MetaMask browser extension and reload.' };
       try { provider = await mobileProvider(); viaApp = true; }
-      catch (e) {   // fallback: the site can be reopened inside MetaMask's own browser (the UI offers this as a button)
+      catch (e) {   // never send the page away on its own: report what failed and let the user choose
         S.connectLink = null; emit();
-        try { location.href = appLink(); } catch (x) {}
-        return { ok: false, code: 'error', message: 'Could not start the MetaMask connection. Tap "Open this site in MetaMask" below.' };
+        return { ok: false, code: 'error', message: 'Could not start the MetaMask connection (' + ((e && e.message) || 'unknown error') + '). You can open this site inside the MetaMask app instead.' };
       }
     }
     try {
       const reqP = withTimeout(provider.request({ method: 'eth_requestAccounts' }), viaApp ? 120000 : 60000, 'no-response');
-      if (viaApp) publishAppLink(provider.__sdk);   // gives the UI a link the user can tap to open the MetaMask app
+      if (viaApp) publishAppLink(sdkInst);   // gives the UI a link the user can tap to open the MetaMask app
       const accts = await reqP;
       S.connectLink = null;
       if (viaApp) { try { localStorage.setItem(SDK_FLAG, '1'); } catch (e) {} }
@@ -471,7 +467,7 @@
     provider = findMetaMask();
     if (!provider && isMobile() && !flagged()) {   // back from the MetaMask app, the page may have reloaded
       let had = false; try { had = localStorage.getItem(SDK_FLAG) === '1'; } catch (e) {}
-      if (had) { try { provider = await withTimeout(mobileProvider(), 8000); const live = provider.selectedAddress || (provider.__sdk && provider.__sdk.isAuthorized && await provider.__sdk.isAuthorized()); if (!live) provider = null; } catch (e) { provider = null; } }   // only restore a live session; never redirect on load
+      if (had) { try { provider = await withTimeout(mobileProvider(), 8000); const live = provider.selectedAddress || (sdkInst && sdkInst.isAuthorized && await sdkInst.isAuthorized()); if (!live) provider = null; } catch (e) { provider = null; } }   // only restore a live session; never redirect on load
     }
     if (!provider) return;
     listen();
