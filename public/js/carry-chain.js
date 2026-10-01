@@ -140,7 +140,7 @@
   // Daily series for the last N days (local days, ending today) from the vault's own events.
   // Stock deposits are valued at the current oracle price: the chain keeps no price history.
   async function readAnalytics() {
-    const N = 90, price = S.vault ? S.vault.price : 0;
+    const N = 180, price = S.vault ? S.vault.price : 0;
     const logs = await pub.getContractEvents({ address: cfg.vault, abi: vaultAbi, fromBlock: 0n, toBlock: 'latest' });
     const blocks = [...new Set(logs.map((l) => l.blockNumber))];
     for (let i = 0; i < blocks.length; i += 25) await Promise.all(blocks.slice(i, i + 25).map(timeOf));
@@ -149,26 +149,27 @@
     const dayOf = (ms) => { const d = new Date(ms); d.setHours(0, 0, 0, 0); return N - 1 - Math.round((today - d) / 864e5); };   // index into the series
     const zero = () => Array(N).fill(0), arr = { dep: zero(), wd: zero(), fees: zero(), rev: zero(), earned: zero(), newU: zero(), dau: zero() };
     const daySets = Array.from({ length: N }, () => new Set()), seen = new Set(), matchedOf = new Map();
-    const act = zero(), tot = zero();   // end-of-day matched USDG and total lent USDG
-    let runAct = 0, runTot = 0, allDep = 0, allFees = 0, users = 0;
+    const act = zero(), tot = zero(), stk = zero(), bsBal = zero(), bsIn = zero(), bsOut = zero();   // end-of-day matched USDG, total lent USDG, stock held (MSTR), backstop balance
+    let runAct = 0, runTot = 0, runStock = 0, runBs = 0, allDep = 0, allFees = 0, users = 0;
     const add = (a, i, v) => { if (i >= 0 && i < N) a[i] += v; };
     const touch = (i, who) => { if (!who) return; const w = who.toLowerCase(); if (i >= 0 && i < N) daySets[i].add(w); if (!seen.has(w)) { seen.add(w); users++; add(arr.newU, i, 1); } };
 
     const sorted = logs.slice().sort((a, b) => Number(a.blockNumber - b.blockNumber) || a.logIndex - b.logIndex);
     let lastDay = -Infinity;
-    const snap = (to) => { for (let d = Math.max(lastDay, 0); d <= Math.min(to, N - 1); d++) { act[d] = runAct; tot[d] = runTot; } };
+    const snap = (to) => { for (let d = Math.max(lastDay, 0); d <= Math.min(to, N - 1); d++) { act[d] = runAct; tot[d] = runTot; stk[d] = runStock; bsBal[d] = runBs; } };
     for (const l of sorted) {
       const i = dayOf(blockTime.get(l.blockNumber)), a = l.args || {};
       if (i > lastDay) { snap(i - 1); lastDay = i; }
       switch (l.eventName) {
-        case 'JuniorDeposit': { const v = num(a.mstrAmount) * price; add(arr.dep, i, v); allDep += v; touch(i, a.junior); break; }
+        case 'JuniorDeposit': { const v = num(a.mstrAmount) * price; add(arr.dep, i, v); allDep += v; runStock += num(a.mstrAmount); touch(i, a.junior); break; }
         case 'SeniorDeposit': { const v = num(a.amount); add(arr.dep, i, v); allDep += v; runTot += v; touch(i, a.senior); break; }
         case 'SeniorWithdraw': { const v = num(a.principal); add(arr.wd, i, v); runTot -= v; touch(i, a.senior); break; }
-        case 'UnmatchedWithdraw': add(arr.wd, i, num(a.mstrAmount) * price); touch(i, a.junior); break;
+        case 'UnmatchedWithdraw': add(arr.wd, i, num(a.mstrAmount) * price); runStock -= num(a.mstrAmount); touch(i, a.junior); break;
         case 'PositionMatched': { const v = num(a.seniorPrincipal); matchedOf.set(a.positionId, v); runAct += v; touch(i, a.junior); break; }
-        case 'EarlyExit': add(arr.wd, i, (num(a.mstrReturned) + num(a.mstrSold)) * price); runAct -= matchedOf.get(a.positionId) || 0; touch(i, a.junior); break;
-        case 'Settled': add(arr.wd, i, (num(a.mstrKept) + num(a.mstrSold)) * price); runAct -= matchedOf.get(a.positionId) || 0; touch(i, a.junior); break;
-        case 'LpFeeAccrued': { const g = num(a.gross); add(arr.fees, i, g); add(arr.rev, i, num(a.toBackstop)); add(arr.earned, i, num(a.toPosition)); allFees += num(a.toPosition); break; }
+        case 'EarlyExit': add(arr.wd, i, (num(a.mstrReturned) + num(a.mstrSold)) * price); runStock -= num(a.mstrReturned) + num(a.mstrSold); runAct -= matchedOf.get(a.positionId) || 0; touch(i, a.junior); break;
+        case 'Settled': add(arr.wd, i, (num(a.mstrKept) + num(a.mstrSold)) * price); runStock -= num(a.mstrKept) + num(a.mstrSold); { const o = num(a.fromBackstop); add(bsOut, i, o); runBs -= o; } runAct -= matchedOf.get(a.positionId) || 0; touch(i, a.junior); break;
+        case 'BackstopFunded': { const v = num(a.amount); add(bsIn, i, v); runBs += v; break; }
+        case 'LpFeeAccrued': { const g = num(a.gross); runBs += num(a.toBackstop); add(bsIn, i, num(a.toBackstop)); add(arr.fees, i, g); add(arr.rev, i, num(a.toBackstop)); add(arr.earned, i, num(a.toPosition)); allFees += num(a.toPosition); break; }
         default: break;
       }
     }
@@ -179,6 +180,7 @@
     S.analytics = {
       N, dep: arr.dep, wd: arr.wd, inflow, cumIn, newU: arr.newU, cumU, dau: daySets.map((x) => x.size),
       fees: arr.fees, rev: arr.rev, earned: arr.earned, active: act, inact: tot.map((t, i) => Math.max(t - act[i], 0)),
+      bsIn, bsOut, bsBal, tvl: tot.map((t, i) => t + stk[i] * price),
       totals: { users, dep: allDep, earned: allFees }, updated: Date.now(),
     };
   }
@@ -292,7 +294,7 @@
     } catch (e) { return fail(e); }
   }
 
-  async function withdraw({ sym, amount, onStep }) {
+  async function withdraw({ sym, amount, onStep, confirm }) {
     try {
       guard();
       await refresh(true);
@@ -323,10 +325,18 @@
       if (all && act.length) {
         const prev = await Promise.all(act.map((r) => pub.readContract({ address: cfg.vault, abi: vaultAbi, functionName: 'previewEarlyExit', args: [r.id] })));
         const sum = (k) => prev.reduce((x, p) => x + num(p[k]), 0);
-        const ok = window.confirm(`The early-exit fee applies to ${fx(tot(act))} MSTR that is still inside its 7-day term` + (freeTotal > 0 ? `. The other ${fx(freeTotal)} MSTR leaves with no fee.` : '.') + `\n\n` +
-          `Coupon owed to the lender: ${fx(sum('couponOwed'))} USDG\nPaid from position fees: ${fx(sum('fromPositionFees'))} USDG\n` +
-          `Stock sold to cover the rest: ${fx(sum('mstrSold'))} MSTR\nStock returned to you: ${fx(sum('mstrReturned'))} MSTR\n` +
-          `Fees returned to you: ${fx(sum('juniorLeftoverFees'))} USDG\n\nContinue?`);
+        const intro = `The early-exit fee applies to ${fx(tot(act))} MSTR that is still inside its 7-day term.` + (freeTotal > 0 ? ` The other ${fx(freeTotal)} MSTR leaves with no fee.` : '');
+        const rows = [
+          { k: 'Coupon owed to the lender', v: `${fx(sum('couponOwed'))} USDG` },
+          { k: 'Paid from position fees', v: `${fx(sum('fromPositionFees'))} USDG` },
+          { k: 'Stock sold to cover the rest', v: `${fx(sum('mstrSold'))} MSTR` },
+          { k: 'Stock returned to you', v: `${fx(sum('mstrReturned'))} MSTR` },
+          { k: 'Fees returned to you', v: `${fx(sum('juniorLeftoverFees'))} USDG` },
+        ];
+        if (sum('feeShortfallUsdg') > 0) rows.push({ k: 'Fee shortfall', v: `${fx(sum('feeShortfallUsdg'))} USDG` });
+        const ok = confirm
+          ? await confirm({ title: 'Confirm early exit', intro, rows, confirmLabel: 'Confirm early exit' })
+          : window.confirm(intro + '\n\n' + rows.map((r) => `${r.k}: ${r.v}`).join('\n') + '\n\nContinue?');
         if (!ok) throw user('Early exit cancelled. No funds were moved.');
         steps.push([act, 'earlyExit', 'Confirm the early exit in MetaMask…']);
       }
