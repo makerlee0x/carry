@@ -267,7 +267,7 @@ function mobileProvider() {
     sdkP = (async () => {
       try { localStorage.removeItem('.sdk-comm'); } catch (e) {}   // fresh channel per page load (storage is shared with the main site)
       const mod = await import('https://esm.sh/@metamask/sdk@0.34.0?bundle'), Ctor = mod.MetaMaskSDK || mod.default;
-      const sdk = new Ctor({ dappMetadata: { name: 'Carry testnet', url: location.origin }, useDeeplink: false, injectProvider: false, checkInstallationImmediately: false, logging: { sdk: false } });
+      const sdk = new Ctor({ dappMetadata: { name: 'Carry testnet', url: location.origin }, checkInstallationImmediately: false, logging: { sdk: false } });
       await sdk.init();
       let pr = sdk.getProvider(); const t0 = Date.now();
       while (!pr && Date.now() - t0 < 6000) { await new Promise((r) => setTimeout(r, 200)); pr = sdk.getProvider(); }

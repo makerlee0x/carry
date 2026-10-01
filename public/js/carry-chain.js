@@ -57,7 +57,7 @@
         // with a fresh channel so one page never resumes the other's half-finished or stale connection.
         try { localStorage.removeItem('.sdk-comm'); } catch (e) {}
         const mod = await import(SDK_URL), Ctor = mod.MetaMaskSDK || mod.default;
-        const sdk = new Ctor({ dappMetadata: { name: 'Carry', url: location.origin }, useDeeplink: false, injectProvider: false, checkInstallationImmediately: false, logging: { sdk: false } });
+        const sdk = new Ctor({ dappMetadata: { name: 'Carry', url: location.origin }, checkInstallationImmediately: false, logging: { sdk: false } });
         await sdk.init();
         let pr = sdk.getProvider(); const t0 = Date.now();
         while (!pr && Date.now() - t0 < 6000) { await new Promise((r) => setTimeout(r, 200)); pr = sdk.getProvider(); }
@@ -503,7 +503,6 @@
     S.ready = true;
 
     readyResolve();
-    if (isMobile() && !findMetaMask()) setTimeout(() => { mobileProvider().catch(() => {}); }, 1500);   // warm the phone connector so a tap can launch the app at once
     refresh();   // public vault data does not need a wallet
     await restoreWallet();
     if (S.account) await refresh();
