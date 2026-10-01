@@ -63,6 +63,8 @@ See [`CARRY_CONTRACT.md`](./CARRY_CONTRACT.md), [`CARRY_TESTNET.md`](./CARRY_TES
 
 `public/config.json` still drives geoblock and demo `simulate.*` states (loading, wrong network, etc.). See prior notes: `geoblock.simulateRegion`, `simulate.network`, `simulate.tx`. With `chain.live: true`, deposit/withdraw txs hit the vault instead of `simulate.tx`.
 
+`analytics.simulate` (default `true`) fills the Analytics page with simulated protocol activity (users, volume, fees, deposits) that grows day by day and ticks up through the current day, with real vault activity added on top. Set it to `false` to show only static sample volume/APY plus the real vault data.
+
 ## Notes
 
 - Pages use hash routing (`#home`, `#markets`, `#dashboard`, `#deposit`, …).

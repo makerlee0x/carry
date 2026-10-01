@@ -17,9 +17,9 @@
   const REFRESH_MS = 20000;
 
   let viem, pub, cfg, vaultAbi, provider, chainDef;
-  const S = { ready: false, vault: null, account: null, chainId: null, ui: null, raw: [], error: null };
+  const S = { ready: false, vault: null, account: null, chainId: null, ui: null, raw: [], analytics: null, error: null };
 
-  const snapshot = () => ({ ready: S.ready, vault: S.vault, account: S.account, chainId: S.chainId, ui: S.ui, error: S.error });
+  const snapshot = () => ({ ready: S.ready, vault: S.vault, account: S.account, chainId: S.chainId, ui: S.ui, analytics: S.analytics, error: S.error });
   const emit = () => {
     window.CarryChain.last = snapshot();
     window.dispatchEvent(new CustomEvent('carrychain', { detail: window.CarryChain.last }));
@@ -126,6 +126,63 @@
     S.ui = { wallet: { ETH: round(num(eth), 5), MSTR: round(num(mstr), 4), USDG: round(num(usdg), 4) }, positions };
   }
 
+
+  // ---- Protocol analytics (built from the vault's events) -------------------
+  const blockTime = new Map();
+  async function timeOf(blockNumber) {
+    if (blockTime.has(blockNumber)) return blockTime.get(blockNumber);
+    const b = await pub.getBlock({ blockNumber });
+    const t = Number(b.timestamp) * 1000;
+    blockTime.set(blockNumber, t);
+    return t;
+  }
+
+  // Daily series for the last N days (local days, ending today) from the vault's own events.
+  // Stock deposits are valued at the current oracle price: the chain keeps no price history.
+  async function readAnalytics() {
+    const N = 90, price = S.vault ? S.vault.price : 0;
+    const logs = await pub.getContractEvents({ address: cfg.vault, abi: vaultAbi, fromBlock: 0n, toBlock: 'latest' });
+    const blocks = [...new Set(logs.map((l) => l.blockNumber))];
+    for (let i = 0; i < blocks.length; i += 25) await Promise.all(blocks.slice(i, i + 25).map(timeOf));
+
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const dayOf = (ms) => { const d = new Date(ms); d.setHours(0, 0, 0, 0); return N - 1 - Math.round((today - d) / 864e5); };   // index into the series
+    const zero = () => Array(N).fill(0), arr = { dep: zero(), wd: zero(), fees: zero(), rev: zero(), earned: zero(), newU: zero(), dau: zero() };
+    const daySets = Array.from({ length: N }, () => new Set()), seen = new Set(), matchedOf = new Map();
+    const act = zero(), tot = zero();   // end-of-day matched USDG and total lent USDG
+    let runAct = 0, runTot = 0, allDep = 0, allFees = 0, users = 0;
+    const add = (a, i, v) => { if (i >= 0 && i < N) a[i] += v; };
+    const touch = (i, who) => { if (!who) return; const w = who.toLowerCase(); if (i >= 0 && i < N) daySets[i].add(w); if (!seen.has(w)) { seen.add(w); users++; add(arr.newU, i, 1); } };
+
+    const sorted = logs.slice().sort((a, b) => Number(a.blockNumber - b.blockNumber) || a.logIndex - b.logIndex);
+    let lastDay = -Infinity;
+    const snap = (to) => { for (let d = Math.max(lastDay, 0); d <= Math.min(to, N - 1); d++) { act[d] = runAct; tot[d] = runTot; } };
+    for (const l of sorted) {
+      const i = dayOf(blockTime.get(l.blockNumber)), a = l.args || {};
+      if (i > lastDay) { snap(i - 1); lastDay = i; }
+      switch (l.eventName) {
+        case 'JuniorDeposit': { const v = num(a.mstrAmount) * price; add(arr.dep, i, v); allDep += v; touch(i, a.junior); break; }
+        case 'SeniorDeposit': { const v = num(a.amount); add(arr.dep, i, v); allDep += v; runTot += v; touch(i, a.senior); break; }
+        case 'SeniorWithdraw': { const v = num(a.principal); add(arr.wd, i, v); runTot -= v; touch(i, a.senior); break; }
+        case 'UnmatchedWithdraw': add(arr.wd, i, num(a.mstrAmount) * price); touch(i, a.junior); break;
+        case 'PositionMatched': { const v = num(a.seniorPrincipal); matchedOf.set(a.positionId, v); runAct += v; touch(i, a.junior); break; }
+        case 'EarlyExit': add(arr.wd, i, (num(a.mstrReturned) + num(a.mstrSold)) * price); runAct -= matchedOf.get(a.positionId) || 0; touch(i, a.junior); break;
+        case 'Settled': add(arr.wd, i, (num(a.mstrKept) + num(a.mstrSold)) * price); runAct -= matchedOf.get(a.positionId) || 0; touch(i, a.junior); break;
+        case 'LpFeeAccrued': { const g = num(a.gross); add(arr.fees, i, g); add(arr.rev, i, num(a.toBackstop)); add(arr.earned, i, num(a.toPosition)); allFees += num(a.toPosition); break; }
+        default: break;
+      }
+    }
+    snap(N - 1);
+    const inflow = arr.dep.map((v, i) => v - arr.wd[i]);
+    const cumIn = []; inflow.reduce((x, v, i) => (cumIn[i] = x + v), 0);
+    const cumU = []; arr.newU.reduce((x, v, i) => (cumU[i] = x + v), 0);
+    S.analytics = {
+      N, dep: arr.dep, wd: arr.wd, inflow, cumIn, newU: arr.newU, cumU, dau: daySets.map((x) => x.size),
+      fees: arr.fees, rev: arr.rev, earned: arr.earned, active: act, inact: tot.map((t, i) => Math.max(t - act[i], 0)),
+      totals: { users, dep: allDep, earned: allFees }, updated: Date.now(),
+    };
+  }
+
   // ---- Refresh -------------------------------------------------------------
   let busy = null;
   async function refresh(force) {
@@ -134,6 +191,7 @@
       try {
         await readVault();
         await readAccount();
+        try { await readAnalytics(); } catch (e) { console.warn('[CarryChain] analytics', e); }
         S.error = null;
       } catch (e) {
         S.error = e.shortMessage || e.message || String(e);

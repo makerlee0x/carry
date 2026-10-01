@@ -24,5 +24,8 @@
     "feePool": "0xa4122524aD97Aab05cAC7F99c04Cd060D02F0771",
     "vaultOwner": "0xcA44F2dbB2D43b93b39F01B88E0f0e2966983c57",
     "decimals": 18
+  },
+  "analytics": {
+    "simulate": true
   }
 }
