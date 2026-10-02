@@ -223,6 +223,47 @@
       }
     }
     snap(N - 1);
+    // Newest-first transaction list for the Analytics table. Every row keeps its transaction hash.
+    const EV = {
+      JuniorDeposit: (a) => ({ k: 'dep', t: 'Deposit', n: num(a.mstrAmount), u: 'MSTR', who: a.junior, pid: a.positionId, note: a.matched ? 'Matched' : 'Waiting for USDG' }),
+      SeniorDeposit: (a) => ({ k: 'dep', t: 'Deposit', n: num(a.amount), u: 'USDG', who: a.senior }),
+      PositionMatched: (a) => ({ k: 'match', t: 'Matched', n: num(a.seniorPrincipal), u: 'USDG', who: a.junior, pid: a.positionId }),
+      SeniorWithdraw: (a) => ({ k: 'wd', t: 'Withdraw', n: num(a.principal), u: 'USDG', who: a.senior }),
+      UnmatchedWithdraw: (a) => ({ k: 'wd', t: 'Withdraw', n: num(a.mstrAmount), u: 'MSTR', who: a.junior, pid: a.positionId }),
+      EarlyExit: (a) => ({ k: 'wd', t: 'Early exit', n: num(a.mstrReturned) + num(a.mstrSold), u: 'MSTR', who: a.junior, pid: a.positionId, note: 'Coupon ' + round(num(a.couponOwed), 2) + ' USDG' }),
+      Settled: (a) => ({ k: 'wd', t: 'Settled', n: num(a.mstrKept) + num(a.mstrSold), u: 'MSTR', who: a.junior, pid: a.positionId, note: num(a.fromBackstop) > 0 ? 'Backstop paid ' + round(num(a.fromBackstop), 2) + ' USDG' : '' }),
+      LpFeeAccrued: (a) => ({ k: 'fee', t: 'Fees', n: num(a.gross), u: 'USDG', pid: a.positionId, note: 'To position ' + round(num(a.toPosition), 2) + ' · backstop ' + round(num(a.toBackstop), 2) }),
+      BackstopFunded: (a) => ({ k: 'bs', t: 'Backstop', n: num(a.amount), u: 'USDG', who: a.from }),
+      PausedDeposits: (a) => ({ k: 'admin', t: a.paused ? 'Deposits paused' : 'Deposits resumed' }),
+    };
+    const events = [];
+    for (const l of sorted.slice().reverse()) {
+      const f = EV[l.eventName]; if (!f) continue;
+      const e = f(l.args || {});
+      events.push(Object.assign(e, { pid: e.pid != null ? String(e.pid) : '', who: e.who || '', note: e.note || '', ts: blockTime.get(l.blockNumber), hash: l.transactionHash, id: l.transactionHash + ':' + l.logIndex }));
+      if (events.length >= 300) break;
+    }
+    // Live MSTR APY for stock holders: fees paid to positions, minus the lender's borrow cost, over the
+    // matched stock-time (matched USDG x time) of the last 30 days. Needs 1+ day of history and some fees.
+    let mstrApy = null;
+    {
+      const nowMs = Date.now(), apr = S.vault ? S.vault.aprPct / 100 : 0.05, evT = (l) => blockTime.get(l.blockNumber);
+      const firstM = sorted.find((l) => l.eventName === 'PositionMatched');
+      if (firstM) {
+        const start = Math.max(nowMs - 30 * 864e5, evT(firstM)), m2 = new Map();
+        let prevT = start, cur = 0, ms = 0, fee = 0, nFee = 0;
+        for (const l of sorted) {
+          const t = evT(l), a = l.args || {};
+          if (t > start) { ms += cur * (t - prevT); prevT = t; }
+          if (l.eventName === 'PositionMatched') { const v = num(a.seniorPrincipal); m2.set(String(a.positionId), v); cur += v; }
+          else if (l.eventName === 'EarlyExit' || l.eventName === 'Settled') { cur -= m2.get(String(a.positionId)) || 0; m2.delete(String(a.positionId)); }
+          else if (l.eventName === 'LpFeeAccrued' && t >= start) { fee += num(a.toPosition); nFee++; }
+        }
+        ms += cur * (nowMs - prevT);
+        const stockDays = ms / 864e5, winDays = (nowMs - start) / 864e5;
+        if (nFee > 0 && stockDays > 0 && winDays >= 1) mstrApy = { pct: round(Math.min(999, Math.max(0, (fee / stockDays * 365 - apr) * 100)), 1), days: round(winDays, 1), fees: round(fee, 2) };
+      }
+    }
     const inflow = arr.dep.map((v, i) => v - arr.wd[i]);
     const cumIn = []; inflow.reduce((x, v, i) => (cumIn[i] = x + v), 0);
     const cumU = []; arr.newU.reduce((x, v, i) => (cumU[i] = x + v), 0);
@@ -230,7 +271,7 @@
       N, dep: arr.dep, wd: arr.wd, inflow, cumIn, newU: arr.newU, cumU, dau: daySets.map((x) => x.size),
       fees: arr.fees, rev: arr.rev, earned: arr.earned, active: act, inact: tot.map((t, i) => Math.max(t - act[i], 0)),
       bsIn, bsOut, bsBal, tvl: tot.map((t, i) => t + stk[i] * price),
-      totals: { users, dep: allDep, earned: allFees }, updated: Date.now(),
+      totals: { users, dep: allDep, earned: allFees }, events, explorer: cfg.explorerUrl || '', mstrApy, updated: Date.now(),
     };
   }
 

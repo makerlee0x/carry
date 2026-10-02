@@ -26,6 +26,7 @@
     "decimals": 18
   },
   "analytics": {
-    "simulate": true
+    "simulate": true,
+    "liveApy": false
   }
 }
