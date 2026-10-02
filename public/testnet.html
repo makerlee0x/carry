@@ -445,27 +445,24 @@ async function connect() {
 }
 
 async function switchNetwork() {
+  err('');
   const hexId = '0x' + cfg.chain.id.toString(16);
-  try {
-    await provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: hexId }] });
-  } catch (e) {
-    if (e.code === 4902 || (e.data && e.data.originalError && e.data.originalError.code === 4902)) {
-      try {
-        await provider.request({
-          method: 'wallet_addEthereumChain',
-          params: [{
-            chainId: hexId,
-            chainName: cfg.chain.name,
-            nativeCurrency: cfg.chain.nativeCurrency,
-            rpcUrls: [cfg.chain.rpc],
-            blockExplorerUrls: [cfg.chain.explorer],
-          }],
-        });
-      } catch (e2) { err('Could not add the network: ' + (e2.message || e2)); }
-    } else if (e.code !== 4001) {
-      err('Could not switch network: ' + (e.message || e));
-    }
+  const addChain = () => provider.request({ method: 'wallet_addEthereumChain', params: [{ chainId: hexId, chainName: cfg.chain.name, nativeCurrency: cfg.chain.nativeCurrency, rpcUrls: [cfg.chain.rpc], blockExplorerUrls: [cfg.chain.explorer] }] });
+  // sent first thing inside the tap; on a phone the answer comes from the MetaMask app, so poll the chain afterwards
+  let failure = null;
+  provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: hexId }] })
+    .catch((e) => { if (e && e.code === 4001) throw e; return addChain(); })
+    .catch((e) => { failure = e; });
+  if (sdkInst) {
+    const dapp = 'https://metamask.app.link/dapp/' + location.host + location.pathname;
+    (async () => { for (let i = 0; i < 40; i++) { let l = ''; try { l = String(sdkInst.getUniversalLink() || ''); } catch (x) {} if (/channelId=/.test(l)) { showApp(l, dapp, 'Approve the network switch in the MetaMask app, then come back to this page.'); return; } await new Promise((r) => setTimeout(r, 150)); } })();
   }
+  for (let i = 0; i < 120; i++) {
+    if (failure) { if (failure.code !== 4001) err('Could not switch network: ' + (failure.message || failure) + (failure.code ? ' (code ' + failure.code + ')' : '')); info(''); return; }
+    try { const c = parseInt(await provider.request({ method: 'eth_chainId' }), 16); if (c !== chainIdNow) { chainIdNow = c; renderWallet(); refreshAccount(); } if (c === cfg.chain.id) { show('infoNote', false); return; } } catch (e) {}
+    await new Promise((r) => setTimeout(r, 1000));
+  }
+  err('No answer from MetaMask. Open the MetaMask app, approve the network request, then come back.');
 }
 
 function renderContracts() {

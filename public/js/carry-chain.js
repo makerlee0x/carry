@@ -448,7 +448,12 @@
   // A site cannot disconnect MetaMask itself; forget the account locally.
   async function disconnect() {
     flag(true);
-    S.account = null; S.ui = null;
+    S.account = null; S.ui = null; S.connectLink = null;
+    if (sdkInst) {   // the phone connection can be ended for real, so the next connect starts a clean session
+      try { await withTimeout(Promise.resolve(sdkInst.terminate()), 4000); } catch (e) {}
+      sdkInst = null; sdkP = null; provider = null; listening = false;
+      try { localStorage.removeItem(SDK_FLAG); } catch (e) {}
+    }
     emit();
   }
 
@@ -506,7 +511,35 @@
     document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
   }
 
-  window.CarryChain = { last: snapshot(), connect, disconnect, refresh, afterTx, leftText, deposit, withdraw, mint, needsApp: () => isMobile() && !findMetaMask(), appLink };
+  // Switch (or add) the testnet through the connected wallet, then confirm by re-reading the chain.
+  // On a phone the request is answered in the MetaMask app, which the SDK often cannot open by itself once the
+  // tap is over (the request is only delivered; the user has to open the app). So the request is sent first thing,
+  // inside the tap, a tap-to-open link is published for the UI, and the chain is polled until it matches.
+  async function switchNetwork() {
+    if (!provider) return { ok: false, error: 'Connect MetaMask first.' };
+    const hex = '0x' + cfg.chainId.toString(16);
+    let err = null;
+    const add = () => provider.request({ method: 'wallet_addEthereumChain', params: [{ chainId: hex, chainName: cfg.chainName, nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 }, rpcUrls: [cfg.rpcUrl], blockExplorerUrls: cfg.explorerUrl ? [cfg.explorerUrl] : undefined }] });
+    const ask = provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: hex }] }).catch((e) => {
+      if (isRejected(e)) throw e;
+      return add();   // chain unknown to the wallet (4902) or answered differently: adding it also switches
+    });
+    ask.catch((e) => { err = e; });
+    if (sdkInst) publishAppLink(sdkInst);
+    const readChain = async () => { try { const c = parseInt(await withTimeout(provider.request({ method: 'eth_chainId' }), 4000), 16); S.chainId = c; return c; } catch (e) { return S.chainId; } };
+    const done = async () => { S.connectLink = null; await refresh(); };
+    let settled = false; ask.then(() => { settled = true; }, () => {});
+    for (let i = 0; i < 120; i++) {   // up to ~2 minutes
+      if (err) { S.connectLink = null; emit(); const code = err && err.code ? ' (code ' + err.code + ')' : ''; return { ok: false, rejected: isRejected(err), error: isRejected(err) ? 'You rejected the network switch in MetaMask.' : nice(err) + code }; }
+      if ((await readChain()) === cfg.chainId) { await done(); return { ok: true }; }
+      if (settled && i > 2) { await sleep(800); if ((await readChain()) === cfg.chainId) { await done(); return { ok: true }; } }
+      await sleep(1000);
+    }
+    S.connectLink = null; emit();
+    return { ok: false, error: 'No answer from MetaMask. Open the MetaMask app, approve the network request, and come back (or switch to Robinhood Chain Testnet there yourself).' };
+  }
+
+  window.CarryChain = { last: snapshot(), connect, switchNetwork, disconnect, refresh, afterTx, leftText, deposit, withdraw, mint, needsApp: () => isMobile() && !findMetaMask(), appLink };
   const initP = init();
   initP.catch((e) => { S.error = (e && e.message) || String(e); console.warn('[CarryChain]', e); readyResolve(); emit(); });
 })();
