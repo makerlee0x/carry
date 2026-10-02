@@ -68,6 +68,19 @@
   }
 
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  // Forget the phone session completely: end it, and clear what the SDK keeps in this browser, so the next
+  // connect opens a brand new channel instead of tripping over the old one ("channel already connected").
+  async function resetSdk() {
+    if (sdkInst) { try { await withTimeout(Promise.resolve(sdkInst.terminate()), 4000); } catch (e) {} }
+    sdkInst = null; sdkP = null; provider = null; listening = false;
+    try {
+      for (const st of [localStorage, sessionStorage]) {
+        for (const k of Object.keys(st)) if (/MMSDK|sdk-comm|metamask|providerType|^\.sdk/i.test(k) && k !== 'carry_last_wallet') st.removeItem(k);
+      }
+      localStorage.removeItem(SDK_FLAG);
+    } catch (e) {}
+  }
   const withTimeout = (p, ms, msg) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error(msg || 'timeout')), ms))]);
   let readyResolve; const readyP = new Promise((r) => { readyResolve = r; });   // resolves once the library and config have loaded
 
@@ -398,7 +411,8 @@
   async function setAccounts(accts) {
     S.account = accts && accts[0] ? viem.getAddress(accts[0]) : null;
     if (provider) { try { S.chainId = parseInt(await withTimeout(provider.request({ method: 'eth_chainId' }), 5000), 16); } catch (e) {} }   // keep the last known chain if the wallet is slow
-    await refresh();
+    emit();      // show the connected state right away; the heavy reads (balances, positions, analytics) follow
+    refresh();
   }
 
   // The SDK opens the app itself, but a browser may block that when it is not a direct result of a tap.
@@ -413,7 +427,7 @@
     } catch (e) {}
   }
 
-  async function connect() {
+  async function connect(retried) {
     await readyP;
     if (!S.ready) return { ok: false, code: 'error', message: 'The blockchain library failed to load. Check your connection and reload.' };
     provider = findMetaMask();
@@ -422,6 +436,7 @@
       if (!isMobile()) return { ok: false, code: 'nowallet', message: 'MetaMask not found. Install the MetaMask browser extension and reload.' };
       try { provider = await mobileProvider(); viaApp = true; }
       catch (e) {   // never send the page away on its own: report what failed and let the user choose
+        if (!retried && /already connected|channel/i.test((e && e.message) || '')) { await resetSdk(); return connect(true); }
         S.connectLink = null; emit();
         return { ok: false, code: 'error', message: 'Could not start the MetaMask connection (' + ((e && e.message) || 'unknown error') + '). You can open this site inside the MetaMask app instead.' };
       }
@@ -438,6 +453,7 @@
       return { ok: true, account: S.account };
     } catch (e) {
       S.connectLink = null; emit();
+      if (!retried && viaApp && /already connected|channel/i.test((e && e.message) || '')) { await resetSdk(); return connect(true); }   // stale session: start a fresh one once
       if (e && (e.code === 4001 || /reject|denied/i.test(e.message || ''))) return { ok: false, code: 'rejected', message: 'Connection request was rejected in MetaMask.' };
       if (e && e.code === -32002) return { ok: false, code: 'error', message: 'A connection request is already open in MetaMask. Open the MetaMask app, approve or reject it, then try again.' };
       if (e && e.message === 'no-response') return { ok: false, code: 'error', message: 'MetaMask did not respond. Open the MetaMask app, check for a pending request, then try again.' };
@@ -449,11 +465,7 @@
   async function disconnect() {
     flag(true);
     S.account = null; S.ui = null; S.connectLink = null;
-    if (sdkInst) {   // the phone connection can be ended for real, so the next connect starts a clean session
-      try { await withTimeout(Promise.resolve(sdkInst.terminate()), 4000); } catch (e) {}
-      sdkInst = null; sdkP = null; provider = null; listening = false;
-      try { localStorage.removeItem(SDK_FLAG); } catch (e) {}
-    }
+    if (sdkInst || sdkP) await resetSdk();   // the phone connection is ended for real, so the next connect starts clean
     emit();
   }
 
