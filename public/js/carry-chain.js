@@ -1,7 +1,7 @@
 /**
  * Carry chain module (viem). Reads the LeveredLpVault on Robinhood Chain Testnet and
  * handles the real MetaMask connection. It does not send transactions: deposits and
- * withdrawals still go through carry-vault.js.
+ * withdrawals prefer this module; carry-vault.js is a thinner fallback with the same flows.
  *
  * The UI listens for the "carrychain" window event; its detail is a snapshot:
  *   { ready, vault, account, chainId, ui, error }

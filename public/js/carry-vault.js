@@ -1,7 +1,8 @@
 /**
  * Carry ↔ LeveredLpVault bridge (Robinhood Chain Testnet 46630).
- * Loaded alongside the static UI. When config.chain.live is true, deposit /
- * withdraw / network-switch call this module instead of the demo simulator.
+ * Loaded alongside the static UI. Prefer window.CarryChain for live deposit /
+ * withdraw when it is ready; this module remains a thinner ethereum provider
+ * fallback with the same junior close paths (unmatched / settle / earlyExit).
  *
  * No private keys here — uses window.ethereum (MetaMask / Robinhood Wallet).
  */
@@ -15,12 +16,20 @@
     "function depositSenior(uint256 amount)",
     "function withdrawSenior(uint256 principalAmount)",
     "function withdrawUnmatched(uint256 positionId)",
+    "function earlyExit(uint256 positionId)",
+    "function settle(uint256 positionId)",
     "function paused() view returns (bool)",
+    "function term() view returns (uint64)",
     "function mstr() view returns (address)",
     "function usdg() view returns (address)",
     "function freePrincipal(address) view returns (uint256)",
     "function seniorPrincipal(address) view returns (uint256)",
+    "function positions(uint256) view returns (address,uint256,uint256,uint256,uint256,uint64,bool)",
   ];
+
+  // JuniorDeposit(positionId indexed, junior indexed, mstrAmount, matched)
+  const JUNIOR_DEPOSIT_TOPIC =
+    "0x202b8761606dd63827b9fc6283c44f527e6a0146362613adb77bf3541d29593f";
 
   const ERC20_ABI = [
     "function approve(address spender, uint256 amount) returns (bool)",
@@ -99,7 +108,11 @@
         "depositSenior(uint256)": "0x4e43773e",
         "withdrawSenior(uint256)": "0x875382e5",
         "withdrawUnmatched(uint256)": "0xafadd42b",
+        "earlyExit(uint256)": "0xb8af3d3e",
+        "settle(uint256)": "0x8df82800",
         "paused()": "0x5c975abb",
+        "term()": "0xa10ffbed",
+        "positions(uint256)": "0x99fbab88",
         "approve(address,uint256)": "0x095ea7b3",
         "allowance(address,address)": "0xdd62ed3e",
         "balanceOf(address)": "0x70a08231",
@@ -190,8 +203,101 @@
     return { ok: true };
   }
 
+  function topicAddr(addr) {
+    return "0x" + addr.toLowerCase().replace(/^0x/, "").padStart(64, "0");
+  }
+
+  function decodeUintWords(raw) {
+    const hex = (raw || "0x").replace(/^0x/, "");
+    const out = [];
+    for (let i = 0; i + 64 <= hex.length; i += 64) out.push(BigInt("0x" + hex.slice(i, i + 64)));
+    return out;
+  }
+
+  async function listJuniorLive(eth, vault, account) {
+    const logs = await eth.request({
+      method: "eth_getLogs",
+      params: [
+        {
+          address: vault,
+          fromBlock: "0x0",
+          toBlock: "latest",
+          topics: [JUNIOR_DEPOSIT_TOPIC, null, topicAddr(account)],
+        },
+      ],
+    });
+    const ids = [
+      ...new Set(
+        (logs || []).map((l) => BigInt(l.topics[1])).filter((id) => id > 0n)
+      ),
+    ];
+    const term = await readUint(eth, vault, encodeFn("term()", [], []));
+    const now = BigInt(Math.floor(Date.now() / 1000));
+    const live = [];
+    for (const id of ids) {
+      const words = decodeUintWords(
+        await ethCall(eth, vault, encodeFn("positions(uint256)", ["uint256"], [id]))
+      );
+      // owner, mstrAmount, seniorPrincipal, entryPriceWad, feeUsdg, openedAt, settled
+      if (!words.length || words[6] !== 0n) continue;
+      const owner = "0x" + words[0].toString(16).padStart(40, "0");
+      if (owner.toLowerCase() !== account.toLowerCase()) continue;
+      const matched = words[2] > 0n;
+      const openedAt = words[5];
+      live.push({
+        id,
+        mstr: words[1],
+        matched,
+        openedAt,
+        ready: matched && now >= openedAt + term,
+        active: matched && now < openedAt + term,
+      });
+    }
+    return live;
+  }
+
+  async function withdrawJuniorPositions(eth, account, vault, amount, decimals) {
+    const live = await listJuniorLive(eth, account, vault);
+    if (!live.length) throw new Error("You have no stock positions to withdraw.");
+    const open = live.filter((r) => !r.matched);
+    const ready = live.filter((r) => r.ready);
+    const act = live.filter((r) => r.active);
+    const tot = (list) => list.reduce((x, r) => x + r.mstr, 0n);
+    const total = tot(live);
+    const freeTotal = tot(open) + tot(ready);
+    const want = parseUnits(amount, decimals);
+    const near = (a, b) => {
+      const d = a > b ? a - b : b - a;
+      return d <= 10n ** 14n; // dust tolerance
+    };
+    const all = near(want, total);
+    const freeOnly = freeTotal > 0n && near(want, freeTotal);
+    if (!all && !freeOnly) {
+      const fx = (v) => Number(v) / 10 ** decimals;
+      throw new Error(
+        act.length && freeTotal > 0n
+          ? `Deposits leave as whole positions. Withdraw ${fx(freeTotal)} MSTR with no fee, or all ${fx(total)} MSTR (early-exit applies to active legs).`
+          : `Stock positions withdraw in full. Use the full amount: ${fx(total)} MSTR.`
+      );
+    }
+    const steps = [
+      [open, "withdrawUnmatched(uint256)"],
+      [ready, "settle(uint256)"],
+    ];
+    if (all && act.length) steps.push([act, "earlyExit(uint256)"]);
+    let hash = null;
+    for (const [group, sig] of steps) {
+      for (const r of group) {
+        const data = encodeFn(sig, ["uint256"], [r.id]);
+        hash = await ethSend(eth, account, vault, data);
+      }
+    }
+    if (!hash) throw new Error("Nothing to withdraw for that amount.");
+    return hash;
+  }
+
   /**
-   * @param {{ mode: string, sym: string, amount: number|string, cfg: object }} opts
+   * @param {{ mode: string, sym: string, amount: number|string, cfg: object, confirm?: Function }} opts
    * mode: 'deposit' | 'withdraw'
    * sym: 'MSTR' | 'USDG' (stock → junior, USDG → senior)
    */
@@ -237,12 +343,19 @@
           window.CarryVault.lastHash = hash;
           return { ok: true, hash };
         }
-        // Stock withdraw of unmatched needs a positionId — not in the modal today.
-        return {
-          ok: false,
-          phase: "error",
-          error: "Junior withdrawUnmatched needs a position id (use cast/script for now).",
-        };
+        // Prefer the viem bridge (same path the live site uses).
+        if (window.CarryChain && typeof window.CarryChain.withdraw === "function") {
+          const res = await window.CarryChain.withdraw({
+            sym,
+            amount,
+            confirm: opts && opts.confirm,
+          });
+          if (res && res.hash) window.CarryVault.lastHash = res.hash;
+          return res;
+        }
+        const hash = await withdrawJuniorPositions(eth, account, vault, amount, decimals);
+        window.CarryVault.lastHash = hash;
+        return { ok: true, hash };
       }
 
       return { ok: false, phase: "error", error: "Unsupported mode: " + mode };
