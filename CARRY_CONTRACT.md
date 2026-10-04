@@ -2,9 +2,10 @@
 
 Grant- and audit-oriented reference for `contracts/src/LeveredLpVault.sol`.  
 Deploy steps live in [`CARRY_TESTNET.md`](./CARRY_TESTNET.md).  
-Historical build notes: [`LEVERED_LP_BUILD.md`](./LEVERED_LP_BUILD.md).
+Historical build notes: [`LEVERED_LP_BUILD.md`](./LEVERED_LP_BUILD.md).  
+Maker-locked product rules + research sync: [`docs/MAKER_V1_NOTES.md`](./docs/MAKER_V1_NOTES.md).
 
-**Status:** EVM testnet. Vault starts **paused**. DualPool hook is **NOT IMPLEMENTED** (`dualPoolAdapter() == address(0)`). Fees are mocked via `accrueLpFee` / `MockFeePool`. No Yieldz, Morpho idle sleeve, or STRATEGY burn/boost wiring.
+**Status:** EVM testnet. Vault starts **paused**. DualPool hook is **NOT IMPLEMENTED** (`dualPoolAdapter() == address(0)`). LP fees on testnet are pushed via `accrueLpFee` / `MockFeePool` (fee-donor path for demos). No Yieldz, Morpho idle sleeve, or STRATEGY burn/boost wiring.
 
 ---
 

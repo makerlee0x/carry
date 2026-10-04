@@ -8,6 +8,7 @@ This repo is the **working Carry app + contracts**:
 
 - **UI** — static site in `public/` (hash-routed marketing + app prototype)
 - **Vault** — `contracts/` Forge project (`LeveredLpVault`) on **Robinhood Chain Testnet (46630)**
+- **Product rules** — Maker-locked V1 notes + research parameter sync in [`docs/MAKER_V1_NOTES.md`](./docs/MAKER_V1_NOTES.md)
 
 | Deployed (46630) | Address |
 | --- | --- |
