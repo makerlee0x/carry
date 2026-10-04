@@ -90,6 +90,9 @@ contract LeveredLpVault {
     mapping(address => uint256) public walletJuniorUsdg;
     mapping(uint256 => uint256) public positionJuniorUsdg;
 
+    /// @notice Product Morpho-rate floor for seniors (display / Vault v2 placeholder). Settlement still uses immutable `borrowAprWad`.
+    uint256 public morphoFloorAprWad;
+
     /// @dev FIFO queue of Open (unmatched) position ids.
     uint256 public openHead;
     uint256 public openTail;
@@ -156,6 +159,7 @@ contract LeveredLpVault {
         uint256 juniorLeftoverFees
     );
     event CapsUpdated(uint256 maxTotalSeniorUsdg, uint256 maxTotalJuniorUsdg, uint256 maxPerWalletUsdg);
+    event MorphoFloorAprUpdated(uint256 morphoFloorAprWad);
 
     modifier onlyOwner() {
         if (msg.sender != owner) revert NotOwner();
@@ -232,6 +236,13 @@ contract LeveredLpVault {
         maxTotalJuniorUsdg = maxTotalJuniorUsdg_;
         maxPerWalletUsdg = maxPerWalletUsdg_;
         emit CapsUpdated(maxTotalSeniorUsdg_, maxTotalJuniorUsdg_, maxPerWalletUsdg_);
+    }
+
+    /// @notice Owner-bounded Morpho floor APR placeholder (≤ MAX_BORROW_APR_WAD). Does not change settle math.
+    function setMorphoFloorApr(uint256 morphoFloorAprWad_) external onlyOwner {
+        if (morphoFloorAprWad_ > MAX_BORROW_APR_WAD) revert BadApr();
+        morphoFloorAprWad = morphoFloorAprWad_;
+        emit MorphoFloorAprUpdated(morphoFloorAprWad_);
     }
 
     /// @notice Rescue a token that is not MSTR and not USDG. Principal stays put.

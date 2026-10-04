@@ -479,6 +479,19 @@ contract LeveredLpVaultTest is Test {
         vault.setDepositCaps(1, 1, 1);
     }
 
+    function test_morphoFloorAprDefaultAndOwnerSet() public {
+        assertEq(vault.morphoFloorAprWad(), 0.039e18);
+        vault.setMorphoFloorApr(0.04e18);
+        assertEq(vault.morphoFloorAprWad(), 0.04e18);
+        vm.expectRevert(LeveredLpVault.BadApr.selector);
+        vault.setMorphoFloorApr(0.06e18);
+        // Settlement still uses immutable borrowAprWad (5%), not the Morpho floor placeholder.
+        assertEq(vault.borrowAprWad(), 0.05e18);
+        vm.prank(attacker);
+        vm.expectRevert(LeveredLpVault.NotOwner.selector);
+        vault.setMorphoFloorApr(0.03e18);
+    }
+
     function _openMatched() internal returns (uint256 id) {
         uint256 seniorNeed = vault.previewSeniorAssets(MSTR_IN);
         _depositSenior(senior, seniorNeed);

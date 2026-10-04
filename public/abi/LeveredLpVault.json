@@ -454,6 +454,19 @@
   },
   {
     "type": "function",
+    "name": "morphoFloorAprWad",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "mstr",
     "inputs": [],
     "outputs": [
@@ -1009,6 +1022,19 @@
   },
   {
     "type": "function",
+    "name": "setMorphoFloorApr",
+    "inputs": [
+      {
+        "name": "morphoFloorAprWad_",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "settle",
     "inputs": [
       {
@@ -1353,6 +1379,19 @@
       },
       {
         "name": "toPosition",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "MorphoFloorAprUpdated",
+    "inputs": [
+      {
+        "name": "morphoFloorAprWad",
         "type": "uint256",
         "indexed": false,
         "internalType": "uint256"

@@ -68,6 +68,8 @@
       "post": 45,
       "overnight": 60,
       "weekend": 100
-    }
+    },
+    "morphoFloorAprPct": 3.9,
+    "seniorBorrowAprPctOnChain": 5
   }
 }
