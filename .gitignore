@@ -1,6 +1,8 @@
 node_modules/
+keeper/node_modules/
 .vercel/
 .DS_Store
+contracts/foundry.lock
 
 # Secrets — never commit
 .env

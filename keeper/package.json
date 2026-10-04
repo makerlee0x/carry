@@ -1,0 +1,14 @@
+{
+  "name": "carry-keeper",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Carry LP keeper dry-run skeleton (Hyperliquid reference, no DualPool txs)",
+  "scripts": {
+    "dry-run": "node --experimental-strip-types src/index.ts --dry-run",
+    "start": "node --experimental-strip-types src/index.ts --dry-run"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
