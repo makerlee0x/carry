@@ -440,14 +440,23 @@ contract LeveredLpVaultTest is Test {
         vault.setDepositCaps(seniorNeed, seniorNeed, seniorNeed);
 
         _depositSenior(senior, seniorNeed);
+
+        usdg.mint(senior2, 1 ether);
+        vm.startPrank(senior2);
+        usdg.approve(address(vault), 1 ether);
         vm.expectRevert(LeveredLpVault.CapExceeded.selector);
-        _depositSenior(senior2, 1 ether);
+        vault.depositSenior(1 ether);
+        vm.stopPrank();
 
         uint256 id = _depositJunior(junior, MSTR_IN);
         assertTrue(vault.isMatched(id));
 
+        mstr.mint(attacker, MSTR_IN);
+        vm.startPrank(attacker);
+        mstr.approve(address(vault), MSTR_IN);
         vm.expectRevert(LeveredLpVault.CapExceeded.selector);
-        _depositJunior(attacker, MSTR_IN);
+        vault.depositJunior(MSTR_IN);
+        vm.stopPrank();
     }
 
     function test_depositCapsReleaseOnUnmatchedWithdraw() public {
