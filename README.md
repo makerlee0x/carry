@@ -66,7 +66,7 @@ See [`CARRY_CONTRACT.md`](./CARRY_CONTRACT.md), [`CARRY_TESTNET.md`](./CARRY_TES
 
 `analytics.simulate` (default `true`) fills the Analytics page with simulated protocol activity (users, volume, fees, deposits) that grows day by day and ticks up through the current day, with real vault activity added on top. Set it to `false` to show only static sample volume/APY plus the real vault data.
 
-`analytics.liveApy` (default `false`) switches the MSTR APY from the sample number to the live one worked out from the vault's real fees: fees paid to positions minus the lender's borrow cost, over matched stock-time for the last 30 days (needs 1+ day of history, capped at 999%). The live value is always computed and available as `CarryChain.last.analytics.mstrApy` (`{ pct, days, fees }`) whether or not the flag is on. NVDA and the other markets stay simulated.
+`analytics.liveApy` (default `true`) switches the MSTR APY from the sample number to the live one worked out from the vault's real fees: fees paid to positions minus the lender's borrow cost, over matched stock-time for the last 30 days (needs 1+ day of history, capped at 999%). The live value is always computed and available as `CarryChain.last.analytics.mstrApy` (`{ pct, days, fees }`) whether or not the flag is on. NVDA and the other markets stay simulated.
 
 ## Notes
 

@@ -27,7 +27,7 @@
   },
   "analytics": {
     "simulate": true,
-    "liveApy": false,
+    "liveApy": true,
     "showMorphoTiles": true
   },
   "product": {
@@ -40,10 +40,16 @@
     "earlyExitFloorAprPct": 4,
     "claimFeeBps": 50,
     "ranges": {
-      "MSTR": { "halfWidthPct": 32, "source": "maker" },
-      "NVDA": { "halfWidthPct": 8, "source": "maker" }
+      "MSTR": {
+        "halfWidthPct": 32,
+        "source": "maker"
+      },
+      "NVDA": {
+        "halfWidthPct": 8,
+        "source": "maker"
+      }
     },
-    "researchRangesNote": "Research uses session-vol bands (±1× five-session); UI follows Maker until he picks.",
+    "researchRangesNote": "Research uses session-vol bands (\u00b11\u00d7 five-session); UI follows Maker until he picks.",
     "recenter": {
       "termDays": 7,
       "oracleDriftFromCenterPct": 80
