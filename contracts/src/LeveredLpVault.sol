@@ -204,6 +204,8 @@ contract LeveredLpVault {
         mstrDecimals = mstr.decimals();
         usdgDecimals = usdg.decimals();
         paused = true;
+        // Default product floor ~3.9% Morpho; owner may refresh within borrow APR bound.
+        morphoFloorAprWad = 0.039e18;
         emit PausedDeposits(true);
     }
 
