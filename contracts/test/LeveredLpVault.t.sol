@@ -435,6 +435,41 @@ contract LeveredLpVaultTest is Test {
         assertEq(owed, expected);
     }
 
+    function test_depositCapsEnforceTotalAndPerWallet() public {
+        uint256 seniorNeed = vault.previewSeniorAssets(MSTR_IN);
+        vault.setDepositCaps(seniorNeed, seniorNeed, seniorNeed);
+
+        _depositSenior(senior, seniorNeed);
+        vm.expectRevert(LeveredLpVault.CapExceeded.selector);
+        _depositSenior(senior2, 1 ether);
+
+        uint256 id = _depositJunior(junior, MSTR_IN);
+        assertTrue(vault.isMatched(id));
+
+        vm.expectRevert(LeveredLpVault.CapExceeded.selector);
+        _depositJunior(attacker, MSTR_IN);
+    }
+
+    function test_depositCapsReleaseOnUnmatchedWithdraw() public {
+        uint256 seniorNeed = vault.previewSeniorAssets(MSTR_IN);
+        vault.setDepositCaps(0, seniorNeed, 0);
+        uint256 id = _depositJunior(junior, MSTR_IN);
+        assertEq(vault.totalJuniorUsdg(), seniorNeed);
+        vm.prank(junior);
+        vault.withdrawUnmatched(id);
+        assertEq(vault.totalJuniorUsdg(), 0);
+        assertEq(vault.walletJuniorUsdg(junior), 0);
+        // Cap frees up for a new deposit.
+        _depositJunior(junior, MSTR_IN);
+        assertEq(vault.totalJuniorUsdg(), seniorNeed);
+    }
+
+    function test_setDepositCapsOnlyOwner() public {
+        vm.prank(attacker);
+        vm.expectRevert(LeveredLpVault.NotOwner.selector);
+        vault.setDepositCaps(1, 1, 1);
+    }
+
     function _openMatched() internal returns (uint256 id) {
         uint256 seniorNeed = vault.previewSeniorAssets(MSTR_IN);
         _depositSenior(senior, seniorNeed);

@@ -125,3 +125,9 @@ Then owner calls `unpause()` when ready for deposits. Mint mock tokens via `Mock
 - Owner cannot rescue MSTR/USDG.  
 - No Yieldz. No mainnet custody of real Stock Tokens for this script.  
 - `DeployLeveredLpVault.s.sol` (4663) stays **disarmed** — not used for Carry testnet.
+
+
+## Additive vault params (pending redeploy)
+
+Source now includes owner-settable **deposit caps** (`setDepositCaps`). The live address above was deployed before these getters/setters existed, so caps are **not** enforceable on that bytecode until Dylan redeploys and updates `public/config.json` + this address table. Until then UI caps remain display-only (`product.caps.enforcedOnChain: false`).
+

@@ -81,6 +81,15 @@ contract LeveredLpVault {
     uint256 public accYieldPerPrincipal;
     uint256 public accMstrPerPrincipal;
 
+    /// @notice Owner-set TVL caps in USDG units. Zero means uncapped (default for legacy deploys).
+    uint256 public maxTotalSeniorUsdg;
+    uint256 public maxTotalJuniorUsdg;
+    uint256 public maxPerWalletUsdg;
+    uint256 public totalJuniorUsdg;
+    mapping(address => uint256) public walletSeniorUsdg;
+    mapping(address => uint256) public walletJuniorUsdg;
+    mapping(uint256 => uint256) public positionJuniorUsdg;
+
     /// @dev FIFO queue of Open (unmatched) position ids.
     uint256 public openHead;
     uint256 public openTail;
@@ -116,6 +125,7 @@ contract LeveredLpVault {
     error TransferFailed();
     error FeeOnTransfer();
     error Reentered();
+    error CapExceeded();
 
     event PausedDeposits(bool paused);
     event SeniorDeposit(address indexed senior, uint256 amount);
@@ -145,6 +155,7 @@ contract LeveredLpVault {
         uint256 mstrReturned,
         uint256 juniorLeftoverFees
     );
+    event CapsUpdated(uint256 maxTotalSeniorUsdg, uint256 maxTotalJuniorUsdg, uint256 maxPerWalletUsdg);
 
     modifier onlyOwner() {
         if (msg.sender != owner) revert NotOwner();
@@ -212,6 +223,17 @@ contract LeveredLpVault {
         emit PausedDeposits(false);
     }
 
+    /// @notice Owner-set deposit caps (USDG units / junior notional). Zero = uncapped.
+    function setDepositCaps(uint256 maxTotalSeniorUsdg_, uint256 maxTotalJuniorUsdg_, uint256 maxPerWalletUsdg_)
+        external
+        onlyOwner
+    {
+        maxTotalSeniorUsdg = maxTotalSeniorUsdg_;
+        maxTotalJuniorUsdg = maxTotalJuniorUsdg_;
+        maxPerWalletUsdg = maxPerWalletUsdg_;
+        emit CapsUpdated(maxTotalSeniorUsdg_, maxTotalJuniorUsdg_, maxPerWalletUsdg_);
+    }
+
     /// @notice Rescue a token that is not MSTR and not USDG. Principal stays put.
     function rescueToken(address token, address to, uint256 amount) external onlyOwner nonReentrant {
         if (token == address(mstr) || token == address(usdg)) revert PrincipalToken();
@@ -222,9 +244,11 @@ contract LeveredLpVault {
     /// @notice Lend USDG. Idle USDG then FIFO-matches Open junior positions (Carry: lender matches).
     function depositSenior(uint256 amount) external whenDepositsOpen nonReentrant {
         if (amount == 0) revert ZeroAmount();
+        _enforceSeniorCap(msg.sender, amount);
         _checkpoint(msg.sender);
         seniorPrincipal[msg.sender] += amount;
         totalSeniorPrincipal += amount;
+        walletSeniorUsdg[msg.sender] += amount;
         _syncDebt(msg.sender);
         _pullExact(usdg, msg.sender, amount);
         _matchOpenPositions();
@@ -241,6 +265,8 @@ contract LeveredLpVault {
         if (principalAmount > 0) {
             seniorPrincipal[msg.sender] -= principalAmount;
             totalSeniorPrincipal -= principalAmount;
+            uint256 credited = walletSeniorUsdg[msg.sender];
+            walletSeniorUsdg[msg.sender] = principalAmount > credited ? 0 : credited - principalAmount;
         }
         _syncDebt(msg.sender);
 
@@ -258,6 +284,8 @@ contract LeveredLpVault {
     /// @notice Deposit stock. Matches immediately if idle USDG exists; else stays Open (unmatched).
     function depositJunior(uint256 mstrAmount) external whenDepositsOpen nonReentrant returns (uint256 positionId) {
         if (mstrAmount == 0) revert ZeroAmount();
+        uint256 notional = previewSeniorAssets(mstrAmount);
+        _enforceJuniorCap(msg.sender, notional);
 
         positionId = nextPositionId++;
         positions[positionId] = Position({
@@ -270,6 +298,9 @@ contract LeveredLpVault {
             settled: false
         });
         _enqueueOpen(positionId);
+        totalJuniorUsdg += notional;
+        walletJuniorUsdg[msg.sender] += notional;
+        positionJuniorUsdg[positionId] = notional;
         _pullExact(mstr, msg.sender, mstrAmount);
 
         bool matched = _tryMatch(positionId);
@@ -288,6 +319,7 @@ contract LeveredLpVault {
         position.settled = true;
         position.mstrAmount = 0;
         _dequeueOpen(positionId);
+        _releaseJuniorCap(msg.sender, positionId);
 
         emit UnmatchedWithdraw(positionId, msg.sender, amount);
         _push(mstr, msg.sender, amount);
@@ -348,6 +380,7 @@ contract LeveredLpVault {
         position.feeUsdg = 0;
         backstop -= result.fromBackstop;
         reservedSenior -= position.seniorPrincipal;
+        _releaseJuniorCap(junior, positionId);
 
         uint256 seniorPaid = result.fromPositionFees + result.fromBackstop;
         if (seniorPaid > 0 && totalSeniorPrincipal > 0) {
@@ -379,6 +412,7 @@ contract LeveredLpVault {
         position.settled = true;
         position.feeUsdg = 0;
         reservedSenior -= position.seniorPrincipal;
+        _releaseJuniorCap(junior, positionId);
 
         uint256 seniorPaid = result.fromPositionFees;
         if (seniorPaid > 0 && totalSeniorPrincipal > 0) {
@@ -581,6 +615,26 @@ contract LeveredLpVault {
         uint256 principal = seniorPrincipal[senior];
         seniorYieldDebt[senior] = principal * accYieldPerPrincipal / WAD;
         seniorMstrDebt[senior] = principal * accMstrPerPrincipal / WAD;
+    }
+
+    function _enforceSeniorCap(address senior, uint256 amount) internal view {
+        if (maxTotalSeniorUsdg != 0 && totalSeniorPrincipal + amount > maxTotalSeniorUsdg) revert CapExceeded();
+        if (maxPerWalletUsdg != 0 && walletSeniorUsdg[senior] + amount > maxPerWalletUsdg) revert CapExceeded();
+    }
+
+    function _enforceJuniorCap(address junior, uint256 notional) internal view {
+        if (maxTotalJuniorUsdg != 0 && totalJuniorUsdg + notional > maxTotalJuniorUsdg) revert CapExceeded();
+        if (maxPerWalletUsdg != 0 && walletJuniorUsdg[junior] + notional > maxPerWalletUsdg) revert CapExceeded();
+    }
+
+    function _releaseJuniorCap(address junior, uint256 positionId) internal {
+        uint256 notional = positionJuniorUsdg[positionId];
+        if (notional == 0) return;
+        positionJuniorUsdg[positionId] = 0;
+        if (notional > totalJuniorUsdg) totalJuniorUsdg = 0;
+        else totalJuniorUsdg -= notional;
+        uint256 credited = walletJuniorUsdg[junior];
+        walletJuniorUsdg[junior] = notional > credited ? 0 : credited - notional;
     }
 
     /// @dev Pull exact `amount`. Reverts on failure or fee-on-transfer (balance delta != amount).
