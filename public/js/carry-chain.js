@@ -146,20 +146,30 @@
       const sumOf = (list) => list.reduce((x, r) => x + r.mstr, 0);
       const matchedShares = sumOf(act) + sumOf(rdy), freeShares = sumOf(opn) + sumOf(rdy), activeShares = sumOf(act);
       let statusTxt, leftTxt, free_, earned = 0, days = 0;
+      const parts = [];
+      if (act.length) parts.push(act.length + (act.length === 1 ? ' active' : ' active'));
+      if (rdy.length) parts.push(rdy.length + (rdy.length === 1 ? ' ready' : ' ready'));
+      if (opn.length) parts.push(opn.length + (opn.length === 1 ? ' open' : ' open'));
+      const mixed = [act.length > 0, rdy.length > 0, opn.length > 0].filter(Boolean).length > 1;
       if (act.length) {
         const soonest = Math.min(...act.map((r) => r.openedAt + term)), first = Math.min(...act.map((r) => r.openedAt));
-        statusTxt = 'Active'; free_ = false;
-        leftTxt = leftText(soonest - now);
+        statusTxt = mixed ? ('Mixed · ' + parts.join(', ')) : 'Active';
+        free_ = freeShares > 0;   // some legs may still withdraw without early-exit
+        leftTxt = mixed
+          ? (leftText(soonest - now) + ' on active · ' + round(freeShares, 4) + ' MSTR free of early-exit')
+          : leftText(soonest - now);
         earned = Math.min(4, (4 * (now - first)) / term);
         days = Math.floor((now - first) / 86400);
       } else if (rdy.length) {
-        statusTxt = 'Ready to settle'; free_ = true; leftTxt = 'Term ended'; earned = 4;
+        statusTxt = mixed ? ('Mixed · ' + parts.join(', ')) : 'Ready to settle';
+        free_ = true; leftTxt = mixed ? ('Term ended · ' + parts.join(', ')) : 'Term ended'; earned = 4;
         days = Math.floor((now - Math.min(...rdy.map((r) => r.openedAt))) / 86400);
       } else {
         statusTxt = 'Open'; free_ = true; leftTxt = 'Waiting for USDG';
       }
       positions.push({ sym: 'MSTR', shares: round(mstrTotal, 4), fees: round(fees, 4), days, earned: round(earned, 2), auto: false, real: true, statusTxt, leftTxt, free: free_, count: live.length,
-        matchedPct: mstrTotal > 0 ? round((matchedShares / mstrTotal) * 100, 1) : 0, freeShares: round(freeShares, 4), activeShares: round(activeShares, 4) });
+        matchedPct: mstrTotal > 0 ? round((matchedShares / mstrTotal) * 100, 1) : 0, freeShares: round(freeShares, 4), activeShares: round(activeShares, 4),
+        mixed, openShares: round(sumOf(opn), 4), readyShares: round(sumOf(rdy), 4) });
     }
 
     const seniorN = num(senior);
