@@ -458,6 +458,36 @@
     } catch (e) { return fail(e); }
   }
 
+  /// Claim fee surplus on active matched legs (claimFees). Needs vault bytecode that exposes claimFees.
+  async function claimFees({ sym, onStep }) {
+    try {
+      guard();
+      if (sym && sym !== 'MSTR') throw user(sym + ' fee claim is display-only on this testnet.');
+      await refresh(true);
+      const now = Math.floor(Date.now() / 1000), term = S.vault.termSec;
+      const act = S.raw.filter((r) => r.matched && r.openedAt + term > now);
+      if (!act.length) throw user('No active matched stock position to claim from.');
+      const before = sig();
+      let hash, claimed = 0;
+      for (const r of act) {
+        try {
+          const prev = await pub.readContract({ address: cfg.vault, abi: vaultAbi, functionName: 'previewClaimFees', args: [r.id] });
+          hash = await send({ address: cfg.vault, abi: vaultAbi, functionName: 'claimFees', args: [r.id] }, onStep, 'Confirm fee claim in MetaMask…');
+          claimed += num(prev.toJunior != null ? prev.toJunior : prev[4]);
+        } catch (e) {
+          const msg = e.shortMessage || e.message || String(e);
+          if (/ClaimThreshold|ZeroAmount|function|selector|returned no data|execution reverted/i.test(msg) && act.length === 1) {
+            throw user('Claim-at-4% needs accrued fees above the pace threshold (and a vault that supports claimFees).');
+          }
+          if (!/ClaimThreshold|ZeroAmount/i.test(msg)) throw e;
+        }
+      }
+      if (!hash) throw user('No position had claimable fee surplus above the 4% pace threshold yet.');
+      await settleAfterTx(before);
+      return { ok: true, hash, msg: 'Claimed ' + round(claimed, 4) + ' USDG fee surplus. Position stays open.' };
+    } catch (e) { return fail(e); }
+  }
+
   // ---- Connect -------------------------------------------------------------
   async function setAccounts(accts) {
     S.account = accts && accts[0] ? viem.getAddress(accts[0]) : null;
@@ -602,7 +632,7 @@
     return { ok: false, error: 'No answer from MetaMask. Open the MetaMask app, approve the network request, and come back (or switch to Robinhood Chain Testnet there yourself).' };
   }
 
-  window.CarryChain = { last: snapshot(), connect, switchNetwork, disconnect, refresh, afterTx, leftText, deposit, withdraw, mint, needsApp: () => isMobile() && !findMetaMask(), appLink };
+  window.CarryChain = { last: snapshot(), connect, switchNetwork, disconnect, refresh, afterTx, leftText, deposit, withdraw, mint, claimFees, needsApp: () => isMobile() && !findMetaMask(), appLink };
   const initP = init();
   initP.catch((e) => { S.error = (e && e.message) || String(e); console.warn('[CarryChain]', e); readyResolve(); emit(); });
 })();

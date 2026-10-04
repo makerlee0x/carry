@@ -129,5 +129,5 @@ Then owner calls `unpause()` when ready for deposits. Mint mock tokens via `Mock
 
 ## Additive vault params (pending redeploy)
 
-Source now includes owner-settable **deposit caps** (`setDepositCaps`) and a **Morpho floor APR** placeholder (`setMorphoFloorApr`, default 3.9%; settlement still uses immutable `borrowAprWad`). The live address above was deployed before these getters/setters existed, so caps are **not** enforceable on that bytecode until Dylan redeploys and updates `public/config.json` + this address table. Until then UI caps remain display-only (`product.caps.enforcedOnChain: false`).
+Source now includes owner-settable **deposit caps** (`setDepositCaps`) and a **Morpho floor APR** placeholder (`setMorphoFloorApr`, default 3.9%; settlement still uses immutable `borrowAprWad`). Source also adds **claimFees** (skim surplus above the 4% pace without closing; claim fee to backstop). The live address above was deployed before these getters/setters existed, so caps are **not** enforceable on that bytecode until Dylan redeploys and updates `public/config.json` + this address table. Until then UI caps remain display-only (`product.caps.enforcedOnChain: false`).
 

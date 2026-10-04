@@ -68,6 +68,19 @@
   },
   {
     "type": "function",
+    "name": "MAX_CLAIM_FEE_WAD",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "MAX_PROTOCOL_CUT_WAD",
     "inputs": [],
     "outputs": [
@@ -200,6 +213,65 @@
       }
     ],
     "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "claimFeeWad",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "claimFees",
+    "inputs": [
+      {
+        "name": "positionId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "tuple",
+        "internalType": "struct LeveredLpVault.ClaimFeesResult",
+        "components": [
+          {
+            "name": "elapsed",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "couponReserved",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "claimedGross",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "claimFee",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "toJunior",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ]
+      }
+    ],
+    "stateMutability": "nonpayable"
   },
   {
     "type": "function",
@@ -684,6 +756,52 @@
   },
   {
     "type": "function",
+    "name": "previewClaimFees",
+    "inputs": [
+      {
+        "name": "positionId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "tuple",
+        "internalType": "struct LeveredLpVault.ClaimFeesResult",
+        "components": [
+          {
+            "name": "elapsed",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "couponReserved",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "claimedGross",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "claimFee",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "toJunior",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ]
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "previewEarlyExit",
     "inputs": [
       {
@@ -999,6 +1117,19 @@
   },
   {
     "type": "function",
+    "name": "setClaimFee",
+    "inputs": [
+      {
+        "name": "claimFeeWad_",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "setDepositCaps",
     "inputs": [
       {
@@ -1271,6 +1402,19 @@
   },
   {
     "type": "event",
+    "name": "ClaimFeeUpdated",
+    "inputs": [
+      {
+        "name": "claimFeeWad",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "EarlyExit",
     "inputs": [
       {
@@ -1317,6 +1461,49 @@
       },
       {
         "name": "juniorLeftoverFees",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "FeesClaimed",
+    "inputs": [
+      {
+        "name": "positionId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "junior",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "claimedGross",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "claimFee",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "toJunior",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "couponReserved",
         "type": "uint256",
         "indexed": false,
         "internalType": "uint256"
@@ -1578,6 +1765,11 @@
   },
   {
     "type": "error",
+    "name": "BadClaimFee",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "BadCut",
     "inputs": []
   },
@@ -1599,6 +1791,11 @@
   {
     "type": "error",
     "name": "CapExceeded",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "ClaimThreshold",
     "inputs": []
   },
   {

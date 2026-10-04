@@ -13,6 +13,8 @@ import {IPriceOracle} from "./interfaces/IPriceOracle.sol";
 /// 3. Early exit (junior, while active, before term): coupon = principal · 4% · elapsed / year
 ///    from position fees first; gap covered by selling junior MSTR from the position (no spare
 ///    wallet USDG). Returns remaining shares. V1 closes the whole position.
+/// 3b. claimFees (junior, while active): once fees ≥ that 4% pace, skim surplus without closing;
+///    claimFeeWad of surplus → backstop; coupon stays reserved on the position.
 /// 4. Settle (after term): maturity borrow fee (borrowAprWad · term / year); may sell shares
 ///    if fees + backstop cannot cover. Separate path from early exit.
 /// 5. Lender exit: withdraw idle/free principal anytime; matched size needs replacement USDG
@@ -27,6 +29,8 @@ contract LeveredLpVault {
     uint256 public constant MAX_PROTOCOL_CUT_WAD = 0.2e18;
     /// @notice Early-exit coupon pace / pool-floor APR in product copy (4%).
     uint256 public constant EARLY_EXIT_APR_WAD = 0.04e18;
+    /// @notice Max claim-fee cut when skimming fees without closing (10%).
+    uint256 public constant MAX_CLAIM_FEE_WAD = 0.1e18;
     uint64 public constant MAX_TERM = 7 days;
 
     /// @dev Documented target. This vault does not approve it and holds no position there.
@@ -63,6 +67,14 @@ contract LeveredLpVault {
         uint256 feeShortfallUsdg;
     }
 
+    struct ClaimFeesResult {
+        uint256 elapsed;
+        uint256 couponReserved;
+        uint256 claimedGross;
+        uint256 claimFee;
+        uint256 toJunior;
+    }
+
     IERC20Minimal public immutable mstr;
     IERC20Minimal public immutable usdg;
     IPriceOracle public immutable oracle;
@@ -92,6 +104,8 @@ contract LeveredLpVault {
 
     /// @notice Product Morpho-rate floor for seniors (display / Vault v2 placeholder). Settlement still uses immutable `borrowAprWad`.
     uint256 public morphoFloorAprWad;
+    /// @notice Cut of claimed fee surplus paid to backstop (default 0.5%).
+    uint256 public claimFeeWad;
 
     /// @dev FIFO queue of Open (unmatched) position ids.
     uint256 public openHead;
@@ -129,6 +143,8 @@ contract LeveredLpVault {
     error FeeOnTransfer();
     error Reentered();
     error CapExceeded();
+    error ClaimThreshold();
+    error BadClaimFee();
 
     event PausedDeposits(bool paused);
     event SeniorDeposit(address indexed senior, uint256 amount);
@@ -160,6 +176,15 @@ contract LeveredLpVault {
     );
     event CapsUpdated(uint256 maxTotalSeniorUsdg, uint256 maxTotalJuniorUsdg, uint256 maxPerWalletUsdg);
     event MorphoFloorAprUpdated(uint256 morphoFloorAprWad);
+    event ClaimFeeUpdated(uint256 claimFeeWad);
+    event FeesClaimed(
+        uint256 indexed positionId,
+        address indexed junior,
+        uint256 claimedGross,
+        uint256 claimFee,
+        uint256 toJunior,
+        uint256 couponReserved
+    );
 
     modifier onlyOwner() {
         if (msg.sender != owner) revert NotOwner();
@@ -206,6 +231,7 @@ contract LeveredLpVault {
         paused = true;
         // Default product floor ~3.9% Morpho; owner may refresh within borrow APR bound.
         morphoFloorAprWad = 0.039e18;
+        claimFeeWad = 0.005e18; // 0.5% of claimed surplus
         emit PausedDeposits(true);
     }
 
@@ -245,6 +271,13 @@ contract LeveredLpVault {
         if (morphoFloorAprWad_ > MAX_BORROW_APR_WAD) revert BadApr();
         morphoFloorAprWad = morphoFloorAprWad_;
         emit MorphoFloorAprUpdated(morphoFloorAprWad_);
+    }
+
+    /// @notice Owner-bounded fee on claimFees surplus (≤ 10%).
+    function setClaimFee(uint256 claimFeeWad_) external onlyOwner {
+        if (claimFeeWad_ > MAX_CLAIM_FEE_WAD) revert BadClaimFee();
+        claimFeeWad = claimFeeWad_;
+        emit ClaimFeeUpdated(claimFeeWad_);
     }
 
     /// @notice Rescue a token that is not MSTR and not USDG. Principal stays put.
@@ -407,6 +440,41 @@ contract LeveredLpVault {
 
         if (result.mstrKept > 0) _push(mstr, junior, result.mstrKept);
         if (result.juniorYield > 0) _push(usdg, junior, result.juniorYield);
+    }
+
+    /// @notice Claim fee surplus without closing. Requires accrued fees ≥ 4% pace for elapsed time.
+    ///         Reserves the current early-exit coupon in the position; surplus pays claimFeeWad to backstop,
+    ///         remainder to the junior. Intent matches Maker claim-at-4% (math sign-off still welcome).
+    function claimFees(uint256 positionId) external nonReentrant returns (ClaimFeesResult memory result) {
+        result = previewClaimFees(positionId);
+        Position storage position = positions[positionId];
+        if (position.owner != msg.sender) revert NotJunior();
+
+        position.feeUsdg = result.couponReserved;
+        backstop += result.claimFee;
+
+        emit FeesClaimed(
+            positionId, msg.sender, result.claimedGross, result.claimFee, result.toJunior, result.couponReserved
+        );
+
+        if (result.toJunior > 0) _push(usdg, msg.sender, result.toJunior);
+    }
+
+    /// @notice Preview claimFees. Reverts if unmatched, settled, after term, or below 4% pace threshold.
+    function previewClaimFees(uint256 positionId) public view returns (ClaimFeesResult memory result) {
+        Position storage position = positions[positionId];
+        if (position.owner == address(0) || position.settled) revert BadPosition();
+        if (position.seniorPrincipal == 0) revert NotMatched();
+        if (block.timestamp >= uint256(position.openedAt) + term) revert TermElapsed();
+
+        result.elapsed = block.timestamp - uint256(position.openedAt);
+        result.couponReserved = previewEarlyExitCoupon(position.seniorPrincipal, result.elapsed);
+        if (position.feeUsdg < result.couponReserved) revert ClaimThreshold();
+
+        result.claimedGross = position.feeUsdg - result.couponReserved;
+        if (result.claimedGross == 0) revert ZeroAmount();
+        result.claimFee = result.claimedGross * claimFeeWad / WAD;
+        result.toJunior = result.claimedGross - result.claimFee;
     }
 
     /// @notice Close a matched position before `term`. Coupon from position fees; gap via MSTR from

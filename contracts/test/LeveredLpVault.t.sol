@@ -479,6 +479,53 @@ contract LeveredLpVaultTest is Test {
         vault.setDepositCaps(1, 1, 1);
     }
 
+    function test_claimFeesSkimsSurplusAboveFourPercentPace() public {
+        uint256 id = _openMatched();
+        // After 30 minutes, coupon is tiny on a 1h term vault; pay enough gross that position fees clear it.
+        vm.warp(block.timestamp + 30 minutes);
+        uint256 coupon = vault.previewEarlyExitCoupon(vault.previewSeniorAssets(MSTR_IN), 30 minutes);
+        uint256 gross = 10 ether;
+        _payFee(id, gross);
+        uint256 toPosition = gross - (gross * vault.protocolCutWad() / 1e18);
+        assertGt(toPosition, coupon);
+
+        LeveredLpVault.ClaimFeesResult memory preview = vault.previewClaimFees(id);
+        assertEq(preview.couponReserved, coupon);
+        assertEq(preview.claimedGross, toPosition - coupon);
+        assertEq(preview.claimFee, preview.claimedGross * vault.claimFeeWad() / 1e18);
+
+        uint256 junBefore = usdg.balanceOf(junior);
+        uint256 bsBefore = vault.backstop();
+        vm.prank(junior);
+        LeveredLpVault.ClaimFeesResult memory result = vault.claimFees(id);
+        assertEq(result.toJunior, preview.toJunior);
+        assertEq(usdg.balanceOf(junior), junBefore + result.toJunior);
+        assertEq(vault.backstop(), bsBefore + result.claimFee);
+
+        (,,,, uint256 feeUsdg,,) = vault.positions(id);
+        assertEq(feeUsdg, coupon);
+        assertTrue(vault.isMatched(id));
+    }
+
+    function test_claimFeesRevertsBelowThreshold() public {
+        uint256 id = _openMatched();
+        vm.warp(block.timestamp + 30 minutes);
+        uint256 coupon = vault.previewEarlyExitCoupon(vault.previewSeniorAssets(MSTR_IN), 30 minutes);
+        if (coupon > 1) _payFee(id, coupon - 1);
+        vm.prank(junior);
+        vm.expectRevert(LeveredLpVault.ClaimThreshold.selector);
+        vault.claimFees(id);
+    }
+
+    function test_claimFeesOnlyJunior() public {
+        uint256 id = _openMatched();
+        vm.warp(block.timestamp + 30 minutes);
+        _payFee(id, 5 ether);
+        vm.prank(attacker);
+        vm.expectRevert(LeveredLpVault.NotJunior.selector);
+        vault.claimFees(id);
+    }
+
     function test_morphoFloorAprDefaultAndOwnerSet() public {
         assertEq(vault.morphoFloorAprWad(), 0.039e18);
         vault.setMorphoFloorApr(0.04e18);
