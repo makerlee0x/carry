@@ -293,7 +293,7 @@
       try {
         await readVault();
         await readAccount();
-        try { await readAnalytics(); } catch (e) { console.warn('[CarryChain] analytics', e); }
+        try { await readAnalytics(); } catch (e) { console.warn('[CarryChain] analytics', (e && (e.shortMessage || e.message)) || e); }
         S.error = null;
       } catch (e) {
         S.error = e.shortMessage || e.message || String(e);
@@ -634,5 +634,5 @@
 
   window.CarryChain = { last: snapshot(), connect, switchNetwork, disconnect, refresh, afterTx, leftText, deposit, withdraw, mint, claimFees, needsApp: () => isMobile() && !findMetaMask(), appLink };
   const initP = init();
-  initP.catch((e) => { S.error = (e && e.message) || String(e); console.warn('[CarryChain]', e); readyResolve(); emit(); });
+  initP.catch((e) => { S.error = (e && e.message) || String(e); console.warn('[CarryChain]', (e && (e.shortMessage || e.message)) || e); readyResolve(); emit(); });
 })();

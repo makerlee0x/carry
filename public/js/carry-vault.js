@@ -363,7 +363,7 @@
       const msg = (err && (err.message || err.reason)) || String(err);
       const rejected =
         /reject|denied|user refused|4001/i.test(msg) || (err && err.code === 4001);
-      console.error("[CarryVault]", err);
+      console.error("[CarryVault]", msg);
       return { ok: false, phase: rejected ? "rejected" : "error", error: msg };
     }
   }
