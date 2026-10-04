@@ -28,6 +28,7 @@ on Robinhood Chain Testnet **46630** (no DualPool, no Morpho sleeve).
 
 Concrete values from the zips live in [`contracts/config/mainnet.json`](../contracts/config/mainnet.json)
 and are mirrored under `product` in [`public/config.json`](../public/config.json).
+Human-readable table: [`V1_PARAMETERS.md`](./V1_PARAMETERS.md).
 Highlights:
 
 - Base fee **0.20%** (Safe limits 0.10–0.30%); surcharge cap **3%**

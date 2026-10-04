@@ -1,0 +1,110 @@
+{
+  "_comment": "Research v1 parameter table (Carry Pool v1 Build Plan, 2 Oct 2026). Source of truth for DualPool + Vault v2 + keeper on Robinhood mainnet 4663. Not all values are live on testnet 46630 — see layer labels.",
+  "chainId": 4663,
+  "pair": "MSTR/USDG",
+  "hours": "24/7",
+  "fees": {
+    "baseBps": 20,
+    "baseBpsMin": 10,
+    "baseBpsMax": 30,
+    "surchargeCapBps": 300,
+    "surchargeSlope": 2,
+    "staleReferenceFeeBps": 100,
+    "staleAfterMinutes": 10,
+    "deadBandBps": {
+      "regular": 25,
+      "pre": 45,
+      "post": 45,
+      "overnight": 60,
+      "weekend": 100
+    },
+    "surchargeMult": {
+      "regular": 1.0,
+      "pre": 1.25,
+      "post": 1.25,
+      "overnight": 1.5,
+      "weekend": 2.0
+    },
+    "protocolCutWad": "0.2e18",
+    "layer": "product-target"
+  },
+  "reference": {
+    "primary": "hyperliquid:xyz:MSTR",
+    "fence": {
+      "regularPct": 1.5,
+      "extendedPct": 3.0,
+      "surgeFirst10mPct": 4.0,
+      "weekendFridayClosePct": 10.0
+    },
+    "rateLimits": {
+      "minGapSec": 3,
+      "maxPerHour": 120,
+      "maxMovePct": 0.5,
+      "maxMoveSurgePct": 1.0,
+      "maxMove15mPct": 3.0,
+      "maxMove15mSurgePct": 5.0
+    },
+    "layer": "product-target"
+  },
+  "ranges": {
+    "research": {
+      "regularMultOfFiveSession": 1.0,
+      "overnightMult": 2.0,
+      "weekendMult": 3.0,
+      "moveTriggerOfHalfWidth": 0.8,
+      "layer": "research"
+    },
+    "makerUi": {
+      "MSTR": { "halfWidthPct": 32 },
+      "NVDA": { "halfWidthPct": 8 },
+      "layer": "ui-display"
+    }
+  },
+  "recenter": {
+    "termDays": 7,
+    "oracleDriftFromCenterPct": 80,
+    "layer": "ui-display"
+  },
+  "inventory": {
+    "bandPct": 5,
+    "layer": "product-target"
+  },
+  "yield": {
+    "morphoApyPct": 3.9,
+    "juniorTargetAprPct": 5,
+    "seniorTargetAprPct": 12,
+    "earlyExitFloorAprPct": 4,
+    "layer": "ui-display"
+  },
+  "caps": {
+    "launchTotalUsd": 25000,
+    "launchPerWalletUsd": 2500,
+    "rampTotalUsd": 250000,
+    "treasuryMinOfCapPct": 10,
+    "tvlCapMultipleOfTreasury": 10,
+    "layer": "ui-display"
+  },
+  "treasury": {
+    "fundedByProtocolCut": true,
+    "seedMinOfCapPct": 10,
+    "pauseDepositsBelowBookPct": 5,
+    "layer": "product-target"
+  },
+  "morpho": {
+    "venue": "Steakhouse USDG",
+    "role": "matched-USDG-sleeve",
+    "layer": "product-target"
+  },
+  "onChainToday": {
+    "chainId": 46630,
+    "vault": "LeveredLpVault",
+    "termDays": 7,
+    "borrowAprPct": 5,
+    "earlyExitAprPct": 4,
+    "protocolCutPct": 20,
+    "dualPool": false,
+    "morphoSleeve": false,
+    "depositCapsEnforced": false,
+    "layer": "on-chain"
+  }
+}

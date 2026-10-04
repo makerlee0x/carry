@@ -27,6 +27,41 @@
   },
   "analytics": {
     "simulate": true,
-    "liveApy": false
+    "liveApy": false,
+    "showMorphoTiles": true
+  },
+  "product": {
+    "_comment": "UI/product display params. Full research table: contracts/config/mainnet.json. Layers: ui-display vs on-chain labeled in docs/V1_PARAMETERS.md.",
+    "morphoApyPct": 3.9,
+    "carryApyPct": 16.9,
+    "usdgIdleApyPct": 3.9,
+    "juniorTargetAprPct": 5,
+    "seniorTargetAprPct": 12,
+    "earlyExitFloorAprPct": 4,
+    "claimFeeBps": 50,
+    "ranges": {
+      "MSTR": { "halfWidthPct": 32, "source": "maker" },
+      "NVDA": { "halfWidthPct": 8, "source": "maker" }
+    },
+    "researchRangesNote": "Research uses session-vol bands (±1× five-session); UI follows Maker until he picks.",
+    "recenter": {
+      "termDays": 7,
+      "oracleDriftFromCenterPct": 80
+    },
+    "caps": {
+      "totalUsd": 25000,
+      "perWalletUsd": 2500,
+      "enforcedOnChain": false
+    },
+    "inventoryBandPct": 5,
+    "baseFeeBps": 20,
+    "surchargeCapBps": 300,
+    "deadBandBps": {
+      "regular": 25,
+      "pre": 45,
+      "post": 45,
+      "overnight": 60,
+      "weekend": 100
+    }
   }
 }
