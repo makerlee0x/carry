@@ -66,3 +66,5 @@ session bands stay in config under `product.researchRanges` for keeper/DualPool 
 
 Do **not** imply DualPool or Morpho are executing on testnet. The site already
 shows a testnet banner; keep copy factual and short.
+
+Vault v2 / option B delta vs today’s contract: [`VAULT_V2_DELTA.md`](./VAULT_V2_DELTA.md).
