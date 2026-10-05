@@ -17,9 +17,9 @@
   const REFRESH_MS = 20000;
 
   let viem, pub, cfg, vaultAbi, provider, chainDef;
-  const S = { ready: false, vault: null, account: null, chainId: null, ui: null, raw: [], analytics: null, connectLink: null, error: null };
+  const S = { ready: false, vault: null, account: null, chainId: null, ui: null, raw: [], analytics: null, closed: null, connectLink: null, error: null };
 
-  const snapshot = () => ({ ready: S.ready, vault: S.vault, account: S.account, chainId: S.chainId, ui: S.ui, analytics: S.analytics, connectLink: S.connectLink, error: S.error });
+  const snapshot = () => ({ ready: S.ready, vault: S.vault, account: S.account, chainId: S.chainId, ui: S.ui, analytics: S.analytics, closed: S.closed, connectLink: S.connectLink, error: S.error });
   const emit = () => {
     window.CarryChain.last = snapshot();
     window.dispatchEvent(new CustomEvent('carrychain', { detail: window.CarryChain.last }));
@@ -88,7 +88,7 @@
   const round = (n, dp) => Number(n.toFixed(dp));
 
   function leftText(sec) {
-    if (sec <= 0) return 'ready to settle';
+    if (sec <= 0) return 'Withdrawal available';
     const d = Math.floor(sec / 86400), h = Math.floor((sec % 86400) / 3600), m = Math.floor((sec % 3600) / 60);
     if (d > 0) return `${d}d ${h}h left`;
     if (h > 0) return `${h}h ${m}m left`;
@@ -146,26 +146,23 @@
       const sumOf = (list) => list.reduce((x, r) => x + r.mstr, 0);
       const matchedShares = sumOf(act) + sumOf(rdy), freeShares = sumOf(opn) + sumOf(rdy), activeShares = sumOf(act);
       let statusTxt, leftTxt, free_, earned = 0, days = 0;
+      // Labels: Idle = not paired with USDG yet; Active = paired. Positions roll over after the 7-day term (they are
+      // never auto-closed), so a paired position past its term is still Active, with "Withdrawal available".
       const parts = [];
-      if (act.length) parts.push(act.length + (act.length === 1 ? ' active' : ' active'));
-      if (rdy.length) parts.push(rdy.length + (rdy.length === 1 ? ' ready' : ' ready'));
-      if (opn.length) parts.push(opn.length + (opn.length === 1 ? ' open' : ' open'));
+      if (act.length) parts.push(act.length + ' active');
+      if (rdy.length) parts.push(rdy.length + ' with withdrawal available');
+      if (opn.length) parts.push(opn.length + ' idle');
       const mixed = [act.length > 0, rdy.length > 0, opn.length > 0].filter(Boolean).length > 1;
-      if (act.length) {
-        const soonest = Math.min(...act.map((r) => r.openedAt + term)), first = Math.min(...act.map((r) => r.openedAt));
-        statusTxt = mixed ? ('Mixed · ' + parts.join(', ')) : 'Active';
-        free_ = freeShares > 0;   // some legs may still withdraw without early-exit
-        leftTxt = mixed
-          ? (leftText(soonest - now) + ' on active · ' + round(freeShares, 4) + ' MSTR free of early-exit')
-          : leftText(soonest - now);
-        earned = Math.min(4, (4 * (now - first)) / term);
+      const soonest = act.length ? Math.min(...act.map((r) => r.openedAt + term)) : 0;
+      if (act.length || rdy.length) {
+        const first = Math.min(...[...act, ...rdy].map((r) => r.openedAt));
+        statusTxt = 'Active';
+        free_ = act.length ? freeShares > 0 : true;   // some legs may still withdraw without an early-exit fee
+        leftTxt = mixed ? (parts.join(' · ') + (act.length ? ' · ' + leftText(soonest - now) + ' on active' : '')) : (act.length ? leftText(soonest - now) : 'Withdrawal available');
+        earned = act.length ? Math.min(4, (4 * (now - first)) / term) : 4;
         days = Math.floor((now - first) / 86400);
-      } else if (rdy.length) {
-        statusTxt = mixed ? ('Mixed · ' + parts.join(', ')) : 'Ready to settle';
-        free_ = true; leftTxt = mixed ? ('Term ended · ' + parts.join(', ')) : 'Term ended'; earned = 4;
-        days = Math.floor((now - Math.min(...rdy.map((r) => r.openedAt))) / 86400);
       } else {
-        statusTxt = 'Open'; free_ = true; leftTxt = 'Waiting for USDG';
+        statusTxt = 'Idle'; free_ = true; leftTxt = 'Waiting for USDG';
       }
       positions.push({ sym: 'MSTR', shares: round(mstrTotal, 4), fees: round(fees, 4), days, earned: round(earned, 2), auto: false, real: true, statusTxt, leftTxt, free: free_, count: live.length,
         matchedPct: mstrTotal > 0 ? round((matchedShares / mstrTotal) * 100, 1) : 0, freeShares: round(freeShares, 4), activeShares: round(activeShares, 4),
@@ -178,7 +175,7 @@
       positions.push({
         sym: 'USDG', shares: round(seniorN, 4), matched: round(matchedN, 4),
         fees: round(num(yld) + num(mstrClaim) * price, 4), days: 0, earned: 0, auto: false, real: true,
-        statusTxt: matchedN > 0 ? 'Active' : 'Open', leftTxt: matchedN > 0 ? 'Unlocks on close' : 'Idle · withdrawable', free: matchedN === 0, count: 1,
+        statusTxt: matchedN > 0 ? 'Active' : 'Idle', leftTxt: matchedN > 0 ? 'Unlocks on close' : 'Earning on Morpho · withdrawable', free: matchedN === 0, count: 1,
       });
     }
 
@@ -209,11 +206,56 @@
     return out;
   }
 
+  // One scan of every vault log, shared by analytics and closed positions (cached for a few seconds).
+  let logCache = { t: 0, p: null };
+  function allLogs() {
+    if (logCache.p && Date.now() - logCache.t < 15000) return logCache.p;
+    const p = vaultEvents({});
+    logCache = { t: Date.now(), p };
+    p.catch(() => { if (logCache.p === p) logCache = { t: 0, p: null }; });
+    return p;
+  }
+
+  // Closed positions for the connected wallet, newest first. Built from the vault's events; each row keeps the
+  // closing transaction hash. The chain keeps no price history, so value is the returned shares at their entry
+  // price plus the net fees kept (see the Total value tooltip).
+  async function readClosed() {
+    if (!S.account) { S.closed = []; return; }
+    const me = S.account.toLowerCase(), logs = await allLogs();
+    const mine = new Map();
+    for (const l of logs) if (l.eventName === 'JuniorDeposit' && String(l.args.junior).toLowerCase() === me) mine.set(String(l.args.positionId), { dep: l, fees: 0, match: null, close: null });
+    for (const l of logs) {
+      const g = l.args || {}, rec = g.positionId != null ? mine.get(String(g.positionId)) : null;
+      if (!rec) continue;
+      if (l.eventName === 'PositionMatched') rec.match = l;
+      else if (l.eventName === 'LpFeeAccrued') rec.fees += num(g.toPosition);
+      else if (l.eventName === 'EarlyExit' || l.eventName === 'Settled' || l.eventName === 'UnmatchedWithdraw') rec.close = l;
+    }
+    const closedRecs = [...mine.entries()].filter(([, r]) => r.close);
+    await Promise.all(closedRecs.map(([, r]) => Promise.all([timeOf(r.close.blockNumber), timeOf(r.dep.blockNumber)])));
+    const rows = await Promise.all(closedRecs.map(async ([id, r]) => {
+      const a = r.close.args, kind = r.close.eventName, p = await pub.readContract({ address: cfg.vault, abi: vaultAbi, functionName: 'positions', args: [BigInt(id)] });
+      const entry = num(p[3]), sharesIn = num(r.dep.args.mstrAmount), closedAt = blockTime.get(r.close.blockNumber);
+      const matchedAt = r.match ? Number(r.match.args.openedAt) * 1000 : 0, startAt = matchedAt || blockTime.get(r.dep.blockNumber);
+      let out, sold = 0, net = 0, paid = 0, label;
+      if (kind === 'EarlyExit') { out = num(a.mstrReturned); sold = num(a.mstrSold); net = num(a.juniorLeftoverFees); paid = num(a.couponOwed); label = 'Early exit'; }
+      else if (kind === 'Settled') { out = num(a.mstrKept); sold = num(a.mstrSold); net = num(a.juniorYield); paid = Math.max(r.fees - net, 0); label = 'Term complete'; }
+      else { out = num(a.mstrAmount); label = 'Idle withdrawal'; }
+      const days = Math.max((closedAt - startAt) / 864e5, 0), paired = !!r.match && entry > 0;
+      return { id, label, matched: paired, hash: r.close.transactionHash, closedAt, startAt, days: round(days, 2),
+        sharesIn: round(sharesIn, 4), sharesOut: round(out, 4), sold: round(sold, 4),
+        feesEarned: paired ? round(r.fees, 4) : null, feesPaid: paired ? round(paid, 4) : null, net: paired ? round(net, 4) : null,
+        apy: paired && days >= 1 / 24 ? round((net / (sharesIn * entry)) * (365 / days) * 100, 1) : null,
+        value: paired ? round(out * entry + net, 2) : null };
+    }));
+    S.closed = rows.sort((x, y) => y.closedAt - x.closedAt);
+  }
+
   // Daily series for the last N days (local days, ending today) from the vault's own events.
   // Stock deposits are valued at the current oracle price: the chain keeps no price history.
   async function readAnalytics() {
     const N = 180, price = S.vault ? S.vault.price : 0;
-    const logs = await vaultEvents({});
+    const logs = await allLogs();
     const blocks = [...new Set(logs.map((l) => l.blockNumber))];
     for (let i = 0; i < blocks.length; i += 25) await Promise.all(blocks.slice(i, i + 25).map(timeOf));
 
@@ -248,7 +290,7 @@
     snap(N - 1);
     // Newest-first transaction list for the Analytics table. Every row keeps its transaction hash.
     const EV = {
-      JuniorDeposit: (a) => ({ k: 'dep', t: 'Deposit', n: num(a.mstrAmount), u: 'MSTR', who: a.junior, pid: a.positionId, note: a.matched ? 'Matched' : 'Waiting for USDG' }),
+      JuniorDeposit: (a) => ({ k: 'dep', t: 'Deposit', n: num(a.mstrAmount), u: 'MSTR', who: a.junior, pid: a.positionId, note: a.matched ? 'Active · paired with USDG' : 'Idle · waiting for USDG' }),
       SeniorDeposit: (a) => ({ k: 'dep', t: 'Deposit', n: num(a.amount), u: 'USDG', who: a.senior }),
       PositionMatched: (a) => ({ k: 'match', t: 'Matched', n: num(a.seniorPrincipal), u: 'USDG', who: a.junior, pid: a.positionId }),
       SeniorWithdraw: (a) => ({ k: 'wd', t: 'Withdraw', n: num(a.principal), u: 'USDG', who: a.senior }),
@@ -306,6 +348,7 @@
       try {
         await readVault();
         await readAccount();
+        try { await readClosed(); } catch (e) { console.warn('[CarryChain] closed positions', (e && (e.shortMessage || e.message)) || e); }
         try { await readAnalytics(); } catch (e) { console.warn('[CarryChain] analytics', (e && (e.shortMessage || e.message)) || e); }
         S.error = null;
       } catch (e) {
@@ -503,7 +546,9 @@
 
   // ---- Connect -------------------------------------------------------------
   async function setAccounts(accts) {
+    const prevAcct = S.account;
     S.account = accts && accts[0] ? viem.getAddress(accts[0]) : null;
+    if (S.account !== prevAcct) S.closed = null;
     if (provider) { try { S.chainId = parseInt(await withTimeout(provider.request({ method: 'eth_chainId' }), 5000), 16); } catch (e) {} }   // keep the last known chain if the wallet is slow
     emit();      // show the connected state right away; the heavy reads (balances, positions, analytics) follow
     refresh();
@@ -558,7 +603,7 @@
   // A site cannot disconnect MetaMask itself; forget the account locally.
   async function disconnect() {
     flag(true);
-    S.account = null; S.ui = null; S.connectLink = null;
+    S.account = null; S.ui = null; S.closed = null; S.connectLink = null;
     if (sdkInst || sdkP) await resetSdk();   // the phone connection is ended for real, so the next connect starts clean
     emit();
   }
