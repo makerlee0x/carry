@@ -214,13 +214,13 @@
     return out;
   }
 
-  async function listJuniorLive(eth, vault, account) {
+  async function listJuniorLive(eth, vault, account, fromBlock) {
     const logs = await eth.request({
       method: "eth_getLogs",
       params: [
         {
           address: vault,
-          fromBlock: "0x0",
+          fromBlock: "0x" + (fromBlock || 0).toString(16),
           toBlock: "latest",
           topics: [JUNIOR_DEPOSIT_TOPIC, null, topicAddr(account)],
         },
@@ -256,8 +256,8 @@
     return live;
   }
 
-  async function withdrawJuniorPositions(eth, account, vault, amount, decimals) {
-    const live = await listJuniorLive(eth, account, vault);
+  async function withdrawJuniorPositions(eth, account, vault, amount, decimals, fromBlock) {
+    const live = await listJuniorLive(eth, vault, account, fromBlock);
     if (!live.length) throw new Error("You have no stock positions to withdraw.");
     const open = live.filter((r) => !r.matched);
     const ready = live.filter((r) => r.ready);
@@ -353,7 +353,7 @@
           if (res && res.hash) window.CarryVault.lastHash = res.hash;
           return res;
         }
-        const hash = await withdrawJuniorPositions(eth, account, vault, amount, decimals);
+        const hash = await withdrawJuniorPositions(eth, account, vault, amount, decimals, chain.deployBlock);
         window.CarryVault.lastHash = hash;
         return { ok: true, hash };
       }

@@ -124,7 +124,7 @@
       pub.readContract({ address: cfg.usdg, abi: erc, functionName: 'balanceOf', args: [a] }),
       rd('seniorPrincipal', [a]), rd('freePrincipal', [a]),
       rd('seniorClaimableYield', [a]), rd('seniorClaimableMstr', [a]),
-      pub.getContractEvents({ address: cfg.vault, abi: vaultAbi, eventName: 'JuniorDeposit', args: { junior: a }, fromBlock: 0n, toBlock: 'latest' }),
+      vaultEvents({ eventName: 'JuniorDeposit', args: { junior: a } }),
     ]);
 
     const ids = [...new Set(logs.map((l) => l.args.positionId))];
@@ -196,11 +196,24 @@
     return t;
   }
 
+  // The testnet RPC caps eth_getLogs spans (10M blocks, 100k when topics are OR'd), so a query from block 0
+  // fails outright. Scan from the vault's deploy block in chunks; with no eventName, fetch every vault log
+  // (address only, no topic filter) and decode them here.
+  async function vaultEvents({ eventName, args }) {
+    const head = await pub.getBlockNumber(), STEP = 9000000n, out = [];
+    for (let from = BigInt(cfg.deployBlock || 0); from <= head; from += STEP) {
+      const to = from + STEP - 1n < head ? from + STEP - 1n : head;
+      if (eventName) out.push(...await pub.getContractEvents({ address: cfg.vault, abi: vaultAbi, eventName, args, fromBlock: from, toBlock: to }));
+      else out.push(...viem.parseEventLogs({ abi: vaultAbi, logs: await pub.getLogs({ address: cfg.vault, fromBlock: from, toBlock: to }) }));
+    }
+    return out;
+  }
+
   // Daily series for the last N days (local days, ending today) from the vault's own events.
   // Stock deposits are valued at the current oracle price: the chain keeps no price history.
   async function readAnalytics() {
     const N = 180, price = S.vault ? S.vault.price : 0;
-    const logs = await pub.getContractEvents({ address: cfg.vault, abi: vaultAbi, fromBlock: 0n, toBlock: 'latest' });
+    const logs = await vaultEvents({});
     const blocks = [...new Set(logs.map((l) => l.blockNumber))];
     for (let i = 0; i < blocks.length; i += 25) await Promise.all(blocks.slice(i, i + 25).map(timeOf));
 
