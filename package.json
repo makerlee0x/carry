@@ -5,6 +5,8 @@
   "description": "Carry app (UI + LeveredLpVault) on Robinhood Chain Testnet",
   "scripts": {
     "dev": "npx serve public -l 3000 -c ../serve.json",
-    "build": "echo \"Static site, nothing to build\""
+    "build": "echo \"Static site, nothing to build\"",
+    "check": "node scripts/check-index.js",
+    "prepare": "git config core.hooksPath .githooks || true"
   }
 }
