@@ -1,5 +1,5 @@
 {
-  "_comment": "Research v1 parameter table (Carry Pool v1 Build Plan, 2 Oct 2026). Source of truth for DualPool + Vault v2 + keeper on Robinhood mainnet 4663. Not all values are live on testnet 46630 — see layer labels.",
+  "_comment": "Research v1 parameter table (Carry Pool v1 Build Plan, 2 Oct 2026). Source of truth for DualPool + Vault v2 + keeper on Robinhood mainnet 4663. Not all values are live on testnet 46630 \u2014 see layer labels.",
   "chainId": 4663,
   "pair": "MSTR/USDG",
   "hours": "24/7",
@@ -55,8 +55,12 @@
       "layer": "research"
     },
     "makerUi": {
-      "MSTR": { "halfWidthPct": 32 },
-      "NVDA": { "halfWidthPct": 8 },
+      "MSTR": {
+        "halfWidthPct": 32
+      },
+      "NVDA": {
+        "halfWidthPct": 8
+      },
       "layer": "ui-display"
     }
   },
@@ -74,7 +78,9 @@
     "juniorTargetAprPct": 5,
     "seniorTargetAprPct": 12,
     "earlyExitFloorAprPct": 4,
-    "layer": "ui-display"
+    "layer": "ui-display",
+    "morphoRateSource": "steakhouse-native-supply",
+    "morphoRateLabel": "Steakhouse Morpho native supply (not Merkl)"
   },
   "caps": {
     "launchTotalUsd": 25000,
@@ -92,7 +98,10 @@
   },
   "morpho": {
     "venue": "Steakhouse USDG",
+    "rate": "native-supply-apy",
+    "notMerkl": true,
     "role": "matched-USDG-sleeve",
+    "testnet": "apy-stub-from-config",
     "layer": "product-target"
   },
   "onChainToday": {

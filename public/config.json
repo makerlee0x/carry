@@ -32,7 +32,7 @@
     "showMorphoTiles": true
   },
   "product": {
-    "_comment": "UI/product display params. Full research table: contracts/config/mainnet.json. Layers: ui-display vs on-chain labeled in docs/V1_PARAMETERS.md.",
+    "_comment": "UI/product display params. morphoApyPct = Steakhouse Morpho native supply APY stub (NOT Merkl). Idle USDG Morpho on testnet stays this stub until a real sleeve. Full research table: contracts/config/mainnet.json. Layers in docs/V1_PARAMETERS.md.",
     "morphoApyPct": 3.9,
     "carryApyPct": 16.9,
     "usdgIdleApyPct": 3.9,
@@ -71,6 +71,10 @@
       "weekend": 100
     },
     "morphoFloorAprPct": 3.9,
-    "seniorBorrowAprPctOnChain": 5
+    "seniorBorrowAprPctOnChain": 5,
+    "morphoRateSource": "steakhouse-native-supply",
+    "morphoRateLabel": "Steakhouse Morpho native supply",
+    "morphoRateNote": "Config stub of Steakhouse Morpho native supply APY (not Merkl rewards). Dynamic live rate wiring comes later.",
+    "usdgIdleApyNote": "Testnet Idle USDG Morpho APY stub (same Steakhouse native supply figure for now)."
   }
 }
