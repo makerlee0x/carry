@@ -16,7 +16,7 @@
   const FLAG = 'carry_chain_disconnected';
   const REFRESH_MS = 20000;
 
-  let viem, pub, cfg, vaultAbi, provider, chainDef;
+  let viem, pub, cfg, productCfg, vaultAbi, provider, chainDef;
   const S = { ready: false, vault: null, account: null, chainId: null, ui: null, raw: [], analytics: null, closed: null, connectLink: null, error: null };
 
   const snapshot = () => ({ ready: S.ready, vault: S.vault, account: S.account, chainId: S.chainId, ui: S.ui, analytics: S.analytics, closed: S.closed, connectLink: S.connectLink, error: S.error });
@@ -145,9 +145,11 @@
       const mstrTotal = live.reduce((x, r) => x + r.mstr, 0), fees = live.reduce((x, r) => x + r.fee, 0);
       const sumOf = (list) => list.reduce((x, r) => x + r.mstr, 0);
       const matchedShares = sumOf(act) + sumOf(rdy), freeShares = sumOf(opn) + sumOf(rdy), activeShares = sumOf(act);
-      let statusTxt, leftTxt, free_, earned = 0, days = 0;
-      // Labels: Idle = not paired with USDG yet; Active = paired. Positions roll over after the 7-day term (they are
-      // never auto-closed), so a paired position past its term is still Active, with "Withdrawal available".
+      let statusTxt, leftTxt, free_, earned = 0, days = 0, feeDue = false;
+      // Product states are only Idle / Active / Boosted / Closed. Unmatched (legacy "Open") → Idle;
+      // settled/exited → Closed (see readClosed). "Early fee due" is a frontend label only, never a fifth state.
+      // Positions roll over after the 7-day term (never auto-closed), so past-term paired legs stay Active with
+      // "Withdrawal available".
       const parts = [];
       if (act.length) parts.push(act.length + ' active');
       if (rdy.length) parts.push(rdy.length + ' with withdrawal available');
@@ -161,10 +163,18 @@
         leftTxt = mixed ? (parts.join(' · ') + (act.length ? ' · ' + leftText(soonest - now) + ' on active' : '')) : (act.length ? leftText(soonest - now) : 'Withdrawal available');
         earned = act.length ? Math.min(4, (4 * (now - first)) / term) : 4;
         days = Math.floor((now - first) / 86400);
+        // FE-only: show "Early fee due" when in-term active legs' fees look short of Morpho-rate senior accrual.
+        if (act.length) {
+          const morpho = Number((productCfg && productCfg.morphoApyPct) || 3.9) / 100;
+          const seniorBook = act.reduce((x, r) => x + r.senior, 0);
+          const elapsed = Math.max(now - first, 0);
+          const accrual = seniorBook * morpho * (elapsed / (365 * 86400));
+          feeDue = fees + 1e-9 < accrual;
+        }
       } else {
         statusTxt = 'Idle'; free_ = true; leftTxt = 'Waiting for USDG';
       }
-      positions.push({ sym: 'MSTR', shares: round(mstrTotal, 4), fees: round(fees, 4), days, earned: round(earned, 2), auto: false, real: true, statusTxt, leftTxt, free: free_, count: live.length,
+      positions.push({ sym: 'MSTR', shares: round(mstrTotal, 4), fees: round(fees, 4), days, earned: round(earned, 2), auto: false, real: true, statusTxt, leftTxt, feeDue, feeDueLabel: feeDue ? 'Early fee due' : '', free: free_, count: live.length,
         matchedPct: mstrTotal > 0 ? round((matchedShares / mstrTotal) * 100, 1) : 0, freeShares: round(freeShares, 4), activeShares: round(activeShares, 4),
         mixed, openShares: round(sumOf(opn), 4), readyShares: round(sumOf(rdy), 4) });
     }
@@ -646,7 +656,7 @@
       fetch('config.json', { cache: 'no-store' }).then((r) => r.json()),
       fetch('abi/LeveredLpVault.json').then((r) => r.json()),
     ]);
-    viem = mod; vaultAbi = abi; cfg = conf.chain;
+    viem = mod; vaultAbi = abi; cfg = conf.chain; productCfg = conf.product || {};
     chainDef = viem.defineChain({
       id: cfg.chainId, name: cfg.chainName, nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
       rpcUrls: { default: { http: [cfg.rpcUrl] } },
