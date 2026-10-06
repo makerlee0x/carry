@@ -547,18 +547,25 @@
         const seniorBook = act.reduce((x, r) => x + r.senior, 0);
         const grossFees = act.reduce((x, r) => x + r.fee, 0);
         const w = waterfallPreview({ seniorPrincipal: seniorBook, morphoRate: morphoRateFromCfg(), elapsedSec: Math.max(now - first, 0), gross: grossFees });
-        const liveNote = 'Live vault bytecode may still use the old 4% pace / fee-in cut until redeploy. This preview is Maker’s waterfall at exit.';
+        const liveNote = 'Live vault bytecode may still sell from the position until redeploy. Your cover choice is recorded for the product path.';
         const intro = `Fee split runs at early exit (not on fee-in). Applies to ${fx(tot(act))} MSTR still inside its 7-day term.` + (freeTotal > 0 ? ` The other ${fx(freeTotal)} MSTR leaves with no fee.` : '') +
-          (sold > 0 ? ' Position fees are short of senior accrual on the live preview — cover options come next.' : '');
+          ' Choose how to cover senior accrual if fees are short.';
         const rows = waterfallRows(w, { liveNote }).concat([
           { k: 'Live preview · coupon owed (legacy bytecode)', v: `${fs(sum('couponOwed'))} USDG` },
           { k: 'Live preview · stock sold to cover', v: `${fs(sold)} MSTR` + (sold > 0 ? ` (≈ $${fs(sold * S.vault.price)})` : '') },
           { k: 'Stock returned to you', v: `${fs(sum('mstrReturned'))} MSTR` },
           { k: 'Fees returned to you', v: `${fs(sum('juniorLeftoverFees'))} USDG` },
         ]);
-        const ok = confirm ? await confirm({ title: 'Confirm early exit', intro, rows, confirmLabel: 'Confirm early exit' }) : false;   // no native dialogs: the site supplies the themed one
-        if (!ok) throw user('Early exit cancelled. No funds were moved.');
-        steps.push([act, 'earlyExit', 'Confirm the early exit in MetaMask…']);
+        const payOptions = [
+          { id: 'wallet', label: 'Wallet USDG', hint: 'Default first. Pay the shortfall from USDG in your wallet.' },
+          { id: 'idle', label: 'Idle USDG on Carry', hint: 'Use unmatched USDG you already deposited on Carry.' },
+          { id: 'sell', label: 'Sell from position', hint: 'Sell junior shares from this position to cover the rest.' },
+        ];
+        const answer = confirm ? await confirm({ title: 'Confirm early exit', intro, rows, confirmLabel: 'Confirm early exit', payOptions, payWith: 'wallet' }) : { ok: true, payWith: 'wallet' };
+        if (!answer || answer.ok === false) throw user('Early exit cancelled. No funds were moved.');
+        const payWith = answer.payWith || 'wallet';
+        // Live bytecode still sells from the position; payWith is the product choice until Redeploy wires wallet/idle cover.
+        steps.push([act, 'earlyExit', payWith === 'wallet' ? 'Confirm early exit in MetaMask (wallet USDG cover preferred)…' : payWith === 'idle' ? 'Confirm early exit in MetaMask (Idle Carry USDG cover preferred)…' : 'Confirm early exit in MetaMask (sell from position)…']);
       } else if (all && ready.length) {
         const first = Math.min(...ready.map((r) => r.openedAt));
         const seniorBook = ready.reduce((x, r) => x + r.senior, 0);
@@ -566,8 +573,8 @@
         const w = waterfallPreview({ seniorPrincipal: seniorBook, morphoRate: morphoRateFromCfg(), elapsedSec: Math.max(now - first, 0), gross: grossFees });
         const intro = 'Fee split runs at settle (not on fee-in). Maker waterfall preview below.';
         const rows = waterfallRows(w, { liveNote: 'Live vault may still settle with the old borrow-fee path until redeploy.' });
-        const ok = confirm ? await confirm({ title: 'Confirm settle', intro, rows, confirmLabel: 'Confirm settle' }) : true;
-        if (!ok) throw user('Settle cancelled. No funds were moved.');
+        const answer = confirm ? await confirm({ title: 'Confirm settle', intro, rows, confirmLabel: 'Confirm settle' }) : { ok: true };
+        if (!answer || answer.ok === false) throw user('Settle cancelled. No funds were moved.');
       }
       let hash;
       for (const [group, fn, label] of steps) for (const r of group) hash = await send({ address: cfg.vault, abi: vaultAbi, functionName: fn, args: [r.id] }, onStep, label);
@@ -602,8 +609,8 @@
       const intro = 'Fee split runs at claimFees only (not on fee-in). Preview uses Maker’s Morpho-rate waterfall.';
       const rows = waterfallRows(w, { liveNote: 'Live vault bytecode may still skim surplus above a 4% pace until redeploy.' });
       if (confirm) {
-        const ok = await confirm({ title: 'Confirm fee claim', intro, rows, confirmLabel: 'Confirm claim' });
-        if (!ok) throw user('Claim cancelled. No funds were moved.');
+        const answer = await confirm({ title: 'Confirm fee claim', intro, rows, confirmLabel: 'Confirm claim' });
+        if (!answer || answer.ok === false) throw user('Claim cancelled. No funds were moved.');
       }
       const before = sig();
       let hash, claimed = 0;
