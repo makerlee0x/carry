@@ -87,6 +87,56 @@
   const num = (v, d = 18) => Number(viem.formatUnits(v, d));
   const round = (n, dp) => Number(n.toFixed(dp));
 
+  // Maker fee waterfall preview (product truth). Live vault bytecode may still use the old 4% pace /
+  // fee-in cut until redeploy — callers must say so in UI copy. Split runs only at claim/exit/settle.
+  function waterfallPreview({ seniorPrincipal, morphoRate, elapsedSec, gross }) {
+    const year = 365 * 86400;
+    const rate = Number.isFinite(morphoRate) ? morphoRate : 0.039;
+    const accrual = Math.max(0, seniorPrincipal) * rate * (Math.max(elapsedSec, 0) / year);
+    const g = Math.max(0, gross);
+    const seniorFloor = Math.min(g, accrual);
+    let left = g - seniorFloor;
+    const treasury = Math.min(left, g * 0.2);
+    left -= treasury;
+    const seniorPerf = Math.min(left, g * 0.2);
+    const junior = left - seniorPerf;
+    return {
+      morphoRate: rate, accrual, seniorFloor, treasury, seniorPerf, junior,
+      senior: seniorFloor + seniorPerf, gross: g,
+      // Reference sheet Maker locked ($10k senior / $10k junior book, 7d, 4% Morpho, 7% gross APR on $20k)
+      example: {
+        label: '$10k senior / $10k junior · 7d @ 4% Morpho, 7% gross on $20k book',
+        accrual: 7.67, gross: 26.85, seniorFloor: 7.67, treasury: 5.37, seniorPerf: 5.37, junior: 8.44, senior: 13.04,
+      },
+    };
+  }
+
+  function morphoRateFromCfg() {
+    const pct = Number(productCfg && productCfg.morphoApyPct);
+    return (Number.isFinite(pct) ? pct : 3.9) / 100;
+  }
+
+  function moneyUsdg(n) {
+    if (!Number.isFinite(n) || n === 0) return '0 USDG';
+    if (Math.abs(n) < 0.0001) return n.toFixed(9).replace(/0+$/, '') + ' USDG';
+    return n.toLocaleString('en-US', { maximumFractionDigits: 4 }) + ' USDG';
+  }
+
+  function waterfallRows(w, { liveNote } = {}) {
+    const ex = w.example;
+    const rows = [
+      { k: 'Senior accrual (Morpho opp. cost)', v: moneyUsdg(w.accrual) },
+      { k: 'Gross LP fees (split now)', v: moneyUsdg(w.gross) },
+      { k: 'Senior floor', v: moneyUsdg(w.seniorFloor) },
+      { k: 'Treasury (20% of gross)', v: moneyUsdg(w.treasury) },
+      { k: 'Senior performance', v: moneyUsdg(w.seniorPerf) },
+      { k: 'Junior', v: moneyUsdg(w.junior) },
+      { k: 'Example · ' + ex.label, v: `floor $${ex.seniorFloor} · treasury $${ex.treasury} · seniorPerf $${ex.seniorPerf} · junior $${ex.junior}` },
+    ];
+    if (liveNote) rows.push({ k: 'Live vault note', v: liveNote });
+    return rows;
+  }
+
   function leftText(sec) {
     if (sec <= 0) return 'Withdrawal available';
     const d = Math.floor(sec / 86400), h = Math.floor((sec % 86400) / 3600), m = Math.floor((sec % 3600) / 60);
@@ -493,19 +543,31 @@
         const sum = (k) => prev.reduce((x, p) => x + num(p[k]), 0);
         const fs = (n) => (n === 0 ? '0' : n < 0.0001 ? n.toFixed(9).replace(/0+$/, '') : fx(n));   // tiny amounts need more decimals to show up
         const sold = sum('mstrSold');
-        const intro = `The early-exit fee applies to ${fx(tot(act))} MSTR that is still inside its 7-day term.` + (freeTotal > 0 ? ` The other ${fx(freeTotal)} MSTR leaves with no fee.` : '') +
-          (sold > 0 ? " Position fees don't cover the lender's coupon, so a small amount of your stock is sold to pay it. It is not taken from the Assistance Fund." : '');
-        const rows = [
-          { k: 'Coupon owed to the lender', v: `${fs(sum('couponOwed'))} USDG` },
-          { k: 'Paid from position fees', v: `${fs(sum('fromPositionFees'))} USDG` },
-          { k: 'Stock sold to cover the rest', v: `${fs(sold)} MSTR` + (sold > 0 ? ` (≈ $${fs(sold * S.vault.price)})` : '') },
+        const first = Math.min(...act.map((r) => r.openedAt));
+        const seniorBook = act.reduce((x, r) => x + r.senior, 0);
+        const grossFees = act.reduce((x, r) => x + r.fee, 0);
+        const w = waterfallPreview({ seniorPrincipal: seniorBook, morphoRate: morphoRateFromCfg(), elapsedSec: Math.max(now - first, 0), gross: grossFees });
+        const liveNote = 'Live vault bytecode may still use the old 4% pace / fee-in cut until redeploy. This preview is Maker’s waterfall at exit.';
+        const intro = `Fee split runs at early exit (not on fee-in). Applies to ${fx(tot(act))} MSTR still inside its 7-day term.` + (freeTotal > 0 ? ` The other ${fx(freeTotal)} MSTR leaves with no fee.` : '') +
+          (sold > 0 ? ' Position fees are short of senior accrual on the live preview — cover options come next.' : '');
+        const rows = waterfallRows(w, { liveNote }).concat([
+          { k: 'Live preview · coupon owed (legacy bytecode)', v: `${fs(sum('couponOwed'))} USDG` },
+          { k: 'Live preview · stock sold to cover', v: `${fs(sold)} MSTR` + (sold > 0 ? ` (≈ $${fs(sold * S.vault.price)})` : '') },
           { k: 'Stock returned to you', v: `${fs(sum('mstrReturned'))} MSTR` },
           { k: 'Fees returned to you', v: `${fs(sum('juniorLeftoverFees'))} USDG` },
-        ];
-        if (sum('feeShortfallUsdg') > 0) rows.push({ k: 'Fee shortfall', v: `${fx(sum('feeShortfallUsdg'))} USDG` });
+        ]);
         const ok = confirm ? await confirm({ title: 'Confirm early exit', intro, rows, confirmLabel: 'Confirm early exit' }) : false;   // no native dialogs: the site supplies the themed one
         if (!ok) throw user('Early exit cancelled. No funds were moved.');
         steps.push([act, 'earlyExit', 'Confirm the early exit in MetaMask…']);
+      } else if (all && ready.length) {
+        const first = Math.min(...ready.map((r) => r.openedAt));
+        const seniorBook = ready.reduce((x, r) => x + r.senior, 0);
+        const grossFees = ready.reduce((x, r) => x + r.fee, 0);
+        const w = waterfallPreview({ seniorPrincipal: seniorBook, morphoRate: morphoRateFromCfg(), elapsedSec: Math.max(now - first, 0), gross: grossFees });
+        const intro = 'Fee split runs at settle (not on fee-in). Maker waterfall preview below.';
+        const rows = waterfallRows(w, { liveNote: 'Live vault may still settle with the old borrow-fee path until redeploy.' });
+        const ok = confirm ? await confirm({ title: 'Confirm settle', intro, rows, confirmLabel: 'Confirm settle' }) : true;
+        if (!ok) throw user('Settle cancelled. No funds were moved.');
       }
       let hash;
       for (const [group, fn, label] of steps) for (const r of group) hash = await send({ address: cfg.vault, abi: vaultAbi, functionName: fn, args: [r.id] }, onStep, label);
@@ -524,8 +586,8 @@
     } catch (e) { return fail(e); }
   }
 
-  /// Claim fee surplus on active matched legs (claimFees). Needs vault bytecode that exposes claimFees.
-  async function claimFees({ sym, onStep }) {
+  /// Claim fees on active matched legs. Product split is Maker waterfall at claim only; live bytecode may still be legacy claimFees.
+  async function claimFees({ sym, onStep, confirm }) {
     try {
       guard();
       if (sym && sym !== 'MSTR') throw user(sym + ' fee claim is display-only on this testnet.');
@@ -533,6 +595,16 @@
       const now = Math.floor(Date.now() / 1000), term = S.vault.termSec;
       const act = S.raw.filter((r) => r.matched && r.openedAt + term > now);
       if (!act.length) throw user('No active matched stock position to claim from.');
+      const first = Math.min(...act.map((r) => r.openedAt));
+      const seniorBook = act.reduce((x, r) => x + r.senior, 0);
+      const grossFees = act.reduce((x, r) => x + r.fee, 0);
+      const w = waterfallPreview({ seniorPrincipal: seniorBook, morphoRate: morphoRateFromCfg(), elapsedSec: Math.max(now - first, 0), gross: grossFees });
+      const intro = 'Fee split runs at claimFees only (not on fee-in). Preview uses Maker’s Morpho-rate waterfall.';
+      const rows = waterfallRows(w, { liveNote: 'Live vault bytecode may still skim surplus above a 4% pace until redeploy.' });
+      if (confirm) {
+        const ok = await confirm({ title: 'Confirm fee claim', intro, rows, confirmLabel: 'Confirm claim' });
+        if (!ok) throw user('Claim cancelled. No funds were moved.');
+      }
       const before = sig();
       let hash, claimed = 0;
       for (const r of act) {
@@ -543,14 +615,14 @@
         } catch (e) {
           const msg = e.shortMessage || e.message || String(e);
           if (/ClaimThreshold|ZeroAmount|function|selector|returned no data|execution reverted/i.test(msg) && act.length === 1) {
-            throw user('Claim-at-4% needs accrued fees above the pace threshold (and a vault that supports claimFees).');
+            throw user('Fee claim needs vault support on this deployment (and accrued fees to split). Live bytecode may still use the legacy 4% pace path until redeploy.');
           }
           if (!/ClaimThreshold|ZeroAmount/i.test(msg)) throw e;
         }
       }
-      if (!hash) throw user('No position had claimable fee surplus above the 4% pace threshold yet.');
+      if (!hash) throw user('No position had claimable fees on this deployment yet.');
       await settleAfterTx(before);
-      return { ok: true, hash, msg: 'Claimed ' + round(claimed, 4) + ' USDG fee surplus. Position stays open.' };
+      return { ok: true, hash, msg: 'Claimed ' + round(claimed, 4) + ' USDG toward junior share. Position stays open.' };
     } catch (e) { return fail(e); }
   }
 
