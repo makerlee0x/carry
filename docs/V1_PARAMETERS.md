@@ -2,7 +2,8 @@
 
 Machine-readable source: [`contracts/config/mainnet.json`](../contracts/config/mainnet.json).  
 UI mirror: `product` in [`public/config.json`](../public/config.json).  
-Product narrative: [`MAKER_V1_NOTES.md`](./MAKER_V1_NOTES.md).
+Product narrative: [`MAKER_V1_NOTES.md`](./MAKER_V1_NOTES.md).  
+**Fee waterfall (source of truth):** [`MAKER_FEE_WATERFALL.md`](./MAKER_FEE_WATERFALL.md).
 
 Layers:
 
@@ -17,9 +18,13 @@ Layers:
 | Base fee | 0.20% (limits 0.10–0.30%) | product-target |
 | Surcharge cap | 3% | product-target |
 | Dead bands | 0.25 / 0.45 / 0.45 / 0.60 / 1.00% | product-target |
-| Morpho APY (display) | 3.9% | ui-display |
+| Morpho rate (Steakhouse native supply) | 3.9% stub in config (not Merkl) | ui-display |
 | Junior / senior targets | 5% / 12% | ui-display |
-| Early-exit / claim floor | 4% | on-chain + ui-display |
+| Fee split timing | claimFees / earlyExit / settle only | product-target |
+| Treasury share of gross | 20% default; Boosted tiers down to 10% | product-target |
+| Senior perf share of gross | 20% (after seniorFloor + treasury) | product-target |
+| Early cover order | wallet USDG → Idle USDG on Carry → sell shares | product-target |
+| Live vault early-exit / claim pace | 4% (legacy bytecode until redeploy) | on-chain |
 | Maker UI ranges | MSTR ±32%, NVDA ±8% | ui-display |
 | Research ranges | ±1× five-session; 2× overnight; 3× weekend | research |
 | Recenter | 7d term + 80% oracle drift from center | ui-display |
@@ -27,4 +32,4 @@ Layers:
 | Launch caps | $25k total / $2.5k per wallet | ui-display |
 | Treasury seed | ≥10% of cap | product-target |
 | Testnet borrow APR | 5% (immutable on deployed vault) | on-chain |
-| DualPool / Morpho sleeve | not on 46630 | on-chain |
+| DualPool / Morpho sleeve | not on 46630; Idle USDG Morpho = APY stub | on-chain / ui-display |

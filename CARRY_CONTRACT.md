@@ -3,7 +3,8 @@
 Grant- and audit-oriented reference for `contracts/src/LeveredLpVault.sol`.  
 Deploy steps live in [`CARRY_TESTNET.md`](./CARRY_TESTNET.md).  
 Historical build notes: [`LEVERED_LP_BUILD.md`](./LEVERED_LP_BUILD.md).  
-Maker-locked product rules + research sync: [`docs/MAKER_V1_NOTES.md`](./docs/MAKER_V1_NOTES.md).
+Maker-locked product rules + research sync: [`docs/MAKER_V1_NOTES.md`](./docs/MAKER_V1_NOTES.md).  
+**Fee waterfall (product source of truth):** [`docs/MAKER_FEE_WATERFALL.md`](./docs/MAKER_FEE_WATERFALL.md) — Morpho-rate senior floor, treasury/seniorPerf/junior split **only** at claimFees / earlyExit / settle. The sections below still describe **live LeveredLpVault bytecode** (protocol cut on fee-in, fixed 4% early pace, 5% maturity borrow). That on-chain behavior is accurate until redeploy; it is no longer the product rule.
 
 **Status:** EVM testnet. Vault starts **paused**. DualPool hook is **NOT IMPLEMENTED** (`dualPoolAdapter() == address(0)`). LP fees on testnet are pushed via `accrueLpFee` / `MockFeePool` (fee-donor path for demos). No Yieldz, Morpho idle sleeve, or STRATEGY burn/boost wiring.
 
@@ -17,11 +18,10 @@ Carry lets a stock-token holder (junior) and a USDG lender (senior) form a **50/
 
 This vault is the **custody + accounting layer** for that product on testnet:
 
-- Junior deposits MSTR → **Open** until USDG is available, then **Active**.
-- Active window is **7 days** (product copy: “active”, not “locked”).
-- **4%** is the **pool-floor pace** used for early-exit coupon math (and the demo’s “fees needed so both sides are whole” story). It is **not** an extra tip paid on top of the maturity borrow fee.
-- At **maturity**, seniors are owed principal + a **borrow fee** (`borrowAprWad`, capped at 5%, × term / year).
-- **Early exit** closes the whole position (V1): if position fees already cover `principal × 4% × elapsed/365`, exit is free for the junior; otherwise the **gap is paid by selling junior MSTR from the position** (no spare-wallet USDG required).
+- Junior deposits MSTR → **Idle** (unmatched) until USDG is available, then **Active**. Product states: Idle / Active / Boosted / Closed.
+- Active window is **7 days** (product copy: “active”, not “locked”; positions roll over, never auto-close).
+- **Live bytecode:** early-exit coupon uses a fixed **4%** pace; maturity uses immutable **borrowAprWad** (≤5%). **Product intent:** senior accrual = Morpho native supply rate × elapsed; fee waterfall at claim/exit/settle only (see [`docs/MAKER_FEE_WATERFALL.md`](./docs/MAKER_FEE_WATERFALL.md)).
+- **Live bytecode early exit:** gap vs 4% coupon is paid by selling junior MSTR from the position. **Product intent:** user chooses wallet USDG → Idle USDG on Carry → sell from position.
 - Lenders withdraw **idle** USDG anytime; **matched** USDG needs replacement liquidity or a position close.
 
 ### For auditors
