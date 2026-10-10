@@ -329,9 +329,10 @@ contract LeveredLpVaultTest is Test {
 
         vm.prank(senior);
         vault.withdrawSenior(seniorNeed);
-        // Senior gets principal + floor + perf (USDG path; no shortfall with fat fees)
+        // Senior gets principal + floor + perf (USDG path; no shortfall with fat fees).
+        // Time-weighted credit rounds down — allow dust.
         assertApproxEqAbs(
-            usdg.balanceOf(senior), seniorNeed + settlement.seniorFloor + settlement.seniorPerf, 1_000
+            usdg.balanceOf(senior), seniorNeed + settlement.seniorFloor + settlement.seniorPerf, 1e7
         );
     }
 
@@ -378,8 +379,9 @@ contract LeveredLpVaultTest is Test {
 
         vm.prank(senior);
         vault.withdrawSenior(seniorNeed);
-        assertApproxEqAbs(mstr.balanceOf(senior), result.mstrSold, 1_000);
-        assertApproxEqAbs(usdg.balanceOf(senior), seniorNeed, 1_000);
+        // Time-weighted index rounds down; dust MSTR stays in vault.
+        assertApproxEqAbs(mstr.balanceOf(senior), result.mstrSold, 1e6);
+        assertApproxEqAbs(usdg.balanceOf(senior), seniorNeed, 1e6);
     }
 
     function test_earlyExitWalletCover() public {
@@ -403,7 +405,7 @@ contract LeveredLpVaultTest is Test {
 
         vm.prank(senior);
         vault.withdrawSenior(seniorNeed);
-        assertApproxEqAbs(usdg.balanceOf(senior), seniorNeed + result.accrual, 1_000);
+        assertApproxEqAbs(usdg.balanceOf(senior), seniorNeed + result.accrual, 1e7);
     }
 
     function test_earlyExitIdleCarryCover() public {
@@ -475,7 +477,7 @@ contract LeveredLpVaultTest is Test {
         vault.upgradeToAndCall(address(v2impl), "");
 
         LeveredLpVaultV2 upgraded = LeveredLpVaultV2(address(vault));
-        assertEq(upgraded.version(), "v2.1-maker-fixes");
+        assertEq(upgraded.version(), "v2.2-maker-answers");
         assertEq(upgraded.reservedSenior(), seniorNeed);
         assertEq(upgraded.morphoRateWad(), MORPHO);
         (,,,,, uint256 feeUsdg,,,,,,) = upgraded.positions(id);
@@ -523,24 +525,24 @@ contract LeveredLpVaultTest is Test {
         assertEq(unpaidAfter, 0);
     }
 
-    /// @notice Settle never sells junior MSTR; shortfall comes from backstop only.
-    function test_settle_doesNotSellJuniorMstr() public {
+    /// @notice Settle with empty backstop sells junior MSTR for residual shortfall + treasury-on-cover.
+    function test_settle_sellSharesWhenBackstopEmpty() public {
         uint256 id = _openMatched();
-        // No fees → full accrual shortfall at maturity.
+        // No fees → full accrual shortfall at maturity; backstop empty → SellShares cover.
         vm.warp(block.timestamp + 1 hours);
         uint256 juniorMstrBefore = mstr.balanceOf(junior);
 
         LeveredLpVault.Settlement memory settlement = vault.settle(id);
-        assertEq(settlement.mstrSold, 0);
-        assertEq(settlement.mstrKept, MSTR_IN);
-        assertEq(mstr.balanceOf(junior), juniorMstrBefore + MSTR_IN);
         assertGt(settlement.accrual, 0);
         assertEq(settlement.seniorFloor, 0);
-        // Without backstop funding, shortfall remains unpaid.
-        assertEq(settlement.feeShortfallUsdg, settlement.accrual - settlement.fromBackstop);
+        assertEq(settlement.fromBackstop, 0);
+        assertGt(settlement.mstrSold, 0);
+        assertEq(settlement.mstrKept, MSTR_IN - settlement.mstrSold);
+        assertEq(mstr.balanceOf(junior), juniorMstrBefore + settlement.mstrKept);
+        assertEq(settlement.feeShortfallUsdg, 0);
     }
 
-    function test_settle_shortfallFromBackstopOnly() public {
+    function test_settle_shortfallBackstopFirstThenNoSell() public {
         uint256 id = _openMatched();
         uint256 seniorNeed = vault.previewSeniorAssets(MSTR_IN);
         vm.warp(block.timestamp + 1 hours);
@@ -555,6 +557,7 @@ contract LeveredLpVaultTest is Test {
         assertEq(settlement.mstrSold, 0);
         assertEq(settlement.mstrKept, MSTR_IN);
         assertEq(settlement.fromBackstop, accrual);
+        assertEq(settlement.coverUsdg, 0);
         assertEq(settlement.feeShortfallUsdg, 0);
         assertEq(mstr.balanceOf(junior), MSTR_IN);
     }
@@ -625,6 +628,135 @@ contract LeveredLpVaultTest is Test {
         assertGt(free, 0);
         vm.prank(senior);
         vault.withdrawSenior(free);
+    }
+
+    // ─── Maker answers (withdraw / settle cover / TW yield / matchCap) ───────
+
+    function test_ownerWithdrawBackstop_cannotRugPrincipal() public {
+        uint256 seniorNeed = vault.previewSeniorAssets(MSTR_IN);
+        uint256 id = _openMatched();
+        _payFee(id, 10 ether);
+        vm.warp(block.timestamp + 30 minutes);
+        vm.prank(junior);
+        LeveredLpVault.ClaimFeesResult memory claimed = vault.claimFees(id);
+        assertGt(vault.backstop(), 0);
+        assertEq(vault.backstop(), claimed.treasury);
+
+        uint256 bs = vault.backstop();
+        address treasury = makeAddr("treasury");
+        vault.withdrawTreasuryFees(treasury, bs);
+        assertEq(usdg.balanceOf(treasury), bs);
+        assertEq(vault.backstop(), 0);
+        // Senior principal + remaining position fees still in vault.
+        assertGe(usdg.balanceOf(address(vault)), seniorNeed);
+        assertEq(mstr.balanceOf(address(vault)), MSTR_IN);
+
+        vm.expectRevert(LeveredLpVault.InsufficientBackstop.selector);
+        vault.withdrawFromBackstop(treasury, 1);
+
+        vm.prank(attacker);
+        vm.expectRevert(abi.encodeWithSelector(OwnableUpgradeable.OwnableUnauthorizedAccount.selector, attacker));
+        vault.withdrawFromBackstop(attacker, 1);
+    }
+
+    function test_settle_walletCoverAfterPartialBackstop() public {
+        uint256 seniorNeed = vault.previewSeniorAssets(MSTR_IN);
+        uint256 id = _openMatched();
+        vm.warp(block.timestamp + 1 hours);
+        uint256 accrual = vault.previewSeniorAccrual(seniorNeed, 1 hours);
+        uint256 half = accrual / 2;
+        usdg.mint(donor, half);
+        vm.startPrank(donor);
+        usdg.approve(address(vault), half);
+        vault.fundBackstop(half);
+        vm.stopPrank();
+
+        LeveredLpVault.Settlement memory preview =
+            vault.previewSettle(id, LeveredLpVault.CoverMode.Wallet);
+        assertEq(preview.fromBackstop, half);
+        assertGt(preview.coverUsdg, 0);
+        assertEq(preview.treasuryOnCover, (accrual - half) * vault.treasuryCutWad() / 1e18);
+
+        usdg.mint(junior, preview.coverUsdg);
+        vm.startPrank(junior);
+        usdg.approve(address(vault), preview.coverUsdg);
+        LeveredLpVault.Settlement memory settlement =
+            vault.settle(id, LeveredLpVault.CoverMode.Wallet);
+        vm.stopPrank();
+
+        assertEq(settlement.mstrSold, 0);
+        assertEq(settlement.mstrKept, MSTR_IN);
+        assertEq(settlement.fromBackstop, half);
+        assertEq(settlement.feeShortfallUsdg, 0);
+        assertEq(vault.backstop(), settlement.treasuryOnCover);
+
+        vm.prank(senior);
+        vault.withdrawSenior(seniorNeed);
+        assertApproxEqAbs(usdg.balanceOf(senior), seniorNeed + accrual, 1e7);
+    }
+
+    function test_settle_walletCoverOnlyJunior() public {
+        uint256 id = _openMatched();
+        vm.warp(block.timestamp + 1 hours);
+        vm.prank(attacker);
+        vm.expectRevert(LeveredLpVault.NotJunior.selector);
+        vault.settle(id, LeveredLpVault.CoverMode.Wallet);
+    }
+
+    function test_lateSenior_yieldProRataByDepositTime() public {
+        uint256 seniorNeed = vault.previewSeniorAssets(MSTR_IN);
+        _depositSenior(senior, seniorNeed);
+        uint256 id = _depositJunior(junior, MSTR_IN);
+        assertTrue(vault.isFullyMatched(id));
+
+        // Accrue almost the whole term with only senior #1 present.
+        vm.warp(block.timestamp + 50 minutes);
+        _depositSenior(senior2, seniorNeed); // late — same principal, tiny time weight
+
+        vm.warp(block.timestamp + 10 minutes); // term = 1 hour
+        uint256 gross = 10 ether;
+        _payFee(id, gross);
+
+        LeveredLpVault.Settlement memory settlement = vault.settle(id);
+        assertEq(settlement.mstrSold, 0); // fat fees cover accrual
+
+        uint256 s1Before = usdg.balanceOf(senior);
+        uint256 s2Before = usdg.balanceOf(senior2);
+        vm.prank(senior);
+        vault.withdrawSenior(seniorNeed);
+        vm.prank(senior2);
+        vault.withdrawSenior(seniorNeed);
+
+        uint256 y1 = usdg.balanceOf(senior) - s1Before - seniorNeed;
+        uint256 y2 = usdg.balanceOf(senior2) - s2Before - seniorNeed;
+        assertGt(y1, 0);
+        assertGt(y2, 0);
+        // Early senior should earn materially more than equal 50/50 under time-weighting.
+        assertGt(y1, y2 * 2);
+    }
+
+    function test_matchCapBoundsDepositSeniorGas() public {
+        vault.setMatchCap(2);
+        assertEq(vault.matchCap(), 2);
+
+        // Three idle juniors waiting; senior deposit only enough for two full matches.
+        uint256 seniorNeed = vault.previewSeniorAssets(MSTR_IN);
+        uint256 id1 = _depositJunior(junior, MSTR_IN);
+        uint256 id2 = _depositJunior(makeAddr("j2"), MSTR_IN);
+        uint256 id3 = _depositJunior(makeAddr("j3"), MSTR_IN);
+        assertFalse(vault.isMatched(id1));
+
+        _depositSenior(senior, seniorNeed * 3);
+        assertTrue(vault.isFullyMatched(id1));
+        assertTrue(vault.isFullyMatched(id2));
+        // Third left unmatched because matchCap=2 stopped the walk.
+        assertFalse(vault.isMatched(id3));
+        assertEq(vault.openHead(), id3);
+        assertEq(vault.freeSenior(), seniorNeed);
+
+        // Later deposit (or same free capital via another senior action) continues matching.
+        _depositSenior(senior2, 1); // triggers another capped walk with free senior already there
+        assertTrue(vault.isFullyMatched(id3));
     }
 
     // ─── helpers ─────────────────────────────────────────────────────────────
