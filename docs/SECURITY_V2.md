@@ -41,11 +41,12 @@ No need to migrate testnet ownership unless it is cheap and Maker wants the rehe
 2. **MockERC20 `mint` is open to deployer** — test tokens only; anyone who holds the mint key can inflate demo balances.
 3. **Public mempool / MEV** — testnet; no keeper private mempool. Fee donors and settle callers are public.
 4. **Boosted** — stake-before-open **flag only**; no STRATEGY yield paid without a funding path.
-5. **SellShares cover (early exit only)** — no AMM; MSTR is credited to seniors via accumulator (notional “sale”). Settle does not sell shares.
+5. **SellShares cover (early exit only)** — no AMM; MSTR is credited to seniors via accumulator (notional “sale”). Settle does not sell shares. If junior leftover fees cannot cover treasury’s 20% of the cover amount, the unpaid treasury slice is also settled as extra MSTR to seniors (testnet OK; no AMM to realize USDG for treasury).
 6. **Abandoned proxy** `0x0e4e59…` — first UUPS proxy contaminated by lost E2E keys; do not use. Leave funds alone until term settle or owner decides otherwise.
 7. **v1 grant vault** `0x72A0…` — left unchanged; not the product CA.
-8. **Treasury / backstop withdraw** — cuts accrue into `backstop`; no owner `withdrawTreasury` yet (product question).
-9. **Open-queue gas** — FIFO walk on senior deposit; large idle queues can be costly (product / keeper question).
+8. **Treasury / backstop withdraw** — **intended for testnet:** cuts stay in `backstop` to fund settle shortfalls. No owner `withdrawTreasury` / `withdrawBackstop`. Mainnet may add a multisig-gated withdraw later.
+9. **Open-queue gas** — FIFO walk on senior deposit; large idle queues can be costly. Accepted for v1; keeper batching / queue caps later if needed.
+10. **Late senior deposits** — yield uses a global `accYieldPerPrincipal` accumulator, so a senior who deposits right before a claim/settle can share yield that accrued earlier. **Accepted for v1.**
 
 ## Keeper / ops
 

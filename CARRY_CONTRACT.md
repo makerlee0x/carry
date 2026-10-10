@@ -4,9 +4,12 @@ Grant- and audit-oriented reference for `contracts/src/LeveredLpVault.sol`.
 Deploy steps live in [`CARRY_TESTNET.md`](./CARRY_TESTNET.md).  
 Historical build notes: [`LEVERED_LP_BUILD.md`](./LEVERED_LP_BUILD.md).  
 Maker-locked product rules + research sync: [`docs/MAKER_V1_NOTES.md`](./docs/MAKER_V1_NOTES.md).  
-**Fee waterfall (product source of truth):** [`docs/MAKER_FEE_WATERFALL.md`](./docs/MAKER_FEE_WATERFALL.md) — Morpho-rate senior floor, treasury/seniorPerf/junior split **only** at claimFees / earlyExit / settle. The sections below still describe **live LeveredLpVault bytecode** (protocol cut on fee-in, fixed 4% early pace, 5% maturity borrow). That on-chain behavior is accurate until redeploy; it is no longer the product rule.
+**Fee waterfall (product source of truth):** [`docs/MAKER_FEE_WATERFALL.md`](./docs/MAKER_FEE_WATERFALL.md) — Morpho-rate senior floor, treasury/seniorPerf/junior split **only** at claimFees / earlyExit / settle.
 
-**Status:** EVM testnet. Vault starts **paused**. DualPool hook is **NOT IMPLEMENTED** (`dualPoolAdapter() == address(0)`). LP fees on testnet are pushed via `accrueLpFee` / `MockFeePool` (fee-donor path for demos). No Yieldz, Morpho idle sleeve, or STRATEGY burn/boost wiring.
+**Live product CA (UUPS PROXY):** [`0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd`](https://explorer.testnet.chain.robinhood.com/address/0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd) — `version() = v2.1-maker-fixes`. Maker waterfall, unpaid-accrual carry, rate lock ≤5%, settle without selling junior MSTR, deposit caps.  
+**v1 grant reference (not product):** `0x72A0…36c8` (immutable; old 4%/5%/fee-in cut story applies only there).
+
+**Status:** EVM testnet. DualPool hook is **NOT IMPLEMENTED** (`dualPoolAdapter() == address(0)`). LP fees on testnet are pushed via `accrueLpFee` / `MockFeePool` (fee-donor path for demos). No Yieldz, Morpho idle sleeve, or STRATEGY burn/boost wiring.
 
 ---
 
@@ -20,22 +23,22 @@ This vault is the **custody + accounting layer** for that product on testnet:
 
 - Junior deposits MSTR → **Idle** (unmatched) until USDG is available, then **Active**. Product states: Idle / Active / Boosted / Closed.
 - Active window is **7 days** (product copy: “active”, not “locked”; positions roll over, never auto-close).
-- **Live bytecode:** early-exit coupon uses a fixed **4%** pace; maturity uses immutable **borrowAprWad** (≤5%). **Product intent:** senior accrual = Morpho native supply rate × elapsed; fee waterfall at claim/exit/settle only (see [`docs/MAKER_FEE_WATERFALL.md`](./docs/MAKER_FEE_WATERFALL.md)).
-- **Live bytecode early exit:** gap vs 4% coupon is paid by selling junior MSTR from the position. **Product intent:** user chooses wallet USDG → Idle USDG on Carry → sell from position.
+- **Live UUPS product:** senior accrual = locked Morpho native supply rate (stub **3.9%**, owner cap **≤5%**) × elapsed; fee waterfall at claim/exit/settle only (see [`docs/MAKER_FEE_WATERFALL.md`](./docs/MAKER_FEE_WATERFALL.md)).
+- **Early exit cover:** user chooses Wallet USDG → Idle USDG on Carry → SellShares. **Settle never sells junior MSTR** (treasury/backstop only).
 - Lenders withdraw **idle** USDG anytime; **matched** USDG needs replacement liquidity or a position close.
 
 ### For auditors
 
 | Item | Value |
 | --- | --- |
-| Contract | `LeveredLpVault` (non-upgradeable) |
+| Contract | `LeveredLpVault` / `LeveredLpVaultV2` behind UUPS PROXY |
 | Tokens | Immutable `mstr`, `usdg` ERC-20s |
 | Oracle | Immutable `IPriceOracle` (`mstrPriceWad()`) |
 | Term | Immutable `term` ≤ 7 days |
-| Borrow APR | Immutable `borrowAprWad` ≤ 5% WAD |
-| Protocol cut | Immutable `protocolCutWad` ≤ 20% of each fee |
-| Early-exit APR | Constant `EARLY_EXIT_APR_WAD = 0.04e18` |
-| Pause | Starts `paused = true`; owner pause/unpause deposits only |
+| Morpho rate | Owner-set `morphoRateWad` ≤ `MAX_MORPHO_RATE_WAD` (5%); locked per position at first match |
+| Fee split | Maker waterfall at claim/exit/settle; treasury/seniorPerf cuts of gross (Boosted can cut treasury toward 10%) |
+| Unpaid accrual | Carried on `Position.unpaidSeniorAccrual` when fees &lt; accrual |
+| Pause | Owner pause/unpause deposits only |
 | Pool | No approvals to PoolManager; `joinPool` always reverts |
 | Reentrancy | `nonReentrant` on all value-moving externals |
 
@@ -83,13 +86,12 @@ flowchart TD
 
 Numbered happy path:
 
-1. **Deposit stock** — `depositJunior(mstrAmount)`. If no idle USDG → Open queue. If idle USDG ≥ oracle notional → match immediately (Active, `openedAt = now`).
-2. **Lend USDG** — `depositSenior(amount)`. Credits senior principal; FIFO-matches Open juniors; each match sets `seniorPrincipal`, `entryPriceWad`, `openedAt`, increases `reservedSenior`.
-3. **Active** — Position earns only when matched. Timer = `term` from match.
-4. **Fee accrual** — Caller pushes USDG via `accrueLpFee`. `protocolCutWad` → `backstop`; remainder → `position.feeUsdg`.
-5. **Early exit** (junior, before term) — Coupon `principal × 0.04 × elapsed/365`. Fees first; gap → sell MSTR from position; return remaining shares. Releases `reservedSenior`.
-6. **Maturity settle** (after term) — Borrow fee `principal × borrowApr × term/365`. Waterfall: position fees → backstop → minimum MSTR. Junior gets leftover MSTR + leftover fees.
-7. **Lender replace / exit** — `freePrincipal(senior) = seniorPrincipal × freeSenior / totalSeniorPrincipal`. Extra senior deposits raise idle capacity (replace). Matched size unlocks on early exit/settle when `reservedSenior` drops.
+1. **Deposit stock** — `depositJunior(mstrAmount)`. Partial match OK; residual stays in Open queue.
+2. **Lend USDG** — `depositSenior(amount)`. FIFO-matches Open juniors; first match locks `morphoRateLocked` and starts the term clock. No further match after term.
+3. **Active** — Timer = `term` from first match. Accrual uses locked Morpho rate (≤5%).
+4. **Fee accrual** — `accrueLpFee` pulls raw USDG onto the position (no cut on fee-in).
+5. **claimFees / early exit / settle** — Maker waterfall only here. Unpaid senior accrual carries when fees &lt; accrual. Early cover: Wallet → Idle Carry → SellShares. **Settle never sells junior MSTR** (backstop/treasury only).
+6. **Lender replace / exit** — `freePrincipal` pro-rata of idle capacity; matched size unlocks when `reservedSenior` drops.
 
 ---
 
@@ -109,7 +111,7 @@ Numbered happy path:
 | --- | --- | --- | --- |
 | `depositJunior(mstrAmount)` | anyone (when unpaused) | amount > 0 | Pulls exact MSTR; enqueues Open; tries match |
 | `withdrawUnmatched(positionId)` | position owner | Open, not settled | Returns all MSTR; no coupon |
-| `earlyExit(positionId)` | position owner | Matched, before term, not settled | Closes position; coupon from fees; gap via MSTR from position; pushes leftover MSTR/USDG to junior |
+| `earlyExit(positionId[, mode])` | position owner | Matched, before term, not settled | Closes position; Maker waterfall; cover Wallet / Idle / SellShares |
 
 ### Senior
 
@@ -122,21 +124,22 @@ Numbered happy path:
 
 | Function | Who | Preconditions | Effects / funds |
 | --- | --- | --- | --- |
-| `accrueLpFee(positionId, amount)` | anyone | Matched, not settled | Pulls exact USDG; cut → backstop; rest → position |
+| `accrueLpFee(positionId, amount)` | anyone | Matched, not settled | Pulls exact USDG raw onto position (no cut) |
+| `claimFees(positionId)` | junior | Matched, before term | Maker waterfall; unpaid accrual carries forward |
 | `fundBackstop(amount)` | anyone | amount > 0 | Pulls USDG into `backstop` |
 
 ### Settlement / views
 
 | Function | Who | Preconditions | Effects / funds |
 | --- | --- | --- | --- |
-| `settle(positionId)` | anyone | Matched, term elapsed, not settled | Maturity waterfall; pushes to junior; credits senior accumulators |
-| `previewEarlyExit` / `previewEarlyExitCoupon` | view | — | Coupon + share sale preview |
-| `previewBorrowFee` / `previewSeniorAssets` / `previewMstrToCover` | view | — | Quoting helpers |
+| `settle(positionId)` | anyone | Matched, term elapsed, not settled | Maturity waterfall; **no MSTR sold**; shortfall from backstop |
+| `previewEarlyExit` / `previewClaimFees` | view | — | Mode-aware accrual + waterfall preview |
+| `previewSeniorAssets` / `previewMstrToCover` | view | — | Quoting helpers |
 | `freeSenior` / `freePrincipal` / `isMatched` / `mark` | view | — | Capacity / MTM |
 | `dualPoolAdapter()` | view | — | Always `address(0)` |
 | `joinPool(bytes)` | anyone | — | Always reverts `ExternalLpForbidden` |
 
-Constructor immutables: `mstr`, `usdg`, `oracle`, `term`, `borrowAprWad`, `protocolCutWad`, `owner`. Always starts paused.
+Initializer config: `mstr`, `usdg`, `oracle`, `term`, `morphoRateWad` (≤5%), owner.
 
 ---
 
@@ -144,38 +147,16 @@ Constructor immutables: `mstr`, `usdg`, `oracle`, `term`, `borrowAprWad`, `proto
 
 ### What “whole” means
 
-If the pool earns at the **4% floor** on LP notional for the week (demo math), then after the **20% protocol cut**, remaining fees cover the senior **borrow fee** so:
+If fees cover Morpho-rate senior accrual for the matched window, seniors are made whole on opportunity cost and juniors keep remaining MSTR at settle (no share sale).
 
-- Junior can withdraw **all shares** (and leftover fees), and  
-- Senior receives **principal + borrow fee** in USDG (or MSTR only if the fee waterfall had to sell shares).
-
-4% is **not** “an extra 4% tip to the lender on top of the borrow fee.”
-
-### Early-exit coupon (implemented)
+### Senior accrual (implemented)
 
 ```
-couponOwed = seniorPrincipal * EARLY_EXIT_APR_WAD * elapsed / (WAD * YEAR)
-           = principal * 0.04 * elapsed_seconds / (365 days)
+accrual = unpaidSeniorAccrual
+        + seniorPrincipal * morphoRateLocked * elapsed / (WAD * YEAR)
 ```
 
-Waterfall:
-
-1. `fromPositionFees = min(position.feeUsdg, couponOwed)`
-2. `usdgGap = couponOwed - fromPositionFees`
-3. If gap > 0: `mstrSold = ceil(gap / price)` from **this position’s MSTR** (credited to seniors via `accMstrPerPrincipal`)
-4. Junior receives `mstrAmount - mstrSold` and any leftover fees
-
-**No external USDG pull from the junior’s wallet** on early exit. If MSTR is insufficient to cover the gap, `feeShortfallUsdg` is recorded; seniors may be underpaid on the coupon (known limitation without a liquid AMM sell).
-
-### Maturity borrow fee (implemented)
-
-```
-borrowFeeOwed = seniorPrincipal * borrowAprWad * term / (WAD * YEAR)
-```
-
-Default deploy constants: borrow APR **5%**, term **7 days**, protocol cut **20%**.
-
-Waterfall: position fees → backstop → minimum junior MSTR. Leftover fees go to junior as `juniorYield`.
+Maker waterfall at claim/exit/settle: `seniorFloor → treasury → seniorPerf → junior`. Early-exit shortfall uses Wallet / Idle / SellShares. Settle shortfall uses `backstop` only.
 
 ### Fee credit path
 

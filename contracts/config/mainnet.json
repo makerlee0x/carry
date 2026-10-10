@@ -106,14 +106,22 @@
   },
   "onChainToday": {
     "chainId": 46630,
-    "vault": "LeveredLpVault",
+    "vault": "LeveredLpVaultV2",
+    "proxy": "0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd",
+    "version": "v2.1-maker-fixes",
     "termDays": 7,
-    "borrowAprPct": 5,
-    "earlyExitAprPct": 4,
-    "protocolCutPct": 20,
+    "morphoRatePct": 3.9,
+    "morphoRateCapPct": 5,
+    "morphoRateLockedAtMatch": true,
+    "earlyExitFloorAprPct": 3.9,
+    "treasuryCutPct": 20,
+    "seniorPerfCutPct": 20,
     "dualPool": false,
     "morphoSleeve": false,
-    "depositCapsEnforced": false,
+    "depositCapsEnforced": true,
+    "maxTotalUsdg": 25000,
+    "maxPerWalletUsdg": 2500,
+    "settleSellsJuniorMstr": false,
     "layer": "on-chain"
   }
 }

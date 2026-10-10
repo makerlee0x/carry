@@ -103,6 +103,7 @@ Use this as the fee-preview reference in the UI. Live rate on testnet is the
 
 - **Early exit:** user chooses Wallet / Idle Carry / SellShares when fees &lt; accrual.
 - **Settle (maturity):** junior keeps all remaining MSTR; unpaid accrual covered from treasury/`backstop` only (no share sale).
+- **SellShares + treasury shortfall (accepted testnet):** treasury still wants 20% of the cover amount. If junior leftover fees cannot pay that USDG slice, the unpaid treasury piece is credited to seniors as additional MSTR (no AMM on testnet).
 
 ## Explicitly later
 

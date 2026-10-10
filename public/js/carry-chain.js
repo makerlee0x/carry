@@ -87,8 +87,8 @@
   const num = (v, d = 18) => Number(viem.formatUnits(v, d));
   const round = (n, dp) => Number(n.toFixed(dp));
 
-  // Maker fee waterfall preview (product truth). Live UUPS vault applies this on-chain;
-  // fee-in cut until redeploy — callers must say so in UI copy. Split runs only at claim/exit/settle.
+  // Maker fee waterfall preview (product truth). Live UUPS vault applies this on-chain
+  // at claimFees / earlyExit / settle only (no cut on fee-in).
   function waterfallPreview({ seniorPrincipal, morphoRate, elapsedSec, gross }) {
     const year = 365 * 86400;
     const rate = Number.isFinite(morphoRate) ? morphoRate : 0.039;
