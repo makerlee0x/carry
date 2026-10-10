@@ -24,3 +24,5 @@ contracts/.deployer.address
 contracts/.env*
 .env.carry*
 *.key
+
+contracts/.e2e/

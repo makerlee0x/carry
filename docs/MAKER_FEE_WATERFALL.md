@@ -95,9 +95,13 @@ use the old 4% pace / flat cut until redeploy — preview copy must say so.
 
 ---
 
-## Explicitly later (not this docs batch)
+## On-chain status (2026-10-10)
 
-- Vault bytecode rewrite to this waterfall
-- Partial match + auto-match
+**Landed on testnet PROXY** `0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd` (UUPS; impl `0xe8a840…`): Maker waterfall at claimFees/earlyExit/settle, partial match, early cover chooser, Boosted treasury-tier stub.
+
+## Explicitly later
+
 - Real Morpho sleeve on Robinhood
 - LONG creator fee share into Boosted
+- STRATEGY stake token (beyond owner-set flag)
+- Mainnet 4663

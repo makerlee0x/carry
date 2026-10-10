@@ -47,24 +47,42 @@ Script does **not** unpause, seed user funds, or deploy a hook. Refuses chain id
 
 ---
 
-## Addresses (deployed 2026-10-01 on 46630)
+## Product vault v2 (UUPS) — current CA (2026-10-10)
 
-Deployer / vaultOwner: [`0xcA44F2dbB2D43b93b39F01B88E0f0e2966983c57`](https://explorer.testnet.chain.robinhood.com/address/0xcA44F2dbB2D43b93b39F01B88E0f0e2966983c57)  
-Vault **paused on-chain** (`paused() == true`). Script re-disarmed after broadcast.  
-Source **verified** on explorer via Sourcify (exact match) for vault + mocks.
+**Product CA = PROXY** (future logic upgrades keep this address).  
+Owner / upgrade authority: [`0xcA44F2dbB2D43b93b39F01B88E0f0e2966983c57`](https://explorer.testnet.chain.robinhood.com/address/0xcA44F2dbB2D43b93b39F01B88E0f0e2966983c57)  
+Security notes: [`docs/SECURITY_V2.md`](./docs/SECURITY_V2.md). Maker waterfall: [`docs/MAKER_FEE_WATERFALL.md`](./docs/MAKER_FEE_WATERFALL.md).
 
-| Name | Address | Explorer (contract / code) |
+| Name | Address | Explorer |
 | --- | --- | --- |
-| mockMstr | `0x762019309B536bbb89577422FaaFBeC9659f8728` | [verified](https://explorer.testnet.chain.robinhood.com/address/0x762019309B536bbb89577422FaaFBeC9659f8728?tab=contract) |
-| mockUsdg | `0x25030Bff74764aD72b912276a603717DB1C00644` | [verified](https://explorer.testnet.chain.robinhood.com/address/0x25030Bff74764aD72b912276a603717DB1C00644?tab=contract) |
-| mockOracle | `0xc74Af7E23A2B4b46B5Fe05E5c7c5ec0BB5dbc5B7` | [verified](https://explorer.testnet.chain.robinhood.com/address/0xc74Af7E23A2B4b46B5Fe05E5c7c5ec0BB5dbc5B7?tab=contract) |
-| mockFeePool | `0xa4122524aD97Aab05cAC7F99c04Cd060D02F0771` | [verified](https://explorer.testnet.chain.robinhood.com/address/0xa4122524aD97Aab05cAC7F99c04Cd060D02F0771?tab=contract) |
-| vault | `0x72A053120f03B10c5506d2325f92F59B0FfC36c8` | [verified](https://explorer.testnet.chain.robinhood.com/address/0x72A053120f03B10c5506d2325f92F59B0FfC36c8?tab=contract) |
+| **vault (PROXY / product CA)** | `0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd` | [Sourcify match](https://explorer.testnet.chain.robinhood.com/address/0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd?tab=contract) |
+| implementation | `0xe8a8406d860aCd8c348377D5342bCAcD5770D84b` | [Sourcify match](https://explorer.testnet.chain.robinhood.com/address/0xe8a8406d860aCd8c348377D5342bCAcD5770D84b?tab=contract) |
+| mockMstr (reused) | `0x762019309B536bbb89577422FaaFBeC9659f8728` | [verified](https://explorer.testnet.chain.robinhood.com/address/0x762019309B536bbb89577422FaaFBeC9659f8728?tab=contract) |
+| mockUsdg (reused) | `0x25030Bff74764aD72b912276a603717DB1C00644` | [verified](https://explorer.testnet.chain.robinhood.com/address/0x25030Bff74764aD72b912276a603717DB1C00644?tab=contract) |
+| mockOracle (reused) | `0xc74Af7E23A2B4b46B5Fe05E5c7c5ec0BB5dbc5B7` | [verified](https://explorer.testnet.chain.robinhood.com/address/0xc74Af7E23A2B4b46B5Fe05E5c7c5ec0BB5dbc5B7?tab=contract) |
+| mockFeePool (reused) | `0xa4122524aD97Aab05cAC7F99c04Cd060D02F0771` | [verified](https://explorer.testnet.chain.robinhood.com/address/0xa4122524aD97Aab05cAC7F99c04Cd060D02F0771?tab=contract) |
+
+| Step | Tx |
+| --- | --- |
+| implementation | [`0x90b8d55d2fcc257507f826cd8642604db09970eaababa3a480fa357408597743`](https://explorer.testnet.chain.robinhood.com/tx/0x90b8d55d2fcc257507f826cd8642604db09970eaababa3a480fa357408597743) |
+| product proxy | [`0x457a1dc042a52f494d4b9a913ec8ad7d3348e02ef0825088dafc51cb232d0355`](https://explorer.testnet.chain.robinhood.com/tx/0x457a1dc042a52f494d4b9a913ec8ad7d3348e02ef0825088dafc51cb232d0355) |
+
+`public/config.json` → `chain.vault` = PROXY. UI money paths (`claimFees`, cover-mode `earlyExit`, settle) point here.
+
+### Abandoned test proxy (do not use)
+
+`0x0e4e59b1eb9bA2EE1630ccf720Ea7bC071d21522` — first UUPS proxy from the same session; contaminated by lost E2E keys. Superseded by the product PROXY above.
+
+---
+
+## v1 / grant reference vault (2026-10-01) — keep history
+
+**Not the product CA.** Non-upgradeable LeveredLpVault used for the original grant/demo pack. Left on-chain unchanged.
+
+| Name | Address | Explorer |
+| --- | --- | --- |
+| **vault v1 (grant reference)** | `0x72A053120f03B10c5506d2325f92F59B0FfC36c8` | [verified](https://explorer.testnet.chain.robinhood.com/address/0x72A053120f03B10c5506d2325f92F59B0FfC36c8?tab=contract) |
 | vaultOwner | `0xcA44F2dbB2D43b93b39F01B88E0f0e2966983c57` | [view](https://explorer.testnet.chain.robinhood.com/address/0xcA44F2dbB2D43b93b39F01B88E0f0e2966983c57) |
-
-Printable overview for review: [`contracts/docs/Carry-Contract-Overview.pdf`](./contracts/docs/Carry-Contract-Overview.pdf)
-
-### Broadcast tx hashes
 
 | Contract | Tx |
 | --- | --- |
@@ -72,7 +90,9 @@ Printable overview for review: [`contracts/docs/Carry-Contract-Overview.pdf`](./
 | mockUsdg | [`0x67c7005e0b8bf604077141a73d5adf01801fbaf0d23bb099951f6b3c056dbe31`](https://explorer.testnet.chain.robinhood.com/tx/0x67c7005e0b8bf604077141a73d5adf01801fbaf0d23bb099951f6b3c056dbe31) |
 | mockOracle | [`0x54b2be4cabdb2b0f2f7ac6261f4ba92f4b7a498c5e07af9f6b00a945fc3df7c2`](https://explorer.testnet.chain.robinhood.com/tx/0x54b2be4cabdb2b0f2f7ac6261f4ba92f4b7a498c5e07af9f6b00a945fc3df7c2) |
 | mockFeePool | [`0xe6e834b5407bcac86f6e901408ceac2d37123cc5bea1c2f4cdbfa3f816430e1e`](https://explorer.testnet.chain.robinhood.com/tx/0xe6e834b5407bcac86f6e901408ceac2d37123cc5bea1c2f4cdbfa3f816430e1e) |
-| vault | [`0x444e85ea4ab84816c68ca2defad343068f68758c019506a997d52bf4639f58e6`](https://explorer.testnet.chain.robinhood.com/tx/0x444e85ea4ab84816c68ca2defad343068f68758c019506a997d52bf4639f58e6) |
+| vault v1 | [`0x444e85ea4ab84816c68ca2defad343068f68758c019506a997d52bf4639f58e6`](https://explorer.testnet.chain.robinhood.com/tx/0x444e85ea4ab84816c68ca2defad343068f68758c019506a997d52bf4639f58e6) |
+
+Printable overview for review: [`contracts/docs/Carry-Contract-Overview.pdf`](./contracts/docs/Carry-Contract-Overview.pdf)
 
 ---
 
@@ -127,7 +147,7 @@ Then owner calls `unpause()` when ready for deposits. Mint mock tokens via `Mock
 - `DeployLeveredLpVault.s.sol` (4663) stays **disarmed** — not used for Carry testnet.
 
 
-## Additive vault params (pending redeploy)
+## v2 status
 
-Source now includes owner-settable **deposit caps** (`setDepositCaps`) and a **Morpho floor APR** placeholder (`setMorphoFloorApr`, default 3.9%; settlement still uses immutable `borrowAprWad`). Source also adds **claimFees** (legacy path: skim surplus above the 4% pace without closing; claim fee to backstop). **Product fee rule** is Maker’s Morpho-rate waterfall at claim/exit/settle only — see [`docs/MAKER_FEE_WATERFALL.md`](./docs/MAKER_FEE_WATERFALL.md); vault rewrite + redeploy are later. The live address above was deployed before these getters/setters existed, so caps are **not** enforceable on that bytecode until Dylan redeploys and updates `public/config.json` + this address table. Until then UI caps remain display-only (`product.caps.enforcedOnChain: false`). Idle USDG Morpho on testnet stays an APY stub in config.
+UUPS vault with Maker waterfall, partial match, early cover paths, deposit caps, and Boosted stake-before-open stub is **live** at the PROXY above. `public/config.json` points at PROXY with `product.onChain.* = true`. Idle USDG Morpho on testnet remains an APY stub (no ERC-4626 sleeve). Settle after full 7-day term is forge-covered; live E2E confirmed `TermNotElapsed` before term.
 

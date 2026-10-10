@@ -6,3 +6,6 @@ broadcast/*/*/dry-run/
 .deployer.key
 .deployer.address
 *.pem
+
+.e2e/
+*.e2e.key
