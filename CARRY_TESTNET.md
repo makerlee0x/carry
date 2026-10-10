@@ -56,7 +56,8 @@ Security notes: [`docs/SECURITY_V2.md`](./docs/SECURITY_V2.md). Maker waterfall:
 | Name | Address | Explorer |
 | --- | --- | --- |
 | **vault (PROXY / product CA)** | `0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd` | [Sourcify match](https://explorer.testnet.chain.robinhood.com/address/0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd?tab=contract) |
-| implementation | `0xe8a8406d860aCd8c348377D5342bCAcD5770D84b` | [Sourcify match](https://explorer.testnet.chain.robinhood.com/address/0xe8a8406d860aCd8c348377D5342bCAcD5770D84b?tab=contract) |
+| implementation (`v2.4-maker-leftovers`) | `0x09D2371be36b4910968f675d005e04825dCB74d6` | [contract](https://explorer.testnet.chain.robinhood.com/address/0x09D2371be36b4910968f675d005e04825dCB74d6?tab=contract) |
+| CarryMath library | `0x98574A1719E647775BE39Ec713B657c2CF27Adc5` | [contract](https://explorer.testnet.chain.robinhood.com/address/0x98574A1719E647775BE39Ec713B657c2CF27Adc5?tab=contract) |
 | mockMstr (reused) | `0x762019309B536bbb89577422FaaFBeC9659f8728` | [verified](https://explorer.testnet.chain.robinhood.com/address/0x762019309B536bbb89577422FaaFBeC9659f8728?tab=contract) |
 | mockUsdg (reused) | `0x25030Bff74764aD72b912276a603717DB1C00644` | [verified](https://explorer.testnet.chain.robinhood.com/address/0x25030Bff74764aD72b912276a603717DB1C00644?tab=contract) |
 | mockOracle (reused) | `0xc74Af7E23A2B4b46B5Fe05E5c7c5ec0BB5dbc5B7` | [verified](https://explorer.testnet.chain.robinhood.com/address/0xc74Af7E23A2B4b46B5Fe05E5c7c5ec0BB5dbc5B7?tab=contract) |
@@ -149,11 +150,11 @@ Then owner calls `unpause()` when ready for deposits. Mint mock tokens via `Mock
 
 ## v2 status
 
-UUPS vault with Maker waterfall, partial match, early/settle cover paths, always-20% treasury, junior `gasCredit`, deposit caps, and Boosted stake-before-open stub is **live** at the PROXY above. `public/config.json` points at PROXY with `product.onChain.* = true`. Idle USDG Morpho on testnet remains an APY stub (no ERC-4626 sleeve). Settle after full 7-day term is forge-covered; live E2E confirmed `TermNotElapsed` before term.
+UUPS vault with Maker waterfall (base 20% / Boosted MSTR 10%), partial match, early/settle cover paths, early-exit cover revert, junior `gasCredit` + auto-refund, SellShares AMM stub (`sellSharesRouter=0` on testnet), auto-compound, deposit caps, and Boosted STRATEGY stake stub is **live** at the PROXY above. `public/config.json` points at PROXY with `product.onChain.* = true`. Idle USDG Morpho on testnet remains an APY stub (no ERC-4626 sleeve). Settle after full 7-day term is forge-covered; live E2E confirmed `TermNotElapsed` before term.
 
 ### Live settle watch (do not early-exit)
 
-Fully matched **Active** position **#5** on PROXY `0xc801…72bd` — 1 mMSTR / 100 mUSDG + **1 mUSDG fees**, matched **2026-10-10 03:37:51 UTC**, settle after **2026-10-17 03:37:51 UTC**. Impl `v2.3-maker-clarifications` (`0xCE94…7674`). Details + tx links: [`docs/SETTLE_WATCH.md`](./docs/SETTLE_WATCH.md).
+Fully matched **Active** position **#5** on PROXY `0xc801…72bd` — 1 mMSTR / 100 mUSDG + **1 mUSDG fees**, matched **2026-10-10 03:37:51 UTC**, settle after **2026-10-17 03:37:51 UTC**. Impl `v2.4-maker-leftovers` (`0x09D2…74d6`). Details + tx links: [`docs/SETTLE_WATCH.md`](./docs/SETTLE_WATCH.md).
 
 ### Wallet early-exit path (E2E)
 

@@ -52,10 +52,11 @@ contract UpgradeCarryVault is Script {
             // Storage-additive upgrade only. Does not touch position #5 state.
             proxy.upgradeToAndCall(address(impl), "");
             proxy.setDepositCaps(CAP_TOTAL, CAP_TOTAL, CAP_PER_WALLET);
-            // Sync treasury cut to always-20% (Boosted slot kept equal; ignored by logic).
-            proxy.setTreasuryCuts(0.2e18, 0.2e18);
+            // Base 20% / Boosted MSTR 10% (STRATEGY stake activates reduced cut).
+            proxy.setTreasuryCuts(0.2e18, 0.1e18);
             // Enable junior→senior gas credit refunds on depositSenior.
             proxy.setGasRefundWei(0.0001 ether);
+            // sellSharesRouter stays address(0) on testnet (MSTR→senior credit).
             vm.stopBroadcast();
         }
 
@@ -68,6 +69,8 @@ contract UpgradeCarryVault is Script {
             console2.log("maxPerWalletUsdg", proxy.maxPerWalletUsdg());
             console2.log("gasRefundWei", proxy.gasRefundWei());
             console2.log("treasuryCutWad", proxy.treasuryCutWad());
+            console2.log("boostedTreasuryCutWad", proxy.boostedTreasuryCutWad());
+            console2.log("sellSharesRouter", proxy.sellSharesRouter());
         }
     }
 }

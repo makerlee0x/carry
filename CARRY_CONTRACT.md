@@ -6,7 +6,7 @@ Historical build notes: [`LEVERED_LP_BUILD.md`](./LEVERED_LP_BUILD.md).
 Maker-locked product rules + research sync: [`docs/MAKER_V1_NOTES.md`](./docs/MAKER_V1_NOTES.md).  
 **Fee waterfall (product source of truth):** [`docs/MAKER_FEE_WATERFALL.md`](./docs/MAKER_FEE_WATERFALL.md) — Morpho-rate senior floor, treasury/seniorPerf/junior split **only** at claimFees / earlyExit / settle.
 
-**Live product CA (UUPS PROXY):** [`0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd`](https://explorer.testnet.chain.robinhood.com/address/0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd) — `version() = v2.3-maker-clarifications`. Maker waterfall, unpaid-accrual carry, rate lock ≤5%, settle/early shortfall cover (backstop first then junior), time-weighted senior yield, owner backstop withdraw, matchCap, deposit caps.  
+**Live product CA (UUPS PROXY):** [`0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd`](https://explorer.testnet.chain.robinhood.com/address/0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd) — `version() = v2.4-maker-leftovers`. Maker waterfall (base 20% / Boosted MSTR 10%), unpaid-accrual carry, rate lock ≤5%, settle/early shortfall cover, early-exit cover revert, gasCredit auto-refund, SellShares AMM stub, auto-compound, time-weighted senior yield, matchCap, deposit caps.  
 **v1 grant reference (not product):** `0x72A0…36c8` (immutable; old 4%/5%/fee-in cut story applies only there).
 
 **Status:** EVM testnet. DualPool hook is **NOT IMPLEMENTED** (`dualPoolAdapter() == address(0)`). LP fees on testnet are pushed via `accrueLpFee` / `MockFeePool` (fee-donor path for demos). No Yieldz, Morpho idle sleeve, or STRATEGY burn/boost wiring.
@@ -36,7 +36,7 @@ This vault is the **custody + accounting layer** for that product on testnet:
 | Oracle | Immutable `IPriceOracle` (`mstrPriceWad()`) |
 | Term | Immutable `term` ≤ 7 days |
 | Morpho rate | Owner-set `morphoRateWad` ≤ `MAX_MORPHO_RATE_WAD` (5%); locked per position at first match |
-| Fee split | Maker waterfall at claim/exit/settle; treasury ALWAYS 20% of gross + seniorPerf 20% (Boosted does not reduce treasury) |
+| Fee split | Maker waterfall at claim/exit/settle; treasury base 20% / Boosted MSTR 10% + seniorPerf 20% |
 | Unpaid accrual | Carried on `Position.unpaidSeniorAccrual` when fees &lt; accrual |
 | Pause | Owner pause/unpause deposits only |
 | Pool | No approvals to PoolManager; `joinPool` always reverts |

@@ -8,7 +8,9 @@ import {ReentrancyGuardUpgradeable} from
     "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 
 import {IERC20Minimal} from "./interfaces/IERC20Minimal.sol";
+import {IMstrSellRouter} from "./interfaces/IMstrSellRouter.sol";
 import {IPriceOracle} from "./interfaces/IPriceOracle.sol";
+import {CarryMath} from "./libraries/CarryMath.sol";
 
 /// @title LeveredLpVault
 /// @notice UUPS-upgradeable 2× junior MSTR / senior USDG book (Maker fee waterfall).
@@ -19,18 +21,25 @@ import {IPriceOracle} from "./interfaces/IPriceOracle.sol";
 /// 1. Junior deposits MSTR → Idle or Active (partial match OK).
 /// 2. Senior deposits → FIFO match (bounded by matchCap per tx); residual Idle; auto-match later.
 ///    Junior may prefund `gasCreditWei` so `depositSenior` can refund ETH gas to the senior
-///    (even when the deposit leaves the junior unmatched).
+///    (even when the deposit leaves the junior unmatched). Unused credit auto-refunds on
+///    withdraw Idle / settle / early exit (position close).
 /// 3. Fees accrue raw on fee-in. Waterfall ONLY at claimFees / earlyExit / settle:
-///    seniorFloor → treasury (ALWAYS 20% of gross) → seniorPerf (20% gross) → junior.
+///    seniorFloor → treasury (base 20% of gross; Boosted MSTR uses reduced cut, default 10%)
+///    → seniorPerf (20% gross) → junior.
 ///    accrual = seniorPrincipal × morphoRate × elapsed / 365.
 /// 4. Shortfall cover:
 ///    - settle (maturity): backstop FIRST, then junior chooses Wallet / IdleCarry / SellShares;
 ///    - earlyExit: junior ONLY (Wallet / IdleCarry / SellShares). NO backstop.
-///    Treasury also takes 20% of the junior-covered residual shortfall (`coverTotal = shortfall + 20%`).
-/// 5. SellShares on testnet credits extra MSTR to seniors (no AMM). Mainnet will switch to real sell.
+///      If junior cannot cover with USDG/fees and does not choose SellShares → REVERT, position stays open.
+///    Treasury-on-cover uses the same base/Boosted cut as the waterfall.
+/// 5. SellShares: testnet (router=0) credits extra MSTR to seniors. Mainnet sets `sellSharesRouter`
+///    (Uniswap AMM stub/interface) — swap MSTR→USDG, cover seniors/treasury, remainder to junior.
 /// 6. Senior USDG/MSTR credits are time-weighted by deposit time (late seniors do not take a full
 ///    share of pre-arrival accrual). Legacy equal `accYieldPerPrincipal` still settles old debt.
-/// 7. Boosted = stake-before-open flag only (no fake STRATEGY yield). Does NOT reduce treasury cut.
+/// 7. Boosted (MSTR market only for now): stake STRATEGY before open via owner `setBoostStaked`
+///    stub (live STRATEGY token wire later). Activates reduced treasury cut. Creator fee later.
+/// 8. `autoCompound`: on junior exit / senior withdraw, capital+fees can reopen as Idle
+///    (MSTR→new junior Idle; USDG→senior idle waiting match) instead of wallet payout.
 contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, ReentrancyGuardUpgradeable {
     uint256 public constant WAD = 1e18;
     uint256 public constant YEAR = 365 days;
@@ -39,8 +48,7 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
     uint256 public constant MAX_TREASURY_CUT_WAD = 0.2e18;
     uint256 public constant SENIOR_PERF_CUT_WAD = 0.2e18;
     uint256 public constant DEFAULT_TREASURY_CUT_WAD = 0.2e18;
-    /// @dev Legacy constant (was Boosted 10%). Maker: treasury cut ALWAYS 20%, including Boosted.
-    ///      Kept so bytecode/docs history stay readable; unused by `_treasuryCut`.
+    /// @notice Default Boosted MSTR treasury cut of gross / cover (10%). Creator fee share is separate/later.
     uint256 public constant BOOSTED_TREASURY_CUT_WAD = 0.1e18;
     /// @notice Default max open-queue match attempts per depositSenior when matchCap is 0.
     uint256 public constant DEFAULT_MATCH_CAP = 25;
@@ -190,7 +198,12 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
     /// @notice Junior-funded ETH escrow drawn by `depositSenior` gas refunds (on-chain only).
     mapping(address => uint256) public gasCreditWei;
 
-    uint256[29] private __gap;
+    /// @notice Mainnet SellShares AMM router. `address(0)` = testnet MSTR→senior credit path.
+    address public sellSharesRouter;
+    /// @notice When true, exit/withdraw compounds capital+fees into new Idle (not wallet).
+    mapping(address => bool) public autoCompound;
+
+    uint256[27] private __gap;
 
     error Paused();
     error ZeroAmount();
@@ -209,7 +222,6 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
     error InsufficientFree();
     error InsufficientIdleCover();
     error PrincipalToken();
-    error ExternalLpForbidden();
     error TransferFailed();
     error FeeOnTransfer();
     error CapExceeded();
@@ -219,6 +231,7 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
     error BadMatchCap();
     error InsufficientGasCredit();
     error GasTransferFailed();
+    error ApproveFailed();
 
     event PausedDeposits(bool paused);
     event SeniorDeposit(address indexed senior, uint256 amount);
@@ -278,6 +291,8 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
     event GasCreditFunded(address indexed junior, uint256 amount, uint256 balance);
     event GasCreditWithdrawn(address indexed junior, uint256 amount, uint256 balance);
     event GasCreditConsumed(address indexed junior, address indexed senior, uint256 amount);
+    event SellSharesRouterUpdated(address indexed router);
+    event AutoCompoundUpdated(address indexed user, bool enabled);
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -308,8 +323,8 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         term = term_;
         morphoRateWad = morphoRateWad_;
         treasuryCutWad = DEFAULT_TREASURY_CUT_WAD;
-        // Maker: treasury cut ALWAYS 20% (including Boosted). Keep storage slot equal for readers.
-        boostedTreasuryCutWad = DEFAULT_TREASURY_CUT_WAD;
+        // Boosted MSTR (STRATEGY stake): reduced treasury cut (default 10%). Base stays 20%.
+        boostedTreasuryCutWad = BOOSTED_TREASURY_CUT_WAD;
         gasRefundWei = DEFAULT_GAS_REFUND_WEI;
         mstrDecimals = mstr.decimals();
         usdgDecimals = usdg.decimals();
@@ -319,14 +334,6 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
     }
 
     function _authorizeUpgrade(address) internal override onlyOwner {}
-
-    function dualPoolAdapter() external pure returns (address) {
-        return address(0);
-    }
-
-    function joinPool(bytes calldata) external pure {
-        revert ExternalLpForbidden();
-    }
 
     function pause() external onlyOwner {
         paused = true;
@@ -354,24 +361,31 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         emit MorphoRateUpdated(morphoRateWad_);
     }
 
-    function setMorphoFloorApr(uint256 morphoFloorAprWad_) external onlyOwner {
-        if (morphoFloorAprWad_ == 0 || morphoFloorAprWad_ > MAX_MORPHO_RATE_WAD) revert BadApr();
-        morphoRateWad = morphoFloorAprWad_;
-        emit MorphoRateUpdated(morphoFloorAprWad_);
-    }
-
     function morphoFloorAprWad() external view returns (uint256) {
         return morphoRateWad;
     }
 
-    /// @notice Set treasury cut of gross (and of junior cover residual). Maker: ALWAYS the same
-    ///         rate for Boosted and plain (default 20%). `boostedTreasuryCutWad_` is accepted for
-    ///         ABI stability but ignored — both storage slots are set to `treasuryCutWad_`.
-    function setTreasuryCuts(uint256 treasuryCutWad_, uint256 /*boostedTreasuryCutWad_*/) external onlyOwner {
-        if (treasuryCutWad_ > MAX_TREASURY_CUT_WAD) revert BadCut();
+    /// @notice Set base and Boosted treasury cuts of gross / junior-cover residual.
+    ///         Base default 20%. Boosted MSTR (STRATEGY stake) default 10%. Creator fee is NOT this cut.
+    function setTreasuryCuts(uint256 treasuryCutWad_, uint256 boostedTreasuryCutWad_) external onlyOwner {
+        if (treasuryCutWad_ > MAX_TREASURY_CUT_WAD || boostedTreasuryCutWad_ > MAX_TREASURY_CUT_WAD) {
+            revert BadCut();
+        }
         treasuryCutWad = treasuryCutWad_;
-        boostedTreasuryCutWad = treasuryCutWad_;
-        emit TreasuryCutUpdated(treasuryCutWad_, treasuryCutWad_);
+        boostedTreasuryCutWad = boostedTreasuryCutWad_;
+        emit TreasuryCutUpdated(treasuryCutWad_, boostedTreasuryCutWad_);
+    }
+
+    /// @notice Mainnet Uniswap (or equiv) SellShares router. Zero keeps testnet MSTR→senior credit.
+    function setSellSharesRouter(address router) external onlyOwner {
+        sellSharesRouter = router;
+        emit SellSharesRouterUpdated(router);
+    }
+
+    /// @notice Opt in/out of compounding capital+fees into new Idle on exit/withdraw.
+    function setAutoCompound(bool enabled) external {
+        autoCompound[msg.sender] = enabled;
+        emit AutoCompoundUpdated(msg.sender, enabled);
     }
 
     /// @notice ETH wei refunded to senior on each `depositSenior` when open-queue junior has credit.
@@ -399,7 +413,7 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         emit GasCreditWithdrawn(msg.sender, amount, gasCreditWei[msg.sender]);
     }
 
-    /// @notice Testnet stub: STRATEGY stake-before-open. No yield minted without funding path.
+    /// @notice STRATEGY stake-before-open stub (MSTR market). Owner marks staked; live token wire later.
     function setBoostStaked(address user, bool staked) external onlyOwner {
         if (user == address(0)) revert ZeroAddress();
         boostStaked[user] = staked;
@@ -465,39 +479,22 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
 
         emit SeniorWithdraw(msg.sender, principalAmount, yieldUsdg, mstrOut);
 
-        if (principalAmount + yieldUsdg > 0) _push(usdg, msg.sender, principalAmount + yieldUsdg);
-        if (mstrOut > 0) _push(mstr, msg.sender, mstrOut);
+        if (autoCompound[msg.sender]) {
+            // Compound: USDG capital+fees → senior Idle waiting match; MSTR → new junior Idle.
+            uint256 usdgCompound = principalAmount + yieldUsdg;
+            if (usdgCompound > 0) _compoundUsdgAsSeniorIdle(msg.sender, usdgCompound);
+            if (mstrOut > 0) _openJuniorFromVaultBalance(msg.sender, mstrOut);
+        } else {
+            if (principalAmount + yieldUsdg > 0) _push(usdg, msg.sender, principalAmount + yieldUsdg);
+            if (mstrOut > 0) _push(mstr, msg.sender, mstrOut);
+        }
     }
 
     function depositJunior(uint256 mstrAmount) external nonReentrant returns (uint256 positionId) {
         if (paused) revert Paused();
         if (mstrAmount == 0) revert ZeroAmount();
-        uint256 notional = previewSeniorAssets(mstrAmount);
-        _enforceJuniorCap(msg.sender, notional);
-
-        positionId = nextPositionId++;
-        positions[positionId] = Position({
-            owner: msg.sender,
-            mstrAmount: mstrAmount,
-            seniorPrincipal: 0,
-            targetSenior: notional,
-            entryPriceWad: 0,
-            feeUsdg: 0,
-            openedAt: 0,
-            lastFeeSplitAt: 0,
-            settled: false,
-            boosted: boostStaked[msg.sender],
-            unpaidSeniorAccrual: 0,
-            morphoRateLocked: 0
-        });
-        _enqueueOpen(positionId);
-        totalJuniorUsdg += notional;
-        walletJuniorUsdg[msg.sender] += notional;
-        positionJuniorUsdg[positionId] = notional;
         _pullExact(mstr, msg.sender, mstrAmount);
-
-        bool matched = _tryMatch(positionId);
-        emit JuniorDeposit(positionId, msg.sender, mstrAmount, matched);
+        positionId = _openJuniorFromVaultBalance(msg.sender, mstrAmount);
     }
 
     function withdrawUnmatched(uint256 positionId) external nonReentrant {
@@ -514,7 +511,12 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         _releaseJuniorCap(msg.sender, positionId);
 
         emit UnmatchedWithdraw(positionId, msg.sender, amount);
-        _push(mstr, msg.sender, amount);
+        _refundAllGasCredit(msg.sender);
+        if (autoCompound[msg.sender] && amount > 0) {
+            _openJuniorFromVaultBalance(msg.sender, amount);
+        } else {
+            _push(mstr, msg.sender, amount);
+        }
     }
 
     /// @notice Accrue raw LP fees — no cut on fee-in.
@@ -607,7 +609,7 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         result.fromBackstop = fromBs;
         shortfall -= fromBs;
 
-        uint256 cut = _treasuryCut();
+        uint256 cut = _treasuryCut(position.boosted);
         result.treasuryOnCover = shortfall * cut / WAD;
         result.coverUsdg = shortfall + result.treasuryOnCover;
 
@@ -623,6 +625,7 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
     }
 
     /// @notice Early exit before term. Shortfall cover is junior-only (NO backstop).
+    ///         Wallet/Idle without enough cover REVERTS (position stays open); use SellShares to force close.
     function earlyExit(uint256 positionId) external nonReentrant returns (EarlyExitResult memory) {
         return _earlyExit(positionId, CoverMode.SellShares);
     }
@@ -658,7 +661,7 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
 
         // Early exit: junior covers full accrual shortfall. NO backstop.
         uint256 shortfall = split.accrual > split.seniorFloor ? split.accrual - split.seniorFloor : 0;
-        uint256 cut = _treasuryCut();
+        uint256 cut = _treasuryCut(position.boosted);
         result.treasuryOnCover = shortfall * cut / WAD;
         result.coverUsdg = shortfall + result.treasuryOnCover;
 
@@ -674,15 +677,11 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
     }
 
     function previewSeniorAccrual(uint256 principal, uint256 elapsed) public view returns (uint256) {
-        return principal * morphoRateWad * elapsed / (WAD * YEAR);
+        return CarryMath.morphoAccrual(principal, morphoRateWad, elapsed, YEAR);
     }
 
     function previewSeniorAccrual(uint256 principal, uint256 elapsed, uint256 rateWad) public pure returns (uint256) {
-        return principal * rateWad * elapsed / (WAD * YEAR);
-    }
-
-    function previewEarlyExitCoupon(uint256 principal, uint256 elapsed) public view returns (uint256) {
-        return previewSeniorAccrual(principal, elapsed);
+        return CarryMath.morphoAccrual(principal, rateWad, elapsed, YEAR);
     }
 
     function previewWaterfall(uint256 gross, uint256 seniorPrincipal_, uint256 elapsed, bool boosted)
@@ -727,7 +726,7 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
 
     function previewSeniorAssets(uint256 mstrAmount, uint256 priceWad) public view returns (uint256) {
         if (priceWad == 0) revert BadPrice();
-        return mstrAmount * priceWad * _scale(usdgDecimals) / (WAD * _scale(mstrDecimals));
+        return CarryMath.seniorAssets(mstrAmount, priceWad, mstrDecimals, usdgDecimals);
     }
 
     function previewMstrToCover(uint256 usdgShort) public view returns (uint256) {
@@ -735,31 +734,10 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
     }
 
     function previewMstrToCover(uint256 usdgShort, uint256 priceWad) public view returns (uint256) {
-        if (usdgShort == 0) return 0;
         if (priceWad == 0) revert BadPrice();
-        uint256 numer = usdgShort * WAD * _scale(mstrDecimals);
-        uint256 denom = priceWad * _scale(usdgDecimals);
-        return _ceilDiv(numer, denom);
+        return CarryMath.mstrToCover(usdgShort, priceWad, mstrDecimals, usdgDecimals);
     }
 
-    function mark(uint256 positionId)
-        external
-        view
-        returns (uint256 holdUsdg, uint256 leveredEquityUsdg, uint256 unleveredEquityUsdg)
-    {
-        Position storage position = positions[positionId];
-        if (position.owner == address(0) || position.settled) revert BadPosition();
-        if (position.seniorPrincipal == 0) revert NotMatched();
-        uint256 price = _price();
-        holdUsdg = _usdgValue(position.mstrAmount, price);
-        leveredEquityUsdg = holdUsdg;
-        uint256 entry = position.entryPriceWad;
-        uint256 s = position.seniorPrincipal;
-        if (entry == 0 || s == 0) return (holdUsdg, leveredEquityUsdg, 0);
-        uint256 sqrtR = _sqrt(price * WAD / entry * WAD);
-        if (sqrtR * 2 <= WAD) return (holdUsdg, leveredEquityUsdg, 0);
-        unleveredEquityUsdg = s * (sqrtR * 2 - WAD) / WAD;
-    }
 
     // ─── internal ────────────────────────────────────────────────────────────
 
@@ -783,30 +761,32 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         result.juniorYield = split.junior;
         result.coverMode = mode;
 
-        // Settle shortfall: backstop FIRST, then junior Wallet / IdleCarry / SellShares + 20% treasury-on-cover.
+        // Settle shortfall: backstop FIRST, then junior Wallet / IdleCarry / SellShares + treasury-on-cover.
         uint256 shortfall = split.accrual > split.seniorFloor ? split.accrual - split.seniorFloor : 0;
         uint256 fromBs = backstop < shortfall ? backstop : shortfall;
         result.fromBackstop = fromBs;
         shortfall -= fromBs;
 
-        uint256 treasuryOnCover = shortfall * _treasuryCut() / WAD;
+        uint256 treasuryOnCover = shortfall * _treasuryCut(position.boosted) / WAD;
         uint256 coverTotal = shortfall + treasuryOnCover;
         result.treasuryOnCover = treasuryOnCover;
         result.coverUsdg = coverTotal;
 
-        uint256 price = _price();
         uint256 matchedPrincipal = position.seniorPrincipal;
         uint256 juniorFees = split.junior;
         uint256 mstrSold;
+        uint256 feeShort;
 
         if (coverTotal > 0) {
             // Credits residual shortfall to seniors (USDG or MSTR) inside cover helper — do not re-credit.
-            (mstrSold, juniorFees, result.feeShortfallUsdg) =
-                _applyJuniorCover(position, junior, mode, shortfall, treasuryOnCover, juniorFees, price);
+            (mstrSold, juniorFees, feeShort) =
+                _applyJuniorCover(position, junior, mode, shortfall, treasuryOnCover, juniorFees, _price());
         }
 
         result.mstrSold = mstrSold;
+        result.feeShortfallUsdg = feeShort;
         result.mstrKept = position.mstrAmount; // already reduced by SellShares cover
+        result.juniorYield = juniorFees;
 
         position.settled = true;
         position.feeUsdg = 0;
@@ -818,15 +798,14 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
 
         // Waterfall senior slice + backstop top-up only (junior cover credits separately).
         _creditSeniorYield(split.seniorTotal + fromBs);
-        result.juniorYield = juniorFees;
 
         emit WaterfallApplied(
             positionId, gross, split.accrual, split.seniorFloor, split.treasury, split.seniorPerf, split.junior
         );
         emit Settled(positionId, junior, result.mstrKept, result.mstrSold, split.treasury, result.juniorYield);
 
-        if (result.mstrKept > 0) _push(mstr, junior, result.mstrKept);
-        if (juniorFees > 0) _push(usdg, junior, juniorFees);
+        _refundAllGasCredit(junior);
+        _deliverJuniorExit(junior, result.mstrKept, juniorFees);
     }
 
     function _earlyExit(uint256 positionId, CoverMode mode) internal returns (EarlyExitResult memory result) {
@@ -841,12 +820,21 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         uint256 price = _price();
         uint256 matchedPrincipal = position.seniorPrincipal;
 
+        // Pre-check: Wallet/Idle without enough USDG/fees REVERTS — position stays open (Maker).
+        // SellShares may proceed (testnet MSTR credit / mainnet AMM).
+        uint256 shortfallPreview =
+            result.accrual > result.seniorFloor ? result.accrual - result.seniorFloor : 0;
+        uint256 coverPreview = shortfallPreview + result.treasuryOnCover;
+        if (coverPreview > 0 && mode != CoverMode.SellShares) {
+            _assertJuniorCanCover(msg.sender, mode, coverPreview, result.juniorLeftoverFees);
+        }
+
         // Waterfall on fees credits seniorTotal (USDG) + treasury; returns junior share.
         WaterfallSplit memory split = _splitAndClearFees(positionId);
 
         // Junior-only shortfall cover (Maker): NO backstop draw on early exit.
         uint256 shortfall = result.accrual > split.seniorFloor ? result.accrual - split.seniorFloor : 0;
-        uint256 treasuryOnCover = shortfall * _treasuryCut() / WAD;
+        uint256 treasuryOnCover = shortfall * _treasuryCut(position.boosted) / WAD;
         uint256 coverTotal = shortfall + treasuryOnCover;
 
         uint256 mstrSold;
@@ -891,13 +879,14 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
             mode
         );
 
-        if (mstrReturned > 0) _push(mstr, junior, mstrReturned);
-        if (juniorFees > 0) _push(usdg, junior, juniorFees);
+        _refundAllGasCredit(junior);
+        _deliverJuniorExit(junior, mstrReturned, juniorFees);
     }
 
     /// @dev Junior covers residual shortfall after backstop (settle) or full shortfall (early exit).
     ///      Credits seniors for `shortfall` USDG (or MSTR notional); treasury-on-cover → backstop.
-    ///      SellShares: unpaid treasury-on-cover becomes extra MSTR to seniors (testnet; no AMM).
+    ///      Fees apply to cover first. Wallet/Idle pull/burn the remainder.
+    ///      SellShares: router set → AMM USDG path; else testnet MSTR→senior credit.
     function _applyJuniorCover(
         Position storage position,
         address junior,
@@ -911,17 +900,31 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         uint256 coverTotal = shortfall + treasuryOnCover;
 
         if (mode == CoverMode.Wallet) {
-            _pullExact(usdg, junior, coverTotal);
+            uint256 need = coverTotal;
+            if (juniorFeesOut >= need) {
+                juniorFeesOut -= need;
+                need = 0;
+            } else {
+                need -= juniorFeesOut;
+                juniorFeesOut = 0;
+            }
+            if (need > 0) _pullExact(usdg, junior, need);
             _creditSeniorYield(shortfall);
             backstop += treasuryOnCover;
         } else if (mode == CoverMode.IdleCarry) {
-            // Credit seniors against pre-consume principal base, then burn idle cover.
+            uint256 need = coverTotal;
+            if (juniorFeesOut >= need) {
+                juniorFeesOut -= need;
+                need = 0;
+            } else {
+                need -= juniorFeesOut;
+                juniorFeesOut = 0;
+            }
             _creditSeniorYield(shortfall);
-            _consumeIdleCover(junior, coverTotal);
+            if (need > 0) _consumeIdleCover(junior, need);
             backstop += treasuryOnCover;
         } else {
-            // SellShares: MSTR → seniors. Treasury-on-cover from junior leftover fees first;
-            // remainder sold as extra MSTR (no AMM on testnet — documented residual).
+            // SellShares: treasury-on-cover from junior leftover fees first.
             uint256 tNeed = treasuryOnCover;
             if (tNeed > 0) {
                 if (juniorFeesOut >= tNeed) {
@@ -939,11 +942,34 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
                 mstrSold = previewMstrToCover(usdgNeed, price);
                 if (mstrSold > position.mstrAmount) {
                     mstrSold = position.mstrAmount;
-                    uint256 got = _usdgValue(mstrSold, price);
-                    if (got < shortfall) feeShortfallUsdg = shortfall - got;
                 }
                 position.mstrAmount -= mstrSold;
-                _creditSeniorMstr(mstrSold);
+
+                if (sellSharesRouter != address(0)) {
+                    // Mainnet path: Uniswap (or equiv) AMM → USDG to vault → cover → remainder to junior.
+                    uint256 fair = _usdgValue(mstrSold, price);
+                    uint256 minOut = fair * 95 / 100;
+                    if (!mstr.approve(sellSharesRouter, mstrSold)) revert ApproveFailed();
+                    uint256 usdgOut =
+                        IMstrSellRouter(sellSharesRouter).sellMstrForUsdg(mstrSold, minOut, address(this));
+                    if (!mstr.approve(sellSharesRouter, 0)) revert ApproveFailed();
+
+                    uint256 remaining = usdgOut;
+                    uint256 toSenior = remaining < shortfall ? remaining : shortfall;
+                    _creditSeniorYield(toSenior);
+                    remaining -= toSenior;
+                    if (toSenior < shortfall) feeShortfallUsdg = shortfall - toSenior;
+
+                    uint256 toTreasury = remaining < tNeed ? remaining : tNeed;
+                    backstop += toTreasury;
+                    remaining -= toTreasury;
+                    juniorFeesOut += remaining;
+                } else {
+                    // Testnet: credit MSTR to seniors (no AMM).
+                    uint256 got = _usdgValue(mstrSold, price);
+                    if (got < shortfall) feeShortfallUsdg = shortfall - got;
+                    _creditSeniorMstr(mstrSold);
+                }
             }
         }
     }
@@ -963,23 +989,19 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         );
     }
 
-    function _waterfallFromGross(uint256 gross, uint256 accrual, bool /*boosted*/)
+    function _waterfallFromGross(uint256 gross, uint256 accrual, bool boosted)
         internal
         view
         returns (WaterfallSplit memory s)
     {
-        // Maker: treasury cut ALWAYS `_treasuryCut()` (default 20%), including Boosted.
-        s.accrual = accrual;
-        s.seniorFloor = gross < accrual ? gross : accrual;
-        uint256 left = gross - s.seniorFloor;
-        uint256 cut = _treasuryCut();
-        uint256 treasuryCap = gross * cut / WAD;
-        s.treasury = left < treasuryCap ? left : treasuryCap;
-        left -= s.treasury;
-        uint256 perfCap = gross * SENIOR_PERF_CUT_WAD / WAD;
-        s.seniorPerf = left < perfCap ? left : perfCap;
-        s.junior = left - s.seniorPerf;
-        s.seniorTotal = s.seniorFloor + s.seniorPerf;
+        CarryMath.WaterfallSplit memory w =
+            CarryMath.waterfallFromGross(gross, accrual, _treasuryCut(boosted), SENIOR_PERF_CUT_WAD);
+        s.accrual = w.accrual;
+        s.seniorFloor = w.seniorFloor;
+        s.treasury = w.treasury;
+        s.seniorPerf = w.seniorPerf;
+        s.junior = w.junior;
+        s.seniorTotal = w.seniorTotal;
     }
 
     function _rateFor(Position storage position) internal view returns (uint256) {
@@ -990,7 +1012,7 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
     function _accrualFor(Position storage position) internal view returns (uint256) {
         uint256 elapsed = _elapsedSinceSplit(position);
         return position.unpaidSeniorAccrual
-            + position.seniorPrincipal * _rateFor(position) * elapsed / (WAD * YEAR);
+            + CarryMath.morphoAccrual(position.seniorPrincipal, _rateFor(position), elapsed, YEAR);
     }
 
     /// @dev On incremental match, bank accrual for currently matched principal so new capital is not backdated.
@@ -998,7 +1020,7 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         uint256 elapsed = _elapsedSinceSplit(position);
         if (elapsed == 0 || position.seniorPrincipal == 0) return;
         position.unpaidSeniorAccrual +=
-            position.seniorPrincipal * _rateFor(position) * elapsed / (WAD * YEAR);
+            CarryMath.morphoAccrual(position.seniorPrincipal, _rateFor(position), elapsed, YEAR);
         position.lastFeeSplitAt = uint64(block.timestamp);
     }
 
@@ -1192,9 +1214,96 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         return block.timestamp - start;
     }
 
-    /// @dev Maker: treasury cut ALWAYS `treasuryCutWad` (default 20%), including Boosted + cover paths.
-    function _treasuryCut() internal view returns (uint256) {
-        return treasuryCutWad;
+    /// @dev Base cut `treasuryCutWad` (default 20%). Boosted MSTR uses `boostedTreasuryCutWad` (default 10%).
+    function _treasuryCut(bool boosted) internal view returns (uint256) {
+        return boosted ? boostedTreasuryCutWad : treasuryCutWad;
+    }
+
+    function _isBoostEligible(address user) internal view returns (bool) {
+        return boostStaked[user];
+    }
+
+    /// @dev Maker: early exit with Wallet/Idle must fully cover (fees first, then external). Else revert.
+    function _assertJuniorCanCover(address junior, CoverMode mode, uint256 coverTotal, uint256 juniorFees)
+        internal
+        view
+    {
+        uint256 need = coverTotal > juniorFees ? coverTotal - juniorFees : 0;
+        if (need == 0) return;
+        if (mode == CoverMode.Wallet) {
+            if (usdg.balanceOf(junior) < need || usdg.allowance(junior, address(this)) < need) {
+                revert JuniorCoverRequired();
+            }
+        } else if (mode == CoverMode.IdleCarry) {
+            uint256 maxCover =
+                seniorPrincipal[junior] < freeSenior() ? seniorPrincipal[junior] : freeSenior();
+            if (need > maxCover) revert JuniorCoverRequired();
+        } else {
+            revert JuniorCoverRequired();
+        }
+    }
+
+    /// @dev Auto-refund remaining gas credit when Idle withdraw / settle / early exit closes a position.
+    function _refundAllGasCredit(address junior) internal {
+        uint256 bal = gasCreditWei[junior];
+        if (bal == 0) return;
+        gasCreditWei[junior] = 0;
+        (bool ok,) = junior.call{value: bal}("");
+        if (!ok) revert GasTransferFailed();
+        emit GasCreditWithdrawn(junior, bal, 0);
+    }
+
+    /// @dev Deliver junior exit proceeds to wallet or compound into new Idle positions.
+    function _deliverJuniorExit(address junior, uint256 mstrAmt, uint256 usdgAmt) internal {
+        if (autoCompound[junior]) {
+            if (mstrAmt > 0) _openJuniorFromVaultBalance(junior, mstrAmt);
+            if (usdgAmt > 0) _compoundUsdgAsSeniorIdle(junior, usdgAmt);
+        } else {
+            if (mstrAmt > 0) _push(mstr, junior, mstrAmt);
+            if (usdgAmt > 0) _push(usdg, junior, usdgAmt);
+        }
+    }
+
+    /// @dev Open a new junior Idle from MSTR already held by the vault (compound / no pull).
+    function _openJuniorFromVaultBalance(address junior, uint256 mstrAmount) internal returns (uint256 positionId) {
+        if (mstrAmount == 0) return 0;
+        if (paused) revert Paused();
+        uint256 notional = previewSeniorAssets(mstrAmount);
+        _enforceJuniorCap(junior, notional);
+
+        positionId = nextPositionId++;
+        positions[positionId] = Position({
+            owner: junior,
+            mstrAmount: mstrAmount,
+            seniorPrincipal: 0,
+            targetSenior: notional,
+            entryPriceWad: 0,
+            feeUsdg: 0,
+            openedAt: 0,
+            lastFeeSplitAt: 0,
+            settled: false,
+            boosted: _isBoostEligible(junior),
+            unpaidSeniorAccrual: 0,
+            morphoRateLocked: 0
+        });
+        _enqueueOpen(positionId);
+        totalJuniorUsdg += notional;
+        walletJuniorUsdg[junior] += notional;
+        positionJuniorUsdg[positionId] = notional;
+
+        bool matched = _tryMatch(positionId);
+        emit JuniorDeposit(positionId, junior, mstrAmount, matched);
+    }
+
+    /// @dev Compound USDG into senior idle (waiting match). Tokens stay in vault.
+    function _compoundUsdgAsSeniorIdle(address user, uint256 amount) internal {
+        if (amount == 0) return;
+        _enforceSeniorCap(user, amount);
+        _checkpoint(user);
+        _addSeniorPrincipal(user, amount);
+        walletSeniorUsdg[user] += amount;
+        _syncDebt(user);
+        _matchOpenPositions(_effectiveMatchCap());
     }
 
     /// @dev Open-queue head junior sponsors gas for the next senior deposit (even if unmatched).
@@ -1225,11 +1334,7 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
     }
 
     function _usdgValue(uint256 mstrAmount, uint256 priceWad) internal view returns (uint256) {
-        return mstrAmount * priceWad * _scale(usdgDecimals) / (WAD * _scale(mstrDecimals));
-    }
-
-    function _scale(uint8 decimals_) internal pure returns (uint256) {
-        return 10 ** decimals_;
+        return CarryMath.usdgValue(mstrAmount, priceWad, mstrDecimals, usdgDecimals);
     }
 
     function _checkpoint(address senior) internal {
@@ -1301,21 +1406,4 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         if (!token.transfer(to, amount)) revert TransferFailed();
     }
 
-    function _ceilDiv(uint256 a, uint256 b) internal pure returns (uint256) {
-        if (a == 0) return 0;
-        return (a - 1) / b + 1;
-    }
-
-    function _sqrt(uint256 y) internal pure returns (uint256 z) {
-        if (y > 3) {
-            z = y;
-            uint256 x = y / 2 + 1;
-            while (x < z) {
-                z = x;
-                x = (y / x + x) / 2;
-            }
-        } else if (y != 0) {
-            z = 1;
-        }
-    }
 }

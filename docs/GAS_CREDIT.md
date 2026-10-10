@@ -12,6 +12,7 @@ deposit leaves the junior unmatched / only partially matched. No off-chain DB pa
 | `gasRefundWei` | Owner-set wei paid to senior per `depositSenior` (default `0.0001 ether`) |
 | Sponsor | Open-queue head junior (`openHead`) at the start of `depositSenior` |
 | Consume | After match attempt, vault pays `min(gasRefundWei, credit)` ETH to the senior |
+| Auto-refund | Remaining credit returned to junior on `withdrawUnmatched`, `settle`, and `earlyExit` (position close) |
 
 If there is no open-queue junior, or that junior has zero credit, the senior pays their own gas (no refund).
 
@@ -20,7 +21,7 @@ If there is no open-queue junior, or that junior has zero credit, the senior pay
 1. When a junior opens an Idle / waiting position, prompt: **“Prefund gas credit”** so lenders are not stuck paying queue gas alone.
 2. Show `gasCreditWei(me)` and `gasRefundWei` on the position / lend screens.
 3. On successful `depositSenior`, surface `GasCreditConsumed` (explorer / toast): senior received ETH refund from the waiting junior.
-4. Allow junior to **withdraw unused credit** after Fully Matched or after canceling Idle.
+4. Unused credit **auto-refunds** when the junior cancels Idle or closes via settle / early exit (`GasCreditAutoRefunded`). Manual `withdrawGasCredit` still works anytime.
 
 This is **not** a full ERC-4337 paymaster. It is a clear on-chain ETH escrow the senior deposit can draw. Secure enough for RH testnet demos and Forge-covered.
 

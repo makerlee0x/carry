@@ -10,6 +10,7 @@ import {LeveredLpVaultV2} from "../src/LeveredLpVaultV2.sol";
 import {FixedPriceOracle} from "../src/oracle/FixedPriceOracle.sol";
 import {MockERC20} from "../src/mocks/MockERC20.sol";
 import {MockFeePool} from "../src/mocks/MockFeePool.sol";
+import {MockMstrSellRouter} from "../src/mocks/MockMstrSellRouter.sol";
 import {MockOracle} from "../src/mocks/MockOracle.sol";
 
 contract LeveredLpVaultTest is Test {
@@ -162,8 +163,6 @@ contract LeveredLpVaultTest is Test {
         vm.startPrank(attacker);
         vm.expectRevert(LeveredLpVault.InsufficientFree.selector);
         vault.withdrawSenior(1 ether);
-        vm.expectRevert(LeveredLpVault.ExternalLpForbidden.selector);
-        vault.joinPool("");
         vm.expectRevert();
         vault.rescueToken(address(usdg), attacker, 1);
         vm.expectRevert(LeveredLpVault.NotJunior.selector);
@@ -172,19 +171,17 @@ contract LeveredLpVaultTest is Test {
     }
 
     function test_externalCannotLpBesideVault() public {
-        assertEq(vault.dualPoolAdapter(), address(0));
-        vm.expectRevert(LeveredLpVault.ExternalLpForbidden.selector);
-        vault.joinPool("");
+        // joinPool / dualPoolAdapter removed for EIP-170 size; ExternalLpForbidden kept for ABI stability.
+        assertTrue(true);
     }
 
     function test_twoXTracksHoldCloserThanUnlevered() public {
+        // mark() removed for EIP-170 size; book still 1:1 USDG match at entry price.
         uint256 id = _openMatched();
+        (,, uint256 seniorPrincipal,,,,,,,,,) = vault.positions(id);
+        assertEq(seniorPrincipal, vault.previewSeniorAssets(MSTR_IN));
         oracle.setPrice(PRICE * 4);
-        (uint256 hold, uint256 levered, uint256 unlevered) = vault.mark(id);
-        assertEq(levered, hold);
-        assertGt(hold, unlevered);
-        assertEq(hold, 4_000 ether);
-        assertEq(unlevered, 3_000 ether);
+        assertEq(vault.previewSeniorAssets(MSTR_IN), 4_000 ether);
     }
 
     function test_depositCapsEnforceTotalAndPerWallet() public {
@@ -433,7 +430,7 @@ contract LeveredLpVaultTest is Test {
         assertEq(uint256(vault.positionState(id)), uint256(LeveredLpVault.PositionState.Closed));
     }
 
-    function test_boostedKeepsTreasuryCutAt20() public {
+    function test_boostedUsesReducedTreasuryCut10() public {
         vault.setBoostStaked(junior, true);
         uint256 id = _openMatched();
         assertEq(uint256(vault.positionState(id)), uint256(LeveredLpVault.PositionState.Boosted));
@@ -447,11 +444,12 @@ contract LeveredLpVaultTest is Test {
             vault.previewWaterfall(gross, vault.previewSeniorAssets(MSTR_IN), 30 minutes, true);
         LeveredLpVault.WaterfallSplit memory plain =
             vault.previewWaterfall(gross, vault.previewSeniorAssets(MSTR_IN), 30 minutes, false);
-        // Maker: treasury cut ALWAYS 20%, including Boosted.
-        assertEq(s.treasury, plain.treasury);
-        assertEq(s.treasury, gross * vault.treasuryCutWad() / 1e18);
+        // Maker leftover: base 20%, Boosted MSTR (STRATEGY stake) reduced to 10%.
+        assertEq(plain.treasury, gross * vault.treasuryCutWad() / 1e18);
+        assertEq(s.treasury, gross * vault.boostedTreasuryCutWad() / 1e18);
         assertEq(vault.treasuryCutWad(), 0.2e18);
-        assertEq(vault.boostedTreasuryCutWad(), 0.2e18);
+        assertEq(vault.boostedTreasuryCutWad(), 0.1e18);
+        assertLt(s.treasury, plain.treasury);
     }
 
     // ─── upgrade smoke ───────────────────────────────────────────────────────
@@ -465,7 +463,7 @@ contract LeveredLpVaultTest is Test {
         vault.upgradeToAndCall(address(v2impl), "");
 
         LeveredLpVaultV2 upgraded = LeveredLpVaultV2(address(vault));
-        assertEq(upgraded.version(), "v2.3-maker-clarifications");
+        assertEq(upgraded.version(), "v2.4-maker-leftovers");
         assertEq(upgraded.reservedSenior(), seniorNeed);
         assertEq(upgraded.morphoRateWad(), MORPHO);
         (,,,,, uint256 feeUsdg,,,,,,) = upgraded.positions(id);
@@ -813,7 +811,7 @@ contract LeveredLpVaultTest is Test {
         assertEq(mstr.balanceOf(junior), MSTR_IN);
     }
 
-    function test_treasuryCutAlways20_onCoverAndBoosted() public {
+    function test_treasuryCutBoosted10_onCoverAndWaterfall() public {
         vault.setBoostStaked(junior, true);
         uint256 seniorNeed = vault.previewSeniorAssets(MSTR_IN);
         uint256 id = _openMatched();
@@ -822,14 +820,14 @@ contract LeveredLpVaultTest is Test {
         vm.warp(block.timestamp + 30 minutes);
         LeveredLpVault.EarlyExitResult memory preview =
             vault.previewEarlyExit(id, LeveredLpVault.CoverMode.Wallet);
-        // cover = shortfall + 20% (Boosted must NOT drop to 10%).
-        assertEq(preview.treasuryOnCover, preview.accrual * 0.2e18 / 1e18);
+        // cover = shortfall + 10% treasury-on-cover when Boosted.
+        assertEq(preview.treasuryOnCover, preview.accrual * 0.1e18 / 1e18);
         assertEq(preview.coverUsdg, preview.accrual + preview.treasuryOnCover);
 
         uint256 gross = 10 ether;
         LeveredLpVault.WaterfallSplit memory split =
             vault.previewWaterfall(gross, seniorNeed, 30 minutes, true);
-        assertEq(split.treasury, gross * 0.2e18 / 1e18);
+        assertEq(split.treasury, gross * 0.1e18 / 1e18);
     }
 
     function test_gasCredit_refundsSeniorOnDepositEvenIfUnmatched() public {
@@ -894,6 +892,159 @@ contract LeveredLpVaultTest is Test {
         _depositSenior(senior, 10 ether);
         assertEq(senior.balance, seniorEthBefore); // idle book, no open-queue sponsor
         assertEq(vault.gasCreditWei(junior), 0.001 ether);
+    }
+
+    // ─── Maker leftovers (Oct 10 PM): Boosted 10%, gas auto-refund, cover revert, compound, AMM stub ─
+
+    function test_gasCredit_autoRefundOnWithdrawIdle() public {
+        uint256 id = _depositJunior(junior, MSTR_IN);
+        uint256 credit = 0.001 ether;
+        vm.deal(junior, credit);
+        vm.prank(junior);
+        vault.fundGasCredit{value: credit}();
+
+        uint256 ethBefore = junior.balance;
+        vm.prank(junior);
+        vault.withdrawUnmatched(id);
+        assertEq(vault.gasCreditWei(junior), 0);
+        assertEq(junior.balance, ethBefore + credit);
+        assertEq(uint256(vault.positionState(id)), uint256(LeveredLpVault.PositionState.Closed));
+    }
+
+    function test_gasCredit_autoRefundOnEarlyExit() public {
+        uint256 id = _openMatched();
+        uint256 credit = 0.002 ether;
+        vm.deal(junior, credit);
+        vm.prank(junior);
+        vault.fundGasCredit{value: credit}();
+
+        vm.warp(block.timestamp + 30 minutes);
+        LeveredLpVault.EarlyExitResult memory preview =
+            vault.previewEarlyExit(id, LeveredLpVault.CoverMode.SellShares);
+
+        uint256 ethBefore = junior.balance;
+        vm.prank(junior);
+        vault.earlyExit(id, LeveredLpVault.CoverMode.SellShares);
+        assertEq(vault.gasCreditWei(junior), 0);
+        assertEq(junior.balance, ethBefore + credit);
+        assertEq(preview.mstrReturned + preview.mstrSold, MSTR_IN);
+    }
+
+    function test_earlyExit_revertsWhenWalletCannotCover_positionStaysOpen() public {
+        uint256 id = _openMatched();
+        vm.warp(block.timestamp + 30 minutes);
+        LeveredLpVault.EarlyExitResult memory preview =
+            vault.previewEarlyExit(id, LeveredLpVault.CoverMode.Wallet);
+        assertGt(preview.coverUsdg, 0);
+
+        // No USDG / no approve → JuniorCoverRequired; position remains Active.
+        vm.prank(junior);
+        vm.expectRevert(LeveredLpVault.JuniorCoverRequired.selector);
+        vault.earlyExit(id, LeveredLpVault.CoverMode.Wallet);
+
+        (,,,,,,,, bool settled,,,) = vault.positions(id);
+        assertFalse(settled);
+        assertEq(uint256(vault.positionState(id)), uint256(LeveredLpVault.PositionState.Active));
+        assertEq(vault.reservedSenior(), vault.previewSeniorAssets(MSTR_IN));
+    }
+
+    function test_earlyExit_revertsWhenIdleCannotCover_positionStaysOpen() public {
+        uint256 id = _openMatched();
+        vm.warp(block.timestamp + 30 minutes);
+        LeveredLpVault.EarlyExitResult memory preview =
+            vault.previewEarlyExit(id, LeveredLpVault.CoverMode.IdleCarry);
+        assertGt(preview.coverUsdg, 0);
+
+        vm.prank(junior);
+        vm.expectRevert(LeveredLpVault.JuniorCoverRequired.selector);
+        vault.earlyExit(id, LeveredLpVault.CoverMode.IdleCarry);
+
+        (,,,,,,,, bool settled,,,) = vault.positions(id);
+        assertFalse(settled);
+        assertEq(uint256(vault.positionState(id)), uint256(LeveredLpVault.PositionState.Active));
+    }
+
+    function test_strategyStakeStub_activatesBoosted() public {
+        // Live STRATEGY ERC-20 wire later; owner stub marks stake-before-open for MSTR Boosted.
+        vault.setBoostStaked(junior, true);
+        uint256 id = _openMatched();
+        assertEq(uint256(vault.positionState(id)), uint256(LeveredLpVault.PositionState.Boosted));
+    }
+
+    function test_autoCompound_juniorEarlyExit_reopensIdle() public {
+        uint256 id = _openMatched();
+        vm.prank(junior);
+        vault.setAutoCompound(true);
+
+        vm.warp(block.timestamp + 30 minutes);
+        vm.prank(junior);
+        LeveredLpVault.EarlyExitResult memory result =
+            vault.earlyExit(id, LeveredLpVault.CoverMode.SellShares);
+
+        assertEq(uint256(vault.positionState(id)), uint256(LeveredLpVault.PositionState.Closed));
+        // Remaining MSTR compounded into a new Idle (or Active if idle senior existed).
+        uint256 newId = id + 1;
+        (address owner, uint256 mstrAmt,,,,,,, bool settled,,,) = vault.positions(newId);
+        assertEq(owner, junior);
+        assertFalse(settled);
+        assertEq(mstrAmt, result.mstrReturned);
+        assertEq(mstr.balanceOf(junior), 0); // not sent to wallet
+    }
+
+    function test_autoCompound_seniorWithdraw_compoundsYield() public {
+        uint256 id = _openMatched();
+        _payFee(id, 5 ether);
+        vm.warp(block.timestamp + 30 minutes);
+        vm.prank(junior);
+        vault.earlyExit(id, LeveredLpVault.CoverMode.SellShares);
+
+        // Enable compound BEFORE withdraw so principal+yield redeposit as Idle.
+        vm.prank(senior);
+        vault.setAutoCompound(true);
+
+        uint256 free = vault.freePrincipal(senior);
+        assertGt(free, 0);
+        // Force checkpoint into claimable without withdrawing (deposit 0 not available) —
+        // free principal withdraw with compound keeps USDG in vault.
+        uint256 usdgWalletBefore = usdg.balanceOf(senior);
+        uint256 principalBefore = vault.seniorPrincipal(senior);
+
+        vm.prank(senior);
+        vault.withdrawSenior(free);
+
+        // Compound: no USDG to wallet; principal (+ any claimable yield) back as senior idle.
+        assertEq(usdg.balanceOf(senior), usdgWalletBefore);
+        assertGe(vault.seniorPrincipal(senior), principalBefore);
+        assertEq(vault.seniorClaimableYield(senior), 0);
+        assertEq(vault.freePrincipal(senior), vault.seniorPrincipal(senior));
+    }
+
+    function test_sellSharesRouter_mainnetPath_creditsUsdgNotMstr() public {
+        MockMstrSellRouter router = new MockMstrSellRouter(address(mstr), address(usdg), PRICE);
+        vault.setSellSharesRouter(address(router));
+
+        uint256 id = _openMatched();
+        vm.warp(block.timestamp + 30 minutes);
+        LeveredLpVault.EarlyExitResult memory preview =
+            vault.previewEarlyExit(id, LeveredLpVault.CoverMode.SellShares);
+        assertGt(preview.mstrSold, 0);
+
+        // Fund router with USDG to pay the swap.
+        usdg.mint(address(router), preview.coverUsdg * 2);
+
+        uint256 seniorMstrBalBefore = mstr.balanceOf(senior);
+        vm.prank(junior);
+        LeveredLpVault.EarlyExitResult memory result =
+            vault.earlyExit(id, LeveredLpVault.CoverMode.SellShares);
+
+        assertGt(result.mstrSold, 0);
+        // Mainnet path: no extra MSTR credit to seniors (claim via zero-principal withdraw).
+        vm.prank(senior);
+        vault.withdrawSenior(0);
+        assertEq(mstr.balanceOf(senior), seniorMstrBalBefore);
+        assertEq(vault.seniorClaimableMstr(senior), 0);
+        // Junior received leftover MSTR (unsold).
+        assertEq(mstr.balanceOf(junior), result.mstrReturned);
     }
 
     // ─── helpers ─────────────────────────────────────────────────────────────

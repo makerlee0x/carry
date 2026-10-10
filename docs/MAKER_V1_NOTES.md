@@ -22,10 +22,10 @@ product stories. Live UUPS product PROXY now follows the Maker Morpho-rate water
 | Fees | Accrue raw on fee-in. **Split only** at `claimFees` / `earlyExit` / `settle` via Maker waterfall (senior Morpho accrual floor → treasury → senior perf → junior). See [`MAKER_FEE_WATERFALL.md`](./MAKER_FEE_WATERFALL.md). |
 | Early cover | User chooses; default **wallet USDG → Idle USDG on Carry → sell from position**. |
 | Position states | Only **Idle / Active / Boosted / Closed**. Open→Idle (unmatched); Settled→Closed. “Early fee due” is a frontend label only. |
-| Boosted | Stake STRATEGY **before** open. Cannot boost an already Active position (reopen). Future positions in that market are Boosted while staked. Junior only; funded by reduced treasury (as low as **10%** by tier) + LONG creator fees later. |
+| Boosted | Stake STRATEGY **before** open (MSTR market first). Cannot boost an already Active position (reopen). On-chain: owner `setBoostStaked` stub; live STRATEGY token wire later. Junior only; **treasury cut drops to 10%** while Boosted. LONG creator fee share later (separate). |
 | Multi-position | Extra MSTR deposit = new vault position; frontend combines into one MSTR card. |
 | Caps | Day-1 TVL / per-wallet caps (research: launch ~$25k total / ~$2.5k per wallet). |
-| Treasury | **ALWAYS 20% of gross** at split and on shortfall cover (including Boosted). Target ≥ **10%** of book/cap (Vault v2 / option B). |
+| Treasury | Base **20% of gross** at split and on shortfall cover. Boosted MSTR uses **10%**. Target ≥ **10%** of book/cap (Vault v2 / option B). |
 | Keeper | Maintainer-operated bot first; permissionless later. |
 | Chain | Robinhood Chain. Testnet pack is **46630**; research DualPool path targets mainnet **4663**. |
 
@@ -71,7 +71,7 @@ session bands stay in config under `product.researchRanges` for keeper/DualPool 
 | Morpho | UI display rate from config (Steakhouse native supply stub) | Steakhouse USDG sleeve on matched/idle USDG |
 | Ranges / recenter | Display-only | Keeper + hook on mainnet |
 | Fee claim without close | Needs vault `claimFees` on deployed bytecode; UI preview shows Maker waterfall | Claim/exit/settle apply waterfall |
-| Boosted | UI copy + stake tiers; no on-chain boost yield yet | Stake-before-open; treasury cut stays 20%; Junior only |
+| Boosted | UI copy + stake tiers; no on-chain boost yield yet | Stake-before-open stub; treasury cut **10%** on Boosted MSTR; Junior only |
 
 Do **not** imply DualPool or Morpho are executing on testnet. The site already
 shows a testnet banner; keep copy factual and short. Do **not** call the Morpho

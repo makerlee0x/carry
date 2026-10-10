@@ -89,20 +89,22 @@
 
   // Maker fee waterfall preview (product truth). Live UUPS vault applies this on-chain
   // at claimFees / earlyExit / settle only (no cut on fee-in).
-  function waterfallPreview({ seniorPrincipal, morphoRate, elapsedSec, gross }) {
+  function waterfallPreview({ seniorPrincipal, morphoRate, elapsedSec, gross, boosted }) {
     const year = 365 * 86400;
     const rate = Number.isFinite(morphoRate) ? morphoRate : 0.039;
     const accrual = Math.max(0, seniorPrincipal) * rate * (Math.max(elapsedSec, 0) / year);
     const g = Math.max(0, gross);
     const seniorFloor = Math.min(g, accrual);
     let left = g - seniorFloor;
-    const treasury = Math.min(left, g * 0.2);
+    // Base treasury 20%; Boosted MSTR (STRATEGY stake) reduced cut 10%.
+    const cut = boosted ? 0.1 : 0.2;
+    const treasury = Math.min(left, g * cut);
     left -= treasury;
     const seniorPerf = Math.min(left, g * 0.2);
     const junior = left - seniorPerf;
     return {
       morphoRate: rate, accrual, seniorFloor, treasury, seniorPerf, junior,
-      senior: seniorFloor + seniorPerf, gross: g,
+      senior: seniorFloor + seniorPerf, gross: g, treasuryCut: cut, boosted: !!boosted,
       // Reference sheet Maker locked ($10k senior / $10k junior book, 7d, 4% Morpho, 7% gross APR on $20k)
       example: {
         label: '$10k senior / $10k junior · 7d @ 4% Morpho, 7% gross on $20k book',
@@ -170,14 +172,17 @@
     const a = S.account;
     const erc = viem.parseAbi(['function balanceOf(address) view returns (uint256)']);
     const rd = (functionName, args) => pub.readContract({ address: cfg.vault, abi: vaultAbi, functionName, args });
-    const [eth, mstr, usdg, senior, free, yld, mstrClaim, logs] = await Promise.all([
+    const [eth, mstr, usdg, senior, free, yld, mstrClaim, autoCmp, gasCredit, logs] = await Promise.all([
       pub.getBalance({ address: a }),
       pub.readContract({ address: cfg.mstr, abi: erc, functionName: 'balanceOf', args: [a] }),
       pub.readContract({ address: cfg.usdg, abi: erc, functionName: 'balanceOf', args: [a] }),
       rd('seniorPrincipal', [a]), rd('freePrincipal', [a]),
       rd('seniorClaimableYield', [a]), rd('seniorClaimableMstr', [a]),
+      rd('autoCompound', [a]).catch(() => false),
+      rd('gasCreditWei', [a]).catch(() => 0n),
       vaultEvents({ eventName: 'JuniorDeposit', args: { junior: a } }),
     ]);
+    const autoCompoundOn = !!autoCmp;
 
     const ids = [...new Set(logs.map((l) => l.args.positionId))];
     const raw = await Promise.all(ids.map(async (id) => {
@@ -239,12 +244,15 @@
       } else {
         statusTxt = 'Idle'; free_ = true;
         leftTxt = onChainFlag('gasCredit')
-          ? 'Waiting for USDG · tip: fundGasCredit so lenders get a gas refund'
+          ? (num(gasCredit) > 0
+            ? 'Waiting for USDG · gas credit funded (auto-refunds on withdraw/close)'
+            : 'Waiting for USDG · tip: fundGasCredit so lenders get a gas refund')
           : 'Waiting for USDG';
       }
-      positions.push({ sym: 'MSTR', shares: round(mstrTotal, 4), fees: round(fees, 4), days, earned: round(earned, 2), auto: false, real: true, statusTxt, leftTxt, feeDue, feeDueLabel: feeDue ? 'Early fee due' : '', free: free_, count: live.length,
+      positions.push({ sym: 'MSTR', shares: round(mstrTotal, 4), fees: round(fees, 4), days, earned: round(earned, 2), auto: autoCompoundOn, real: true, statusTxt, leftTxt, feeDue, feeDueLabel: feeDue ? 'Early fee due' : '', free: free_, count: live.length,
         matchedPct: mstrTotal > 0 ? round((matchedShares / mstrTotal) * 100, 1) : 0, freeShares: round(freeShares, 4), activeShares: round(activeShares, 4),
-        mixed, openShares: round(sumOf(opn), 4), readyShares: round(sumOf(rdy), 4), boosted: live.some((r) => r.boosted) });
+        mixed, openShares: round(sumOf(opn), 4), readyShares: round(sumOf(rdy), 4), boosted: live.some((r) => r.boosted),
+        gasCreditEth: round(num(gasCredit), 6) });
     }
 
     const seniorN = num(senior);
@@ -252,7 +260,7 @@
       const freeN = num(free), matchedN = Math.max(seniorN - freeN, 0);
       positions.push({
         sym: 'USDG', shares: round(seniorN, 4), matched: round(matchedN, 4),
-        fees: round(num(yld) + num(mstrClaim) * price, 4), days: 0, earned: 0, auto: false, real: true,
+        fees: round(num(yld) + num(mstrClaim) * price, 4), days: 0, earned: 0, auto: autoCompoundOn, real: true,
         statusTxt: matchedN > 0 ? 'Active' : 'Idle', leftTxt: matchedN > 0 ? 'Unlocks on close' : 'Earning on Morpho · withdrawable', free: matchedN === 0, count: 1,
       });
     }
@@ -468,6 +476,9 @@
     TermNotElapsed: 'The 7-day term has not ended yet.',
     BadPosition: 'Position not found.',
     FeeOnTransfer: 'This token takes a fee on transfer, which the vault rejects.',
+    JuniorCoverRequired: 'Not enough USDG or Idle Carry to cover senior accrual. Approve Wallet USDG, add Idle USDG, or choose Sell from position. The position stayed open.',
+    InsufficientIdleCover: 'Not enough unmatched USDG on Carry to cover this exit.',
+    SellRouterFailed: 'SellShares AMM swap failed. Try again or use Wallet / Idle cover.',
   };
   function nice(e) {
     if (!e) return 'Transaction failed.';
@@ -574,12 +585,13 @@
         const grossFees = act.reduce((x, r) => x + r.fee, 0);
         const accrual = sum(prev, 'accrual') || sum(prev, 'couponOwed');
         const soldIfShares = sum(await previewMode(2), 'mstrSold');
-        const w = waterfallPreview({ seniorPrincipal: seniorBook, morphoRate: morphoRateFromCfg(), elapsedSec: Math.max(now - first, 0), gross: grossFees });
+        const anyBoosted = act.some((r) => r.boosted);
+        const w = waterfallPreview({ seniorPrincipal: seniorBook, morphoRate: morphoRateFromCfg(), elapsedSec: Math.max(now - first, 0), gross: grossFees, boosted: anyBoosted });
         const liveNote = coverOn
-          ? 'Live UUPS vault — Maker waterfall. Early exit: junior cover only (NO backstop). Wallet / Idle Carry / SellShares. Treasury cut always 20%.'
+          ? 'Live UUPS vault — Maker waterfall. Early exit: junior cover only (NO backstop). Wallet / Idle / SellShares. Base treasury 20%; Boosted MSTR 10%. Wallet/Idle without cover reverts (position stays open).'
           : 'Product preview — enable product.onChain.earlyCoverPaths against the UUPS proxy to send cover-mode earlyExit.';
         const intro = `Fee split runs at early exit (not on fee-in). Applies to ${fx(tot(act))} MSTR still inside its 7-day term.` + (freeTotal > 0 ? ` The other ${fx(freeTotal)} MSTR leaves with no fee.` : '') +
-          ' Choose how to cover senior accrual if fees are short (junior pays; backstop is not used on early exit). Wallet USDG is the default — MetaMask will ask you to approve USDG if that path needs a pull.';
+          ' Choose how to cover senior accrual if fees are short (junior pays; backstop is not used on early exit). Wallet/Idle without enough USDG reverts and leaves the position open — use Sell from position to force close. If auto-compound is on, capital+fees reopen as Idle instead of wallet.';
         const rows = waterfallRows(w, { liveNote }).concat([
           { k: 'Senior accrual owed', v: `${fs(accrual)} USDG` },
           { k: 'Wallet / Idle cover (if selected)', v: `${fs(sum(prev, 'coverUsdg'))} USDG` },
@@ -588,9 +600,9 @@
           { k: 'Fees returned to you', v: `${fs(sum(prev, 'juniorLeftoverFees'))} USDG` },
         ]);
         const payOptions = [
-          { id: 'wallet', label: 'Wallet USDG', hint: 'Default first. Pay the shortfall from USDG in your wallet (approve + pull).' },
-          { id: 'idle', label: 'Idle USDG on Carry', hint: 'Use unmatched USDG you already deposited on Carry.' },
-          { id: 'sell', label: 'Sell from position', hint: 'Sell junior shares from this position to cover the rest.' },
+          { id: 'wallet', label: 'Wallet USDG', hint: 'Default first. Pay the shortfall from USDG in your wallet (approve + pull). Reverts if short.' },
+          { id: 'idle', label: 'Idle USDG on Carry', hint: 'Use unmatched USDG you already deposited on Carry. Reverts if short.' },
+          { id: 'sell', label: 'Sell from position', hint: 'Sell junior shares from this position to cover (testnet: MSTR credit to seniors).' },
         ];
         const answer = confirm ? await confirm({ title: 'Confirm early exit', intro, rows, confirmLabel: 'Confirm early exit', payOptions, payWith: 'wallet' }) : { ok: true, payWith: 'wallet' };
         if (!answer || answer.ok === false) throw user('Early exit cancelled. No funds were moved.');
@@ -619,7 +631,7 @@
         const grossFees = ready.reduce((x, r) => x + r.fee, 0);
         const w = waterfallPreview({ seniorPrincipal: seniorBook, morphoRate: morphoRateFromCfg(), elapsedSec: Math.max(now - first, 0), gross: grossFees });
         const intro = 'Fee split runs at settle (not on fee-in). Maker waterfall below.';
-        const rows = waterfallRows(w, { liveNote: onChainFlag('makerWaterfall') ? 'Live UUPS vault settle: Maker Morpho-rate waterfall; shortfall uses backstop first, then junior Wallet / Idle Carry / SellShares (treasury-on-cover always 20%).' : 'Product preview — enable product.onChain.makerWaterfall for live settle waterfall copy.' });
+        const rows = waterfallRows(w, { liveNote: onChainFlag('makerWaterfall') ? 'Live UUPS vault settle: Maker Morpho-rate waterfall; shortfall uses backstop first, then junior Wallet / Idle Carry / SellShares. Base treasury 20%; Boosted MSTR 10% on cover.' : 'Product preview — enable product.onChain.makerWaterfall for live settle waterfall copy.' });
         const answer = confirm ? await confirm({ title: 'Confirm settle', intro, rows, confirmLabel: 'Confirm settle' }) : { ok: true };
         if (!answer || answer.ok === false) throw user('Settle cancelled. No funds were moved.');
       }
@@ -664,7 +676,41 @@
       partialMatch: onChainFlag('partialMatch'),
       boostedStake: onChainFlag('boostedStake'),
       gasCredit: onChainFlag('gasCredit'),
+      autoCompound: onChainFlag('autoCompound'),
     };
+  }
+
+  /// Opt in/out of compounding capital+fees into new Idle on exit/withdraw.
+  async function setAutoCompound({ enabled, onStep }) {
+    try {
+      guard();
+      if (!onChainFlag('autoCompound')) throw user('Auto-compound is not enabled for this vault yet.');
+      const before = sig();
+      const hash = await send(
+        { address: cfg.vault, abi: vaultAbi, functionName: 'setAutoCompound', args: [!!enabled] },
+        onStep,
+        enabled ? 'Enable auto-compound in MetaMask…' : 'Disable auto-compound in MetaMask…'
+      );
+      await settleAfterTx(before);
+      return { ok: true, hash, msg: enabled ? 'Auto-compound on. Exit capital+fees reopen as Idle.' : 'Auto-compound off. Yield goes to your wallet on withdraw.' };
+    } catch (e) { return fail(e); }
+  }
+
+  async function fundGasCredit({ valueEth, onStep }) {
+    try {
+      guard();
+      if (!onChainFlag('gasCredit')) throw user('Gas credit is not enabled for this vault yet.');
+      const wei = toWei(valueEth);
+      if (wei <= 0n) throw user('Enter an ETH amount greater than zero.');
+      const before = sig();
+      const hash = await send(
+        { address: cfg.vault, abi: vaultAbi, functionName: 'fundGasCredit', args: [], value: wei },
+        onStep,
+        'Fund gas credit in MetaMask…'
+      );
+      await settleAfterTx(before);
+      return { ok: true, hash, msg: 'Gas credit funded. Unused credit auto-refunds when you withdraw Idle or close.' };
+    } catch (e) { return fail(e); }
   }
 
   /// Fee claim against config chain.vault (UUPS PROXY). When product.onChain.claimFees is false,
@@ -876,7 +922,7 @@
     return { ok: false, error: 'No answer from MetaMask. Open the MetaMask app, approve the network request, and come back (or switch to Robinhood Chain Testnet there yourself).' };
   }
 
-  window.CarryChain = { last: snapshot(), connect, switchNetwork, disconnect, refresh, afterTx, leftText, deposit, withdraw, mint, claimFees, features, needsApp: () => isMobile() && !findMetaMask(), appLink };
+  window.CarryChain = { last: snapshot(), connect, switchNetwork, disconnect, refresh, afterTx, leftText, deposit, withdraw, mint, claimFees, setAutoCompound, fundGasCredit, features, needsApp: () => isMobile() && !findMetaMask(), appLink };
   const initP = init();
   initP.catch((e) => { S.error = (e && e.message) || String(e); console.warn('[CarryChain]', (e && (e.shortMessage || e.message)) || e); readyResolve(); emit(); });
 })();
