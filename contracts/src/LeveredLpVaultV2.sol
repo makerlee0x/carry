@@ -11,6 +11,6 @@ contract LeveredLpVaultV2 is LeveredLpVault {
     }
 
     function version() external pure returns (string memory) {
-        return "v2.1-maker-fixes";
+        return "v2.2-maker-answers";
     }
 }
