@@ -237,7 +237,10 @@
           feeDue = fees + 1e-9 < accrual;
         }
       } else {
-        statusTxt = 'Idle'; free_ = true; leftTxt = 'Waiting for USDG';
+        statusTxt = 'Idle'; free_ = true;
+        leftTxt = onChainFlag('gasCredit')
+          ? 'Waiting for USDG · tip: fundGasCredit so lenders get a gas refund'
+          : 'Waiting for USDG';
       }
       positions.push({ sym: 'MSTR', shares: round(mstrTotal, 4), fees: round(fees, 4), days, earned: round(earned, 2), auto: false, real: true, statusTxt, leftTxt, feeDue, feeDueLabel: feeDue ? 'Early fee due' : '', free: free_, count: live.length,
         matchedPct: mstrTotal > 0 ? round((matchedShares / mstrTotal) * 100, 1) : 0, freeShares: round(freeShares, 4), activeShares: round(activeShares, 4),
@@ -573,10 +576,10 @@
         const soldIfShares = sum(await previewMode(2), 'mstrSold');
         const w = waterfallPreview({ seniorPrincipal: seniorBook, morphoRate: morphoRateFromCfg(), elapsedSec: Math.max(now - first, 0), gross: grossFees });
         const liveNote = coverOn
-          ? 'Live UUPS vault — Maker waterfall + user-chosen cover (Wallet → Idle Carry → SellShares).'
+          ? 'Live UUPS vault — Maker waterfall. Early exit: junior cover only (NO backstop). Wallet / Idle Carry / SellShares. Treasury cut always 20%.'
           : 'Product preview — enable product.onChain.earlyCoverPaths against the UUPS proxy to send cover-mode earlyExit.';
         const intro = `Fee split runs at early exit (not on fee-in). Applies to ${fx(tot(act))} MSTR still inside its 7-day term.` + (freeTotal > 0 ? ` The other ${fx(freeTotal)} MSTR leaves with no fee.` : '') +
-          ' Choose how to cover senior accrual if fees are short. Wallet USDG is the default — MetaMask will ask you to approve USDG if that path needs a pull.';
+          ' Choose how to cover senior accrual if fees are short (junior pays; backstop is not used on early exit). Wallet USDG is the default — MetaMask will ask you to approve USDG if that path needs a pull.';
         const rows = waterfallRows(w, { liveNote }).concat([
           { k: 'Senior accrual owed', v: `${fs(accrual)} USDG` },
           { k: 'Wallet / Idle cover (if selected)', v: `${fs(sum(prev, 'coverUsdg'))} USDG` },
@@ -616,7 +619,7 @@
         const grossFees = ready.reduce((x, r) => x + r.fee, 0);
         const w = waterfallPreview({ seniorPrincipal: seniorBook, morphoRate: morphoRateFromCfg(), elapsedSec: Math.max(now - first, 0), gross: grossFees });
         const intro = 'Fee split runs at settle (not on fee-in). Maker waterfall below.';
-        const rows = waterfallRows(w, { liveNote: onChainFlag('makerWaterfall') ? 'Live UUPS vault settle uses Maker Morpho-rate waterfall.' : 'Product preview — enable product.onChain.makerWaterfall for live settle waterfall copy.' });
+        const rows = waterfallRows(w, { liveNote: onChainFlag('makerWaterfall') ? 'Live UUPS vault settle: Maker Morpho-rate waterfall; shortfall uses backstop first, then junior Wallet / Idle Carry / SellShares (treasury-on-cover always 20%).' : 'Product preview — enable product.onChain.makerWaterfall for live settle waterfall copy.' });
         const answer = confirm ? await confirm({ title: 'Confirm settle', intro, rows, confirmLabel: 'Confirm settle' }) : { ok: true };
         if (!answer || answer.ok === false) throw user('Settle cancelled. No funds were moved.');
       }
@@ -660,6 +663,7 @@
       earlyCoverPaths: onChainFlag('earlyCoverPaths'),
       partialMatch: onChainFlag('partialMatch'),
       boostedStake: onChainFlag('boostedStake'),
+      gasCredit: onChainFlag('gasCredit'),
     };
   }
 

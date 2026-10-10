@@ -18,14 +18,19 @@ import {IPriceOracle} from "./interfaces/IPriceOracle.sol";
 ///
 /// 1. Junior deposits MSTR → Idle or Active (partial match OK).
 /// 2. Senior deposits → FIFO match (bounded by matchCap per tx); residual Idle; auto-match later.
+///    Junior may prefund `gasCreditWei` so `depositSenior` can refund ETH gas to the senior
+///    (even when the deposit leaves the junior unmatched).
 /// 3. Fees accrue raw on fee-in. Waterfall ONLY at claimFees / earlyExit / settle:
-///    seniorFloor → treasury (20% gross, or Boosted tier) → seniorPerf (20% gross) → junior.
+///    seniorFloor → treasury (ALWAYS 20% of gross) → seniorPerf (20% gross) → junior.
 ///    accrual = seniorPrincipal × morphoRate × elapsed / 365.
-/// 4. Shortfall (settle + early exit): backstop first, then junior Wallet / IdleCarry / SellShares;
-///    treasury also takes cut% of the junior-covered shortfall (default same as waterfall cut).
-/// 5. Senior USDG/MSTR credits are time-weighted by deposit time (late seniors do not take a full
+/// 4. Shortfall cover:
+///    - settle (maturity): backstop FIRST, then junior chooses Wallet / IdleCarry / SellShares;
+///    - earlyExit: junior ONLY (Wallet / IdleCarry / SellShares). NO backstop.
+///    Treasury also takes 20% of the junior-covered residual shortfall (`coverTotal = shortfall + 20%`).
+/// 5. SellShares on testnet credits extra MSTR to seniors (no AMM). Mainnet will switch to real sell.
+/// 6. Senior USDG/MSTR credits are time-weighted by deposit time (late seniors do not take a full
 ///    share of pre-arrival accrual). Legacy equal `accYieldPerPrincipal` still settles old debt.
-/// 6. Boosted = stake-before-open flag only (no fake STRATEGY yield).
+/// 7. Boosted = stake-before-open flag only (no fake STRATEGY yield). Does NOT reduce treasury cut.
 contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, ReentrancyGuardUpgradeable {
     uint256 public constant WAD = 1e18;
     uint256 public constant YEAR = 365 days;
@@ -34,9 +39,13 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
     uint256 public constant MAX_TREASURY_CUT_WAD = 0.2e18;
     uint256 public constant SENIOR_PERF_CUT_WAD = 0.2e18;
     uint256 public constant DEFAULT_TREASURY_CUT_WAD = 0.2e18;
+    /// @dev Legacy constant (was Boosted 10%). Maker: treasury cut ALWAYS 20%, including Boosted.
+    ///      Kept so bytecode/docs history stay readable; unused by `_treasuryCut`.
     uint256 public constant BOOSTED_TREASURY_CUT_WAD = 0.1e18;
     /// @notice Default max open-queue match attempts per depositSenior when matchCap is 0.
     uint256 public constant DEFAULT_MATCH_CAP = 25;
+    /// @notice Default ETH refund per depositSenior when junior gas credit exists (testnet-scale).
+    uint256 public constant DEFAULT_GAS_REFUND_WEI = 0.0001 ether;
     uint64 public constant MAX_TERM = 7 days;
 
     address public constant ROBINHOOD_POOL_MANAGER = 0x8366a39CC670B4001A1121B8F6A443A643e40951;
@@ -175,7 +184,13 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
     mapping(address => uint256) public seniorTwYieldDebt;
     mapping(address => uint256) public seniorTwMstrDebt;
 
-    uint256[31] private __gap;
+    /// @notice ETH wei paid to senior on each `depositSenior` when an open-queue junior has credit.
+    ///         0 disables refunds. Owner-settable; new inits default to `DEFAULT_GAS_REFUND_WEI`.
+    uint256 public gasRefundWei;
+    /// @notice Junior-funded ETH escrow drawn by `depositSenior` gas refunds (on-chain only).
+    mapping(address => uint256) public gasCreditWei;
+
+    uint256[29] private __gap;
 
     error Paused();
     error ZeroAmount();
@@ -202,6 +217,8 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
     error InsufficientBackstop();
     error JuniorCoverRequired();
     error BadMatchCap();
+    error InsufficientGasCredit();
+    error GasTransferFailed();
 
     event PausedDeposits(bool paused);
     event SeniorDeposit(address indexed senior, uint256 amount);
@@ -257,6 +274,10 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
     event BackstopWithdrawn(address indexed to, uint256 amount);
     event TreasuryFeesWithdrawn(address indexed to, uint256 amount);
     event MatchCapUpdated(uint256 matchCap);
+    event GasRefundWeiUpdated(uint256 gasRefundWei);
+    event GasCreditFunded(address indexed junior, uint256 amount, uint256 balance);
+    event GasCreditWithdrawn(address indexed junior, uint256 amount, uint256 balance);
+    event GasCreditConsumed(address indexed junior, address indexed senior, uint256 amount);
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -287,7 +308,9 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         term = term_;
         morphoRateWad = morphoRateWad_;
         treasuryCutWad = DEFAULT_TREASURY_CUT_WAD;
-        boostedTreasuryCutWad = BOOSTED_TREASURY_CUT_WAD;
+        // Maker: treasury cut ALWAYS 20% (including Boosted). Keep storage slot equal for readers.
+        boostedTreasuryCutWad = DEFAULT_TREASURY_CUT_WAD;
+        gasRefundWei = DEFAULT_GAS_REFUND_WEI;
         mstrDecimals = mstr.decimals();
         usdgDecimals = usdg.decimals();
         nextPositionId = 1;
@@ -341,11 +364,39 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         return morphoRateWad;
     }
 
-    function setTreasuryCuts(uint256 treasuryCutWad_, uint256 boostedTreasuryCutWad_) external onlyOwner {
-        if (treasuryCutWad_ > MAX_TREASURY_CUT_WAD || boostedTreasuryCutWad_ > treasuryCutWad_) revert BadCut();
+    /// @notice Set treasury cut of gross (and of junior cover residual). Maker: ALWAYS the same
+    ///         rate for Boosted and plain (default 20%). `boostedTreasuryCutWad_` is accepted for
+    ///         ABI stability but ignored — both storage slots are set to `treasuryCutWad_`.
+    function setTreasuryCuts(uint256 treasuryCutWad_, uint256 /*boostedTreasuryCutWad_*/) external onlyOwner {
+        if (treasuryCutWad_ > MAX_TREASURY_CUT_WAD) revert BadCut();
         treasuryCutWad = treasuryCutWad_;
-        boostedTreasuryCutWad = boostedTreasuryCutWad_;
-        emit TreasuryCutUpdated(treasuryCutWad_, boostedTreasuryCutWad_);
+        boostedTreasuryCutWad = treasuryCutWad_;
+        emit TreasuryCutUpdated(treasuryCutWad_, treasuryCutWad_);
+    }
+
+    /// @notice ETH wei refunded to senior on each `depositSenior` when open-queue junior has credit.
+    function setGasRefundWei(uint256 gasRefundWei_) external onlyOwner {
+        gasRefundWei = gasRefundWei_;
+        emit GasRefundWeiUpdated(gasRefundWei_);
+    }
+
+    /// @notice Junior prefunds ETH escrow so seniors can be refunded gas on `depositSenior`.
+    ///         UX: call before/while Idle so lenders are not stuck paying match-queue gas alone.
+    function fundGasCredit() external payable nonReentrant {
+        if (msg.value == 0) revert ZeroAmount();
+        gasCreditWei[msg.sender] += msg.value;
+        emit GasCreditFunded(msg.sender, msg.value, gasCreditWei[msg.sender]);
+    }
+
+    /// @notice Junior withdraws unused ETH gas credit.
+    function withdrawGasCredit(uint256 amount) external nonReentrant {
+        if (amount == 0) revert ZeroAmount();
+        uint256 bal = gasCreditWei[msg.sender];
+        if (amount > bal) revert InsufficientGasCredit();
+        gasCreditWei[msg.sender] = bal - amount;
+        (bool ok,) = msg.sender.call{value: amount}("");
+        if (!ok) revert GasTransferFailed();
+        emit GasCreditWithdrawn(msg.sender, amount, gasCreditWei[msg.sender]);
     }
 
     /// @notice Testnet stub: STRATEGY stake-before-open. No yield minted without funding path.
@@ -382,6 +433,9 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
     function depositSenior(uint256 amount) external nonReentrant {
         if (paused) revert Paused();
         if (amount == 0) revert ZeroAmount();
+        // Capture open-queue sponsor BEFORE match so a full match still refunds that junior's credit
+        // (Maker: junior fronts gas even when this deposit leaves them unmatched, and also when it matches).
+        address gasSponsor = _gasSponsor();
         _enforceSeniorCap(msg.sender, amount);
         _checkpoint(msg.sender);
         _addSeniorPrincipal(msg.sender, amount);
@@ -389,6 +443,7 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         _syncDebt(msg.sender);
         _pullExact(usdg, msg.sender, amount);
         _matchOpenPositions(_effectiveMatchCap());
+        _payGasRefund(msg.sender, gasSponsor);
         emit SeniorDeposit(msg.sender, amount);
     }
 
@@ -552,7 +607,7 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         result.fromBackstop = fromBs;
         shortfall -= fromBs;
 
-        uint256 cut = _treasuryCut(position.boosted);
+        uint256 cut = _treasuryCut();
         result.treasuryOnCover = shortfall * cut / WAD;
         result.coverUsdg = shortfall + result.treasuryOnCover;
 
@@ -567,10 +622,12 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         result.mstrKept = position.mstrAmount - result.mstrSold;
     }
 
+    /// @notice Early exit before term. Shortfall cover is junior-only (NO backstop).
     function earlyExit(uint256 positionId) external nonReentrant returns (EarlyExitResult memory) {
         return _earlyExit(positionId, CoverMode.SellShares);
     }
 
+    /// @notice Early exit with cover mode: Wallet / IdleCarry / SellShares. NO backstop draw.
     function earlyExit(uint256 positionId, CoverMode mode) external nonReentrant returns (EarlyExitResult memory) {
         return _earlyExit(positionId, mode);
     }
@@ -599,8 +656,9 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         result.seniorPerf = split.seniorPerf;
         result.juniorLeftoverFees = split.junior;
 
+        // Early exit: junior covers full accrual shortfall. NO backstop.
         uint256 shortfall = split.accrual > split.seniorFloor ? split.accrual - split.seniorFloor : 0;
-        uint256 cut = _treasuryCut(position.boosted);
+        uint256 cut = _treasuryCut();
         result.treasuryOnCover = shortfall * cut / WAD;
         result.coverUsdg = shortfall + result.treasuryOnCover;
 
@@ -725,13 +783,13 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         result.juniorYield = split.junior;
         result.coverMode = mode;
 
-        // Backstop first, then junior cover (Wallet / IdleCarry / SellShares) + treasury% on residual.
+        // Settle shortfall: backstop FIRST, then junior Wallet / IdleCarry / SellShares + 20% treasury-on-cover.
         uint256 shortfall = split.accrual > split.seniorFloor ? split.accrual - split.seniorFloor : 0;
         uint256 fromBs = backstop < shortfall ? backstop : shortfall;
         result.fromBackstop = fromBs;
         shortfall -= fromBs;
 
-        uint256 treasuryOnCover = shortfall * _treasuryCut(position.boosted) / WAD;
+        uint256 treasuryOnCover = shortfall * _treasuryCut() / WAD;
         uint256 coverTotal = shortfall + treasuryOnCover;
         result.treasuryOnCover = treasuryOnCover;
         result.coverUsdg = coverTotal;
@@ -786,8 +844,9 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         // Waterfall on fees credits seniorTotal (USDG) + treasury; returns junior share.
         WaterfallSplit memory split = _splitAndClearFees(positionId);
 
+        // Junior-only shortfall cover (Maker): NO backstop draw on early exit.
         uint256 shortfall = result.accrual > split.seniorFloor ? result.accrual - split.seniorFloor : 0;
-        uint256 treasuryOnCover = shortfall * _treasuryCut(position.boosted) / WAD;
+        uint256 treasuryOnCover = shortfall * _treasuryCut() / WAD;
         uint256 coverTotal = shortfall + treasuryOnCover;
 
         uint256 mstrSold;
@@ -838,6 +897,7 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
 
     /// @dev Junior covers residual shortfall after backstop (settle) or full shortfall (early exit).
     ///      Credits seniors for `shortfall` USDG (or MSTR notional); treasury-on-cover → backstop.
+    ///      SellShares: unpaid treasury-on-cover becomes extra MSTR to seniors (testnet; no AMM).
     function _applyJuniorCover(
         Position storage position,
         address junior,
@@ -903,15 +963,16 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         );
     }
 
-    function _waterfallFromGross(uint256 gross, uint256 accrual, bool boosted)
+    function _waterfallFromGross(uint256 gross, uint256 accrual, bool /*boosted*/)
         internal
         view
         returns (WaterfallSplit memory s)
     {
+        // Maker: treasury cut ALWAYS `_treasuryCut()` (default 20%), including Boosted.
         s.accrual = accrual;
         s.seniorFloor = gross < accrual ? gross : accrual;
         uint256 left = gross - s.seniorFloor;
-        uint256 cut = _treasuryCut(boosted);
+        uint256 cut = _treasuryCut();
         uint256 treasuryCap = gross * cut / WAD;
         s.treasury = left < treasuryCap ? left : treasuryCap;
         left -= s.treasury;
@@ -1131,8 +1192,31 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         return block.timestamp - start;
     }
 
-    function _treasuryCut(bool boosted) internal view returns (uint256) {
-        return boosted ? boostedTreasuryCutWad : treasuryCutWad;
+    /// @dev Maker: treasury cut ALWAYS `treasuryCutWad` (default 20%), including Boosted + cover paths.
+    function _treasuryCut() internal view returns (uint256) {
+        return treasuryCutWad;
+    }
+
+    /// @dev Open-queue head junior sponsors gas for the next senior deposit (even if unmatched).
+    function _gasSponsor() internal view returns (address) {
+        uint256 id = openHead;
+        if (id == 0) return address(0);
+        Position storage position = positions[id];
+        if (position.owner == address(0) || position.settled) return address(0);
+        return position.owner;
+    }
+
+    /// @dev Pay ETH gas refund from junior escrow to senior. State updated before external call.
+    function _payGasRefund(address senior, address sponsor) internal {
+        uint256 refund = gasRefundWei;
+        if (refund == 0 || sponsor == address(0) || senior == address(0)) return;
+        uint256 bal = gasCreditWei[sponsor];
+        if (bal == 0) return;
+        uint256 pay = bal < refund ? bal : refund;
+        gasCreditWei[sponsor] = bal - pay;
+        (bool ok,) = senior.call{value: pay}("");
+        if (!ok) revert GasTransferFailed();
+        emit GasCreditConsumed(sponsor, senior, pay);
     }
 
     function _price() internal view returns (uint256 price) {

@@ -19,7 +19,7 @@ Carry pairs a stock-token holder (**junior**) with a USDG lender (**senior**) in
 - Junior deposits MSTR → **Open** until USDG matches, then **Active** for **7 days**.
 - Senior accrual = locked Morpho native supply rate (stub **3.9%**, owner cap **≤5%**) × elapsed.
 - Fee waterfall runs only at `claimFees` / `earlyExit` / `settle` (no cut on fee-in).
-- **Early exit** cover: Wallet → Idle Carry → SellShares (user choice). **Settle never sells junior MSTR** (backstop/treasury only).
+- **Early exit** cover: Wallet / IdleCarry / SellShares (junior only, NO backstop). **Settle:** backstop first, then junior Wallet / IdleCarry / SellShares.
 - Lenders withdraw **idle** USDG anytime; **matched** USDG unlocks via replacement liquidity or position close.
 
 ### Contract snapshot
@@ -29,7 +29,7 @@ Carry pairs a stock-token holder (**junior**) with a USDG lender (**senior**) in
 | Contract | `LeveredLpVault` / `LeveredLpVaultV2` (UUPS PROXY product CA; v1 grant vault was non-upgradeable) |
 | Tokens / oracle | Immutable `mstr`, `usdg`; immutable `IPriceOracle` |
 | Term / Morpho rate | Immutable `term` ≤ 7 days; `morphoRateWad` ≤ 5%, locked at first match |
-| Fee cuts | Treasury 20% + senior perf 20% of gross (after seniorFloor); Boosted can cut treasury toward 10% |
+| Fee cuts | Treasury ALWAYS 20% + senior perf 20% of gross (after seniorFloor); Boosted does not reduce treasury |
 | Unpaid accrual | Carried on position when fees &lt; accrual |
 | Pause / reentrancy | Owner pause gates deposits; `nonReentrant` on value paths |
 | External LP | No PoolManager approvals; `joinPool` reverts |
@@ -56,7 +56,7 @@ Inventory is held inside the vault. `mark()` reports 2× equity vs an unlevered 
 2. **Lend USDG** — `depositSenior(amount)`. FIFO-matches Open juniors; first match locks `morphoRateLocked` and starts the term clock. No further match after term.
 3. **Active** — Timer = `term` from first match. Accrual uses locked Morpho rate (≤5%).
 4. **Fee accrual** — `accrueLpFee` pulls raw USDG onto the position (no cut on fee-in).
-5. **claimFees / early exit / settle** — Maker waterfall only here. Unpaid senior accrual (fees &lt; accrual) carries on the position. Early exit cover: Wallet → Idle Carry → SellShares. **Settle never sells junior MSTR** (backstop/treasury only).
+5. **claimFees / early exit / settle** — Maker waterfall only here. Unpaid senior accrual (fees &lt; accrual) carries on the position. Early exit: junior cover only (NO backstop). Settle: backstop first, then junior cover.
 6. **Lender replace / exit** — `freePrincipal` pro-rata of idle capacity; matched size unlocks when `reservedSenior` drops.
 
 ---
@@ -127,12 +127,12 @@ Waterfall at claim/exit/settle (Maker):
 
 ```
 seniorFloor = min(gross, accrual)
-treasury    = min(left, gross × 0.20)   // Boosted can cut toward 10%
+treasury    = min(left, gross × 0.20)   // ALWAYS 20%, including Boosted
 seniorPerf  = min(left, gross × 0.20)
 junior      = remainder
 ```
 
-Early-exit shortfall (`accrual − seniorFloor`) is covered by user-chosen mode: Wallet USDG, Idle Carry, or SellShares. Settle covers shortfall from `backstop` only (`mstrSold = 0`).
+Early-exit shortfall: junior Wallet / IdleCarry / SellShares (NO backstop). Settle: backstop first, then junior cover; treasury-on-cover ALWAYS 20%. Testnet SellShares → extra MSTR to seniors (mainnet AMM later).
 
 ### Senior claims
 

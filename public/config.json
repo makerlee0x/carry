@@ -18,7 +18,7 @@
     "rpcUrl": "https://rpc.testnet.chain.robinhood.com",
     "explorerUrl": "https://explorer.testnet.chain.robinhood.com",
     "vault": "0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd",
-    "vaultImplementation": "0xC9C8d0741ce25cf46a8989f58AeC74dD8e0F1240",
+    "vaultImplementation": "0xCE9495200b095ee83e3f23fdb34bfAb58b997674",
     "vaultUpgradeability": "UUPS",
     "deployBlock": 131985800,
     "mstr": "0x762019309B536bbb89577422FaaFBeC9659f8728",
@@ -57,7 +57,7 @@
         "source": "maker"
       }
     },
-    "researchRangesNote": "Research uses session-vol bands (±1× five-session); UI follows Maker until he picks.",
+    "researchRangesNote": "Research uses session-vol bands (\u00b11\u00d7 five-session); UI follows Maker until he picks.",
     "recenter": {
       "termDays": 7,
       "oracleDriftFromCenterPct": 80
@@ -84,13 +84,18 @@
     "morphoRateNote": "On-chain morphoRateWad (owner/keeper settable stub). Dynamic live rate wiring comes later.",
     "usdgIdleApyNote": "Testnet Idle USDG Morpho APY stub (same Steakhouse native supply figure for now).",
     "onChain": {
-      "_comment": "Live product vault = UUPS proxy chain.vault (v2). All Maker paths enabled.",
+      "_comment": "Live product vault = UUPS proxy chain.vault. Maker paths + junior gasCredit.",
       "claimFees": true,
       "previewClaimFees": true,
       "makerWaterfall": true,
       "earlyCoverPaths": true,
       "partialMatch": true,
-      "boostedStake": true
-    }
+      "boostedStake": true,
+      "gasCredit": true
+    },
+    "gasCreditNote": "Junior fundGasCredit() ETH escrow; depositSenior refunds gasRefundWei from open-queue junior. See docs/GAS_CREDIT.md.",
+    "treasuryCutNote": "Treasury cut ALWAYS 20% of gross and on shortfall cover (including Boosted).",
+    "earlyExitCoverNote": "Early exit: junior Wallet / IdleCarry / SellShares only. NO backstop.",
+    "settleCoverNote": "Settle: backstop first, then junior Wallet / IdleCarry / SellShares. Testnet SellShares \u2192 extra MSTR to seniors; mainnet will switch to AMM."
   }
 }

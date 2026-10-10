@@ -33,8 +33,9 @@ junior      = left − seniorPerf
 senior      = seniorFloor + seniorPerf
 ```
 
-When Boosted staking tiers cut treasury (as low as **10%** of gross by tier),
-that reduced treasury share funds Junior boost; LONG creator fee share comes later.
+**Treasury cut is ALWAYS 20% of gross** (Maker Oct 10), including Boosted positions
+and shortfall-cover paths. Boosted remains a stake-before-open flag for future LONG /
+STRATEGY yield wiring; it does **not** reduce this cut.
 
 ---
 
@@ -51,24 +52,24 @@ waterfall is applied at claim / exit / settle.
 
 ---
 
-## Shortfall cover (early exit + settle)
+## Shortfall cover (settle vs early exit)
 
 If fees cannot cover senior accrual:
 
+### Settle (maturity / normal exit)
+
 1. **Backstop first** (treasury/backstop USDG).
-2. **Residual:** junior covers via user-chosen mode:
-   - Wallet USDG
-   - Idle USDG on Carry (unmatched senior deposit)
-   - Sell shares from the position
-3. **Treasury-on-cover:** treasury also takes **cut% of the residual shortfall**
-   (default **same as waterfall treasury cut** — 20%, or Boosted 10%).  
+2. **Residual:** junior chooses Wallet USDG, IdleCarry, or SellShares.
+3. **Treasury-on-cover:** ALWAYS **20%** of the residual shortfall.  
    `coverTotal = residualShortfall + treasuryOnCover`.
 
-Defaults assumed until Maker corrects:
+Settle default mode = SellShares (permissionless). Wallet / IdleCarry require the junior caller.
 
-- Treasury% on cover = same cut as waterfall (not a separate rate).
-- Order = backstop → junior cover.
-- Applies at **settle and early exit** (settle default mode = SellShares; Wallet/IdleCarry require junior caller).
+### Early exit (before term)
+
+1. **Junior only** — Wallet / IdleCarry / SellShares.
+2. **NO backstop** draw on early exit.
+3. Treasury-on-cover still **20%** of the junior-covered shortfall.
 
 ### SellShares + treasury shortfall (accepted testnet)
 
@@ -116,31 +117,33 @@ Use this as the fee-preview reference in the UI. Live rate on testnet is the
 
 1. **morphoRate** = Steakhouse Morpho **native supply** APY (not Merkl).
 2. **Fee split only** at `claimFees` / `earlyExit` / `settle` (not on fee-in).
-3. **Early/settle cover:** backstop first; then junior Wallet / Idle / SellShares; treasury% on residual cover.
-4. **Boosted:** must stake STRATEGY **before** open; cannot boost an already Active position (reopen to get boost). Future positions in that market are Boosted while staked. Boost goes to **Junior only**, funded by reduced treasury (as low as 10% by tier) + LONG creator fees later.
+3. **Settle cover:** backstop first; then junior Wallet / IdleCarry / SellShares; treasury-on-cover ALWAYS 20%.
+3b. **Early exit cover:** junior only (NO backstop); same three modes; treasury-on-cover ALWAYS 20%.
+4. **Boosted:** stake STRATEGY **before** open; flag only for now. Treasury cut stays **20%** (not reduced to 10%). LONG creator fee share later.
 5. **Idle USDG Morpho on testnet** = APY stub from config for now (no real ERC-4626 sleeve this round).
 6. **Owner treasury withdraw** = yes (multisig eventually); `withdrawFromBackstop` / `withdrawTreasuryFees`.
 7. **Late senior yield** = pro-rata by deposit time (time-weighted).
-8. **Open-queue gas** = on-chain `matchCap` for now; Maker still picks junior-front-gas vs off-chain idle DB.
+8. **Open-queue gas** = junior on-chain `gasCredit` + `matchCap` (Maker chose junior-front-gas; no off-chain DB).
 
 ---
 
 ## On-chain status
 
-**Landed on testnet PROXY** `0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd` (UUPS): Maker waterfall at claimFees/earlyExit/settle, unpaid accrual carry, partial-match accrual checkpoint, no match-after-term, settle/early shortfall cover with backstop-first + junior modes, time-weighted senior credits, owner backstop withdraw, `matchCap`, Boosted treasury-tier stub, deposit caps. Implementation address in `public/config.json`.
+**Landed on testnet PROXY** `0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd` (UUPS, `v2.3-maker-clarifications`): Maker waterfall at claimFees/earlyExit/settle, unpaid accrual carry, partial-match accrual checkpoint, no match-after-term, settle shortfall = backstop first then junior cover, early exit = junior only (no backstop), treasury cut ALWAYS 20%, junior `gasCredit` ETH escrow, time-weighted senior credits, owner backstop withdraw, `matchCap`, Boosted stake flag (no cut reduction), deposit caps. Implementation address in `public/config.json`.
 
-## Open-queue gas options (Maker pick)
+## Open-queue gas (Maker chose A)
 
-| Option | Idea | This cut |
-| --- | --- | --- |
-| **A** | Junior fronts gas for senior deposit even if unmatched | Not fully implemented — document only |
-| **B** | Idle juniors off-chain in DB until matched | Not fully implemented — document only |
-| **Mitigation shipped** | `matchCap` / max match iterations per `depositSenior` | **Yes** (default 25; owner-settable) |
+| Piece | Status |
+| --- | --- |
+| Junior `fundGasCredit` / `withdrawGasCredit` ETH escrow | **Shipped** — see [`GAS_CREDIT.md`](./GAS_CREDIT.md) |
+| `depositSenior` draws `gasRefundWei` from open-queue junior | **Shipped** (even if only partial match) |
+| `matchCap` bounds match iterations | **Shipped** (default 25) |
+| Off-chain idle DB | **Rejected** for this path |
 
 ## Explicitly later
 
 - Real Morpho sleeve on Robinhood
 - LONG creator fee share into Boosted
 - STRATEGY stake token (beyond owner-set flag)
-- Full junior-front-gas or off-chain idle DB (Maker choice)
+- Mainnet SellShares via AMM (testnet keeps MSTR→seniors accounting)
 - Mainnet 4663

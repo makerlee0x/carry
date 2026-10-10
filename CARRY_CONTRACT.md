@@ -6,7 +6,7 @@ Historical build notes: [`LEVERED_LP_BUILD.md`](./LEVERED_LP_BUILD.md).
 Maker-locked product rules + research sync: [`docs/MAKER_V1_NOTES.md`](./docs/MAKER_V1_NOTES.md).  
 **Fee waterfall (product source of truth):** [`docs/MAKER_FEE_WATERFALL.md`](./docs/MAKER_FEE_WATERFALL.md) — Morpho-rate senior floor, treasury/seniorPerf/junior split **only** at claimFees / earlyExit / settle.
 
-**Live product CA (UUPS PROXY):** [`0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd`](https://explorer.testnet.chain.robinhood.com/address/0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd) — `version() = v2.2-maker-answers`. Maker waterfall, unpaid-accrual carry, rate lock ≤5%, settle/early shortfall cover (backstop first then junior), time-weighted senior yield, owner backstop withdraw, matchCap, deposit caps.  
+**Live product CA (UUPS PROXY):** [`0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd`](https://explorer.testnet.chain.robinhood.com/address/0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd) — `version() = v2.3-maker-clarifications`. Maker waterfall, unpaid-accrual carry, rate lock ≤5%, settle/early shortfall cover (backstop first then junior), time-weighted senior yield, owner backstop withdraw, matchCap, deposit caps.  
 **v1 grant reference (not product):** `0x72A0…36c8` (immutable; old 4%/5%/fee-in cut story applies only there).
 
 **Status:** EVM testnet. DualPool hook is **NOT IMPLEMENTED** (`dualPoolAdapter() == address(0)`). LP fees on testnet are pushed via `accrueLpFee` / `MockFeePool` (fee-donor path for demos). No Yieldz, Morpho idle sleeve, or STRATEGY burn/boost wiring.
@@ -24,7 +24,7 @@ This vault is the **custody + accounting layer** for that product on testnet:
 - Junior deposits MSTR → **Idle** (unmatched) until USDG is available, then **Active**. Product states: Idle / Active / Boosted / Closed.
 - Active window is **7 days** (product copy: “active”, not “locked”; positions roll over, never auto-close).
 - **Live UUPS product:** senior accrual = locked Morpho native supply rate (stub **3.9%**, owner cap **≤5%**) × elapsed; fee waterfall at claim/exit/settle only (see [`docs/MAKER_FEE_WATERFALL.md`](./docs/MAKER_FEE_WATERFALL.md)).
-- **Early exit cover:** user chooses Wallet USDG → Idle USDG on Carry → SellShares. **Settle never sells junior MSTR** (treasury/backstop only).
+- **Early exit cover:** junior chooses Wallet / IdleCarry / SellShares (**NO backstop**). **Settle:** backstop first, then junior chooses Wallet / IdleCarry / SellShares (testnet SellShares → extra MSTR to seniors; mainnet will switch to AMM).
 - Lenders withdraw **idle** USDG anytime; **matched** USDG needs replacement liquidity or a position close.
 
 ### For auditors
@@ -36,7 +36,7 @@ This vault is the **custody + accounting layer** for that product on testnet:
 | Oracle | Immutable `IPriceOracle` (`mstrPriceWad()`) |
 | Term | Immutable `term` ≤ 7 days |
 | Morpho rate | Owner-set `morphoRateWad` ≤ `MAX_MORPHO_RATE_WAD` (5%); locked per position at first match |
-| Fee split | Maker waterfall at claim/exit/settle; treasury/seniorPerf cuts of gross (Boosted can cut treasury toward 10%) |
+| Fee split | Maker waterfall at claim/exit/settle; treasury ALWAYS 20% of gross + seniorPerf 20% (Boosted does not reduce treasury) |
 | Unpaid accrual | Carried on `Position.unpaidSeniorAccrual` when fees &lt; accrual |
 | Pause | Owner pause/unpause deposits only |
 | Pool | No approvals to PoolManager; `joinPool` always reverts |
@@ -90,7 +90,7 @@ Numbered happy path:
 2. **Lend USDG** — `depositSenior(amount)`. FIFO-matches Open juniors; first match locks `morphoRateLocked` and starts the term clock. No further match after term.
 3. **Active** — Timer = `term` from first match. Accrual uses locked Morpho rate (≤5%).
 4. **Fee accrual** — `accrueLpFee` pulls raw USDG onto the position (no cut on fee-in).
-5. **claimFees / early exit / settle** — Maker waterfall only here. Unpaid senior accrual carries when fees &lt; accrual. Early cover: Wallet → Idle Carry → SellShares. **Settle never sells junior MSTR** (backstop/treasury only).
+5. **claimFees / early exit / settle** — Maker waterfall only here. Unpaid senior accrual carries when fees &lt; accrual. Early cover: junior Wallet / IdleCarry / SellShares (NO backstop). Settle: backstop first, then junior cover modes.
 6. **Lender replace / exit** — `freePrincipal` pro-rata of idle capacity; matched size unlocks when `reservedSenior` drops.
 
 ---
@@ -156,7 +156,7 @@ accrual = unpaidSeniorAccrual
         + seniorPrincipal * morphoRateLocked * elapsed / (WAD * YEAR)
 ```
 
-Maker waterfall at claim/exit/settle: `seniorFloor → treasury → seniorPerf → junior`. Early-exit shortfall uses Wallet / Idle / SellShares. Settle shortfall uses `backstop` only.
+Maker waterfall at claim/exit/settle: `seniorFloor → treasury(20%) → seniorPerf → junior`. Early-exit shortfall: junior only (NO backstop). Settle shortfall: backstop first, then junior Wallet / IdleCarry / SellShares. Junior gas credit: see `docs/GAS_CREDIT.md`.
 
 ### Fee credit path
 

@@ -19,6 +19,32 @@
   },
   {
     "type": "function",
+    "name": "DEFAULT_GAS_REFUND_WEI",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "DEFAULT_MATCH_CAP",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "DEFAULT_TREASURY_CUT_WAD",
     "inputs": [],
     "outputs": [
@@ -149,7 +175,59 @@
   },
   {
     "type": "function",
+    "name": "accMstrWeight",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "accMstrWeightT",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "accYieldPerPrincipal",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "accYieldWeight",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "accYieldWeightT",
     "inputs": [],
     "outputs": [
       {
@@ -538,6 +616,45 @@
   },
   {
     "type": "function",
+    "name": "fundGasCredit",
+    "inputs": [],
+    "outputs": [],
+    "stateMutability": "payable"
+  },
+  {
+    "type": "function",
+    "name": "gasCreditWei",
+    "inputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "gasRefundWei",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "initialize",
     "inputs": [
       {
@@ -648,6 +765,19 @@
       },
       {
         "name": "unleveredEquityUsdg",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "matchCap",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
         "type": "uint256",
         "internalType": "uint256"
       }
@@ -1349,6 +1479,173 @@
   },
   {
     "type": "function",
+    "name": "previewSettle",
+    "inputs": [
+      {
+        "name": "positionId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "tuple",
+        "internalType": "struct LeveredLpVault.Settlement",
+        "components": [
+          {
+            "name": "mstrKept",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "mstrSold",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "accrual",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "seniorFloor",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "treasury",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "seniorPerf",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "juniorYield",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "fromBackstop",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "coverUsdg",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "treasuryOnCover",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "feeShortfallUsdg",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "coverMode",
+            "type": "uint8",
+            "internalType": "enum LeveredLpVault.CoverMode"
+          }
+        ]
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "previewSettle",
+    "inputs": [
+      {
+        "name": "positionId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "mode",
+        "type": "uint8",
+        "internalType": "enum LeveredLpVault.CoverMode"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "tuple",
+        "internalType": "struct LeveredLpVault.Settlement",
+        "components": [
+          {
+            "name": "mstrKept",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "mstrSold",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "accrual",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "seniorFloor",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "treasury",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "seniorPerf",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "juniorYield",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "fromBackstop",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "coverUsdg",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "treasuryOnCover",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "feeShortfallUsdg",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "coverMode",
+            "type": "uint8",
+            "internalType": "enum LeveredLpVault.CoverMode"
+          }
+        ]
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "previewWaterfall",
     "inputs": [
       {
@@ -1509,6 +1806,25 @@
   },
   {
     "type": "function",
+    "name": "seniorJoinedAt",
+    "inputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "seniorMstrDebt",
     "inputs": [
       {
@@ -1529,6 +1845,44 @@
   {
     "type": "function",
     "name": "seniorPrincipal",
+    "inputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "seniorTwMstrDebt",
+    "inputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "seniorTwYieldDebt",
     "inputs": [
       {
         "name": "",
@@ -1607,6 +1961,32 @@
   },
   {
     "type": "function",
+    "name": "setGasRefundWei",
+    "inputs": [
+      {
+        "name": "gasRefundWei_",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "setMatchCap",
+    "inputs": [
+      {
+        "name": "matchCap_",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "setMorphoFloorApr",
     "inputs": [
       {
@@ -1641,7 +2021,7 @@
         "internalType": "uint256"
       },
       {
-        "name": "boostedTreasuryCutWad_",
+        "name": "",
         "type": "uint256",
         "internalType": "uint256"
       }
@@ -1661,7 +2041,7 @@
     ],
     "outputs": [
       {
-        "name": "result",
+        "name": "",
         "type": "tuple",
         "internalType": "struct LeveredLpVault.Settlement",
         "components": [
@@ -1711,14 +2091,123 @@
             "internalType": "uint256"
           },
           {
+            "name": "treasuryOnCover",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
             "name": "feeShortfallUsdg",
             "type": "uint256",
             "internalType": "uint256"
+          },
+          {
+            "name": "coverMode",
+            "type": "uint8",
+            "internalType": "enum LeveredLpVault.CoverMode"
           }
         ]
       }
     ],
     "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "settle",
+    "inputs": [
+      {
+        "name": "positionId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "mode",
+        "type": "uint8",
+        "internalType": "enum LeveredLpVault.CoverMode"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "tuple",
+        "internalType": "struct LeveredLpVault.Settlement",
+        "components": [
+          {
+            "name": "mstrKept",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "mstrSold",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "accrual",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "seniorFloor",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "treasury",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "seniorPerf",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "juniorYield",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "fromBackstop",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "coverUsdg",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "treasuryOnCover",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "feeShortfallUsdg",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "coverMode",
+            "type": "uint8",
+            "internalType": "enum LeveredLpVault.CoverMode"
+          }
+        ]
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "sumPrincipalJoinedAt",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
   },
   {
     "type": "function",
@@ -1876,10 +2365,59 @@
   },
   {
     "type": "function",
+    "name": "withdrawFromBackstop",
+    "inputs": [
+      {
+        "name": "to",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "amount",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "withdrawGasCredit",
+    "inputs": [
+      {
+        "name": "amount",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "withdrawSenior",
     "inputs": [
       {
         "name": "principalAmount",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "withdrawTreasuryFees",
+    "inputs": [
+      {
+        "name": "to",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "amount",
         "type": "uint256",
         "internalType": "uint256"
       }
@@ -1906,6 +2444,25 @@
     "inputs": [
       {
         "name": "from",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "amount",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "BackstopWithdrawn",
+    "inputs": [
+      {
+        "name": "to",
         "type": "address",
         "indexed": true,
         "internalType": "address"
@@ -2075,6 +2632,94 @@
   },
   {
     "type": "event",
+    "name": "GasCreditConsumed",
+    "inputs": [
+      {
+        "name": "junior",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "senior",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "amount",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "GasCreditFunded",
+    "inputs": [
+      {
+        "name": "junior",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "amount",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "balance",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "GasCreditWithdrawn",
+    "inputs": [
+      {
+        "name": "junior",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "amount",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "balance",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "GasRefundWeiUpdated",
+    "inputs": [
+      {
+        "name": "gasRefundWei",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "Initialized",
     "inputs": [
       {
@@ -2141,6 +2786,19 @@
       },
       {
         "name": "toPosition",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "MatchCapUpdated",
+    "inputs": [
+      {
+        "name": "matchCap",
         "type": "uint256",
         "indexed": false,
         "internalType": "uint256"
@@ -2344,6 +3002,25 @@
   },
   {
     "type": "event",
+    "name": "TreasuryFeesWithdrawn",
+    "inputs": [
+      {
+        "name": "to",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "amount",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "UnmatchedWithdraw",
     "inputs": [
       {
@@ -2462,6 +3139,11 @@
   },
   {
     "type": "error",
+    "name": "BadMatchCap",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "BadPosition",
     "inputs": []
   },
@@ -2513,7 +3195,22 @@
   },
   {
     "type": "error",
+    "name": "GasTransferFailed",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "InsufficientBackstop",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "InsufficientFree",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "InsufficientGasCredit",
     "inputs": []
   },
   {
@@ -2524,6 +3221,11 @@
   {
     "type": "error",
     "name": "InvalidInitialization",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "JuniorCoverRequired",
     "inputs": []
   },
   {

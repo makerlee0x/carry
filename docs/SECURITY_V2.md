@@ -18,10 +18,12 @@ Implementation address: see `chain.vaultImplementation` in [`public/config.json`
 | Fee-on-transfer | Rejected on pulls |
 | Approval race on deposit | Standard ERC-20 approve+deposit; user-controlled amounts |
 | Morpho rate | Cap **≤5%**; rate **locked per position** at first match |
-| Settle shortfall | Backstop first, then junior cover (Wallet / IdleCarry / SellShares) + treasury% on residual |
+| Settle shortfall | Backstop first, then junior Wallet / IdleCarry / SellShares + **20%** treasury-on-cover |
+| Early exit shortfall | Junior only (NO backstop); same three modes + **20%** treasury-on-cover |
+| Treasury cut | ALWAYS 20% (waterfall + cover); Boosted does not reduce it |
 | Senior yield | Time-weighted by deposit time (late seniors do not take full pre-arrival accrual) |
-| Open-queue gas | `matchCap` bounds match attempts per `depositSenior` (default 25) |
-| Forge suite | Green including withdraw safety, settle cover, TW yield, matchCap |
+| Open-queue gas | Junior `gasCreditWei` ETH escrow + `matchCap` (default 25) |
+| Forge suite | Green including early-no-backstop, settle cover, treasury 20%, gas credit |
 
 ## Upgrade authority — mainnet plan
 
@@ -43,15 +45,12 @@ No need to migrate testnet ownership unless it is cheap and Maker wants the rehe
 1. **MockOracle has `setPrice`** — owner/deployer can move mark for demos. Not a production oracle.
 2. **MockERC20 `mint` is open to deployer** — test tokens only; anyone who holds the mint key can inflate demo balances.
 3. **Public mempool / MEV** — testnet; no keeper private mempool. Fee donors and settle callers are public.
-4. **Boosted** — stake-before-open **flag only**; no STRATEGY yield paid without a funding path.
-5. **SellShares cover (early exit + settle residual)** — no AMM; MSTR is credited to seniors via time-weighted accumulator (notional “sale”). If junior leftover fees cannot cover treasury’s cut of the cover amount, the unpaid treasury slice is also settled as extra MSTR to seniors (testnet OK; no AMM to realize USDG for treasury).
+4. **Boosted** — stake-before-open **flag only**; no STRATEGY yield paid without a funding path. Treasury cut stays 20%.
+5. **SellShares cover (early exit + settle residual)** — no AMM on testnet; MSTR credited to seniors via time-weighted accumulator. Unpaid treasury-on-cover also becomes extra MSTR to seniors. **Mainnet will switch** to a real sell/AMM path.
 6. **Abandoned proxy** `0x0e4e59…` — first UUPS proxy contaminated by lost E2E keys; do not use. Leave funds alone until term settle or owner decides otherwise.
 7. **v1 grant vault** `0x72A0…` — left unchanged; not the product CA.
 8. **Time-weighted yield dust** — integer math rounds senior credits down; dust USDG/MSTR can remain in the vault (cannot overpay seniors).
-9. **Open-queue gas — product choice still open** — on-chain mitigation is `matchCap` per `depositSenior`. Maker still chooses long-term path:
-   - **(A)** Junior fronts gas for senior deposit even when unmatched, or
-   - **(B)** Idle junior positions off-chain in DB until matched.
-   This cut does **not** implement full junior-front-gas or off-chain idle DB rewrite.
+9. **Open-queue gas** — junior on-chain `gasCredit` shipped (see [`GAS_CREDIT.md`](./GAS_CREDIT.md)). Off-chain idle DB not used.
 
 ## Keeper / ops
 

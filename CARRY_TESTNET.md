@@ -149,11 +149,11 @@ Then owner calls `unpause()` when ready for deposits. Mint mock tokens via `Mock
 
 ## v2 status
 
-UUPS vault with Maker waterfall, partial match, early cover paths, deposit caps, and Boosted stake-before-open stub is **live** at the PROXY above. `public/config.json` points at PROXY with `product.onChain.* = true`. Idle USDG Morpho on testnet remains an APY stub (no ERC-4626 sleeve). Settle after full 7-day term is forge-covered; live E2E confirmed `TermNotElapsed` before term.
+UUPS vault with Maker waterfall, partial match, early/settle cover paths, always-20% treasury, junior `gasCredit`, deposit caps, and Boosted stake-before-open stub is **live** at the PROXY above. `public/config.json` points at PROXY with `product.onChain.* = true`. Idle USDG Morpho on testnet remains an APY stub (no ERC-4626 sleeve). Settle after full 7-day term is forge-covered; live E2E confirmed `TermNotElapsed` before term.
 
 ### Live settle watch (do not early-exit)
 
-Fully matched **Active** position **#5** on PROXY `0xc801…72bd` — 1 mMSTR / 100 mUSDG + **1 mUSDG fees**, matched **2026-10-10 03:37:51 UTC**, settle after **2026-10-17 03:37:51 UTC**. Impl `v2.2-maker-answers` (`0xC9C8…1240`). Details + tx links: [`docs/SETTLE_WATCH.md`](./docs/SETTLE_WATCH.md).
+Fully matched **Active** position **#5** on PROXY `0xc801…72bd` — 1 mMSTR / 100 mUSDG + **1 mUSDG fees**, matched **2026-10-10 03:37:51 UTC**, settle after **2026-10-17 03:37:51 UTC**. Impl `v2.3-maker-clarifications` (`0xCE94…7674`). Details + tx links: [`docs/SETTLE_WATCH.md`](./docs/SETTLE_WATCH.md).
 
 ### Wallet early-exit path (E2E)
 

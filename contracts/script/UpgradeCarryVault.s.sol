@@ -49,8 +49,13 @@ contract UpgradeCarryVault is Script {
         LeveredLpVaultV2 impl = new LeveredLpVaultV2();
         if (live) {
             if (proxy.owner() != msg.sender) revert NotOwner();
+            // Storage-additive upgrade only. Does not touch position #5 state.
             proxy.upgradeToAndCall(address(impl), "");
             proxy.setDepositCaps(CAP_TOTAL, CAP_TOTAL, CAP_PER_WALLET);
+            // Sync treasury cut to always-20% (Boosted slot kept equal; ignored by logic).
+            proxy.setTreasuryCuts(0.2e18, 0.2e18);
+            // Enable junior→senior gas credit refunds on depositSenior.
+            proxy.setGasRefundWei(0.0001 ether);
             vm.stopBroadcast();
         }
 
@@ -61,6 +66,8 @@ contract UpgradeCarryVault is Script {
             console2.log("version", LeveredLpVaultV2(proxyAddr).version());
             console2.log("maxTotalSeniorUsdg", proxy.maxTotalSeniorUsdg());
             console2.log("maxPerWalletUsdg", proxy.maxPerWalletUsdg());
+            console2.log("gasRefundWei", proxy.gasRefundWei());
+            console2.log("treasuryCutWad", proxy.treasuryCutWad());
         }
     }
 }
