@@ -26,7 +26,7 @@ Carry pairs a stock-token holder (**junior**) with a USDG lender (**senior**) in
 
 | Item | Value |
 | --- | --- |
-| Contract | `LeveredLpVault` (non-upgradeable) |
+| Contract | `LeveredLpVault` (UUPS proxy product CA; v1 grant vault was non-upgradeable) |
 | Tokens / oracle | Immutable `mstr`, `usdg`; immutable `IPriceOracle` |
 | Term / borrow APR | Immutable `term` ≤ 7 days; `borrowAprWad` ≤ 5% WAD |
 | Protocol cut | Immutable `protocolCutWad` ≤ 20% of each fee |
