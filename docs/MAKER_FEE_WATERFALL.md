@@ -51,16 +51,43 @@ waterfall is applied at claim / exit / settle.
 
 ---
 
-## Early cover (junior short of senior accrual)
+## Shortfall cover (early exit + settle)
 
-If the position is short of senior accrual on a manual early exit, the junior
-covers. **User chooses** how to pay. Default order (do not reorder):
+If fees cannot cover senior accrual:
 
-1. Wallet USDG
-2. Idle USDG on Carry (unmatched senior deposit)
-3. Sell shares from the position
+1. **Backstop first** (treasury/backstop USDG).
+2. **Residual:** junior covers via user-chosen mode:
+   - Wallet USDG
+   - Idle USDG on Carry (unmatched senior deposit)
+   - Sell shares from the position
+3. **Treasury-on-cover:** treasury also takes **cut% of the residual shortfall**
+   (default **same as waterfall treasury cut** — 20%, or Boosted 10%).  
+   `coverTotal = residualShortfall + treasuryOnCover`.
 
-Treasury also takes **20% of that senior fee** (subject to Boosted treasury cut).
+Defaults assumed until Maker corrects:
+
+- Treasury% on cover = same cut as waterfall (not a separate rate).
+- Order = backstop → junior cover.
+- Applies at **settle and early exit** (settle default mode = SellShares; Wallet/IdleCarry require junior caller).
+
+### SellShares + treasury shortfall (accepted testnet)
+
+If junior leftover fees cannot pay the USDG treasury-on-cover slice, the unpaid
+treasury piece is credited to seniors as additional MSTR (no AMM on testnet).
+
+---
+
+## Senior yield timing
+
+USDG (and SellShares MSTR) credits to seniors are **time-weighted by deposit time**:
+
+```
+weight_i = principal_i × (creditTime − joinedAt_i)
+share_i  ∝ weight_i
+```
+
+A senior who deposits right before claim/settle does **not** take a full equal
+share of pre-arrival accrual. Legacy equal-share index remains for pre-upgrade debt.
 
 ---
 
@@ -85,29 +112,35 @@ Use this as the fee-preview reference in the UI. Live rate on testnet is the
 
 ---
 
-## Maker-confirmed answers (5)
+## Maker-confirmed answers (5) — Oct 5 sheet + later product Qs
 
 1. **morphoRate** = Steakhouse Morpho **native supply** APY (not Merkl).
 2. **Fee split only** at `claimFees` / `earlyExit` / `settle` (not on fee-in).
-3. **Early cover:** user decides; default order wallet USDG → Idle USDG on Carry → sell from position.
+3. **Early/settle cover:** backstop first; then junior Wallet / Idle / SellShares; treasury% on residual cover.
 4. **Boosted:** must stake STRATEGY **before** open; cannot boost an already Active position (reopen to get boost). Future positions in that market are Boosted while staked. Boost goes to **Junior only**, funded by reduced treasury (as low as 10% by tier) + LONG creator fees later.
 5. **Idle USDG Morpho on testnet** = APY stub from config for now (no real ERC-4626 sleeve this round).
+6. **Owner treasury withdraw** = yes (multisig eventually); `withdrawFromBackstop` / `withdrawTreasuryFees`.
+7. **Late senior yield** = pro-rata by deposit time (time-weighted).
+8. **Open-queue gas** = on-chain `matchCap` for now; Maker still picks junior-front-gas vs off-chain idle DB.
 
 ---
 
 ## On-chain status
 
-**Landed on testnet PROXY** `0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd` (UUPS): Maker waterfall at claimFees/earlyExit/settle, unpaid accrual carry, partial-match accrual checkpoint, no match-after-term, settle without selling junior MSTR, early cover chooser, Boosted treasury-tier stub, deposit caps. Implementation address in `public/config.json`.
+**Landed on testnet PROXY** `0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd` (UUPS): Maker waterfall at claimFees/earlyExit/settle, unpaid accrual carry, partial-match accrual checkpoint, no match-after-term, settle/early shortfall cover with backstop-first + junior modes, time-weighted senior credits, owner backstop withdraw, `matchCap`, Boosted treasury-tier stub, deposit caps. Implementation address in `public/config.json`.
 
-### Early cover vs settle
+## Open-queue gas options (Maker pick)
 
-- **Early exit:** user chooses Wallet / Idle Carry / SellShares when fees &lt; accrual.
-- **Settle (maturity):** junior keeps all remaining MSTR; unpaid accrual covered from treasury/`backstop` only (no share sale).
-- **SellShares + treasury shortfall (accepted testnet):** treasury still wants 20% of the cover amount. If junior leftover fees cannot pay that USDG slice, the unpaid treasury piece is credited to seniors as additional MSTR (no AMM on testnet).
+| Option | Idea | This cut |
+| --- | --- | --- |
+| **A** | Junior fronts gas for senior deposit even if unmatched | Not fully implemented — document only |
+| **B** | Idle juniors off-chain in DB until matched | Not fully implemented — document only |
+| **Mitigation shipped** | `matchCap` / max match iterations per `depositSenior` | **Yes** (default 25; owner-settable) |
 
 ## Explicitly later
 
 - Real Morpho sleeve on Robinhood
 - LONG creator fee share into Boosted
 - STRATEGY stake token (beyond owner-set flag)
+- Full junior-front-gas or off-chain idle DB (Maker choice)
 - Mainnet 4663

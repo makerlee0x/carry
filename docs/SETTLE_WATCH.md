@@ -8,7 +8,7 @@ Live 7-day **fully matched / Active** position on the product vault for end-of-t
 | --- | --- |
 | Network | Robinhood Chain Testnet **46630** |
 | Vault PROXY (product CA) | [`0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd`](https://explorer.testnet.chain.robinhood.com/address/0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd) |
-| Implementation | [`0x13C365D87f33Be5F51df934c691382dEF3D2ff2A`](https://explorer.testnet.chain.robinhood.com/address/0x13C365D87f33Be5F51df934c691382dEF3D2ff2A) (`version` = `v2.1-maker-fixes`) |
+| Implementation | see `public/config.json` `chain.vaultImplementation` (target `version` = `v2.2-maker-answers`) |
 | **positionId** | **5** |
 | State | Active (`isMatched` + `isFullyMatched` = true; `settled` = false) |
 | Junior wallet (owner) | [`0xcA44F2dbB2D43b93b39F01B88E0f0e2966983c57`](https://explorer.testnet.chain.robinhood.com/address/0xcA44F2dbB2D43b93b39F01B88E0f0e2966983c57) |
@@ -21,6 +21,14 @@ Live 7-day **fully matched / Active** position on the product vault for end-of-t
 | `morphoRateLocked` on #5 | `0` (opened before rate-lock upgrade → uses live `morphoRateWad`) |
 | `matchedAt` / `openedAt` | `1791603471` → **2026-10-10 03:37:51 UTC** |
 | **Expected settle after** | `1792208271` → **2026-10-17 03:37:51 UTC** |
+
+### Upgrade impact on #5 (v2.2)
+
+Storage-additive UUPS upgrade keeps the same PROXY CA and position #5 state.
+
+- Fees on #5 (`1e18`) **≫** 7-day Morpho accrual on `100e18` @ 3.9% (~`0.075e18`), so maturity settle should **not** need backstop or SellShares cover.
+- Junior keeps MSTR; waterfall pays senior floor/perf from fees; treasury cut → backstop.
+- New settle SellShares path exists for **other** shortfall positions; #5 should remain a clean fee-covered settle.
 
 ### Tx links
 
@@ -38,4 +46,4 @@ Live 7-day **fully matched / Active** position on the product vault for end-of-t
 
 ### After maturity
 
-Anyone may call `settle(5)` once `block.timestamp >= openedAt + term`. Proceeds go to junior + senior accounting — not the caller. Junior keeps all MSTR; unpaid Morpho accrual (if any after fees) comes from treasury/`backstop` only. Until then, `TermNotElapsed` is expected.
+Anyone may call `settle(5)` (default SellShares for any residual after backstop) once `block.timestamp >= openedAt + term`. With current fees on #5, residual cover should be zero — junior keeps all MSTR; waterfall runs on the 1 mUSDG fee. Until maturity, `TermNotElapsed` is expected.
