@@ -214,7 +214,7 @@ On claim/exit/settle, USDG paid toward seniorFloor + seniorPerf increases `accYi
 | Name | Address | Explorer |
 | --- | --- | --- |
 | **LeveredLpVault (PROXY)** | `0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd` | [Sourcify match](https://explorer.testnet.chain.robinhood.com/address/0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd?tab=contract) |
-| implementation | `0xe8a8406d860aCd8c348377D5342bCAcD5770D84b` | [Sourcify match](https://explorer.testnet.chain.robinhood.com/address/0xe8a8406d860aCd8c348377D5342bCAcD5770D84b?tab=contract) |
+| implementation | `0x09D2371be36b4910968f675d005e04825dCB74d6` (`v2.4-maker-leftovers`) | [contract](https://explorer.testnet.chain.robinhood.com/address/0x09D2371be36b4910968f675d005e04825dCB74d6?tab=contract) |
 | v1 grant/history reference | `0x72A053120f03B10c5506d2325f92F59B0FfC36c8` | [verified](https://explorer.testnet.chain.robinhood.com/address/0x72A053120f03B10c5506d2325f92F59B0FfC36c8?tab=contract) |
 
 ### Supporting contracts
