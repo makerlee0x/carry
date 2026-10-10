@@ -271,7 +271,8 @@ code.hljs {
 	<body class="">
 		<h1 id="carry--levered-lp-vault--contract-overview">Carry / Levered LP Vault — Contract Overview</h1>
 <p>Grant and audit reference for <code>LeveredLpVault</code> on <strong>Robinhood Chain Testnet (chain id 46630)</strong>.</p>
-<p><strong>Primary vault:</strong> <a href="https://explorer.testnet.chain.robinhood.com/address/0x72A053120f03B10c5506d2325f92F59B0FfC36c8?tab=contract"><code>0x72A053120f03B10c5506d2325f92F59B0FfC36c8</code></a> (Sourcify verified)</p>
+<p><strong>Product vault (PROXY):</strong> <a href="https://explorer.testnet.chain.robinhood.com/address/0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd?tab=contract"><code>0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd</code></a> (UUPS; Sourcify match)<br>
+<strong>v1 grant/history reference (not product CA):</strong> <a href="https://explorer.testnet.chain.robinhood.com/address/0x72A053120f03B10c5506d2325f92F59B0FfC36c8?tab=contract"><code>0x72A053120f03B10c5506d2325f92F59B0FfC36c8</code></a></p>
 <hr>
 <h2 id="1-overview">1. Overview</h2>
 <p>Carry pairs a stock-token holder (<strong>junior</strong>) with a USDG lender (<strong>senior</strong>) into a <strong>50/50 book</strong>: junior posts MSTR, senior posts matching USDG. Equity tracks the stock while the book accrues LP fees over a fixed term.</p>
@@ -770,7 +771,7 @@ code.hljs {
 <td><code>https://explorer.testnet.chain.robinhood.com</code></td>
 </tr>
 </tbody></table>
-<h3 id="primary-vault">Primary vault</h3>
+<h3 id="product-vault">Product vault (UUPS proxy)</h3>
 <table>
 <thead>
 <tr>
@@ -780,9 +781,19 @@ code.hljs {
 </tr>
 </thead>
 <tbody><tr>
-<td><strong>LeveredLpVault</strong></td>
+<td><strong>LeveredLpVault (PROXY)</strong></td>
+<td><code>0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd</code></td>
+<td><a href="https://explorer.testnet.chain.robinhood.com/address/0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd?tab=contract">Sourcify match</a></td>
+<tr>
+<td>implementation</td>
+<td><code>0xe8a8406d860aCd8c348377D5342bCAcD5770D84b</code></td>
+<td><a href="https://explorer.testnet.chain.robinhood.com/address/0xe8a8406d860aCd8c348377D5342bCAcD5770D84b?tab=contract">Sourcify match</a></td>
+</tr>
+<tr>
+<td>v1 grant/history reference</td>
 <td><code>0x72A053120f03B10c5506d2325f92F59B0FfC36c8</code></td>
 <td><a href="https://explorer.testnet.chain.robinhood.com/address/0x72A053120f03B10c5506d2325f92F59B0FfC36c8?tab=contract">verified</a></td>
+</tr>
 </tr>
 </tbody></table>
 <h3 id="supporting-contracts">Supporting contracts</h3>

@@ -13,9 +13,11 @@ This repo is the **working Carry app + contracts**:
 
 | Deployed (46630) | Address |
 | --- | --- |
-| LeveredLpVault | [`0x72A053120f03B10c5506d2325f92F59B0FfC36c8`](https://explorer.testnet.chain.robinhood.com/address/0x72A053120f03B10c5506d2325f92F59B0FfC36c8) |
+| LeveredLpVault (PROXY / product CA) | [`0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd`](https://explorer.testnet.chain.robinhood.com/address/0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd) |
+| implementation | `0xe8a8406d860aCd8c348377D5342bCAcD5770D84b` |
 | mockMSTR | `0x762019309B536bbb89577422FaaFBeC9659f8728` |
 | mockUSDG | `0x25030Bff74764aD72b912276a603717DB1C00644` |
+| v1 grant/history reference (not product CA) | `0x72A053120f03B10c5506d2325f92F59B0FfC36c8` |
 
 ## Run locally
 

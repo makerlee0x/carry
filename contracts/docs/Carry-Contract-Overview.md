@@ -7,7 +7,8 @@ subtitle: "Robinhood Chain Testnet (46630) — for Maker Lee review"
 
 Grant and audit reference for `LeveredLpVault` on **Robinhood Chain Testnet (chain id 46630)**.
 
-**Primary vault:** [`0x72A053120f03B10c5506d2325f92F59B0FfC36c8`](https://explorer.testnet.chain.robinhood.com/address/0x72A053120f03B10c5506d2325f92F59B0FfC36c8?tab=contract) (Sourcify verified)
+**Product vault (PROXY):** [`0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd`](https://explorer.testnet.chain.robinhood.com/address/0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd?tab=contract) (UUPS; Sourcify match)  
+**v1 grant/history reference (not product CA):** [`0x72A053120f03B10c5506d2325f92F59B0FfC36c8`](https://explorer.testnet.chain.robinhood.com/address/0x72A053120f03B10c5506d2325f92F59B0FfC36c8?tab=contract)
 
 ---
 
@@ -219,11 +220,13 @@ On settle/early exit, USDG paid toward fees increases `accYieldPerPrincipal`; so
 | RPC | `https://rpc.testnet.chain.robinhood.com` |
 | Explorer | `https://explorer.testnet.chain.robinhood.com` |
 
-### Primary vault
+### Product vault (UUPS proxy)
 
 | Name | Address | Explorer |
 | --- | --- | --- |
-| **LeveredLpVault** | `0x72A053120f03B10c5506d2325f92F59B0FfC36c8` | [verified](https://explorer.testnet.chain.robinhood.com/address/0x72A053120f03B10c5506d2325f92F59B0FfC36c8?tab=contract) |
+| **LeveredLpVault (PROXY)** | `0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd` | [Sourcify match](https://explorer.testnet.chain.robinhood.com/address/0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd?tab=contract) |
+| implementation | `0xe8a8406d860aCd8c348377D5342bCAcD5770D84b` | [Sourcify match](https://explorer.testnet.chain.robinhood.com/address/0xe8a8406d860aCd8c348377D5342bCAcD5770D84b?tab=contract) |
+| v1 grant/history reference | `0x72A053120f03B10c5506d2325f92F59B0FfC36c8` | [verified](https://explorer.testnet.chain.robinhood.com/address/0x72A053120f03B10c5506d2325f92F59B0FfC36c8?tab=contract) |
 
 ### Supporting contracts
 

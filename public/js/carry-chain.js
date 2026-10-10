@@ -222,7 +222,8 @@
       const soonest = act.length ? Math.min(...act.map((r) => r.openedAt + term)) : 0;
       if (act.length || rdy.length) {
         const first = Math.min(...[...act, ...rdy].map((r) => r.openedAt));
-        statusTxt = 'Active';
+        const anyBoosted = [...act, ...rdy].some((r) => r.boosted);
+        statusTxt = anyBoosted ? 'Boosted' : 'Active';
         free_ = act.length ? freeShares > 0 : true;   // some legs may still withdraw without an early-exit fee
         leftTxt = mixed ? (parts.join(' · ') + (act.length ? ' · ' + leftText(soonest - now) + ' on active' : '')) : (act.length ? leftText(soonest - now) : 'Withdrawal available');
         earned = act.length ? Math.min(4, (4 * (now - first)) / term) : 4;
@@ -240,7 +241,7 @@
       }
       positions.push({ sym: 'MSTR', shares: round(mstrTotal, 4), fees: round(fees, 4), days, earned: round(earned, 2), auto: false, real: true, statusTxt, leftTxt, feeDue, feeDueLabel: feeDue ? 'Early fee due' : '', free: free_, count: live.length,
         matchedPct: mstrTotal > 0 ? round((matchedShares / mstrTotal) * 100, 1) : 0, freeShares: round(freeShares, 4), activeShares: round(activeShares, 4),
-        mixed, openShares: round(sumOf(opn), 4), readyShares: round(sumOf(rdy), 4) });
+        mixed, openShares: round(sumOf(opn), 4), readyShares: round(sumOf(rdy), 4), boosted: live.some((r) => r.boosted) });
     }
 
     const seniorN = num(senior);
@@ -571,7 +572,7 @@
         const w = waterfallPreview({ seniorPrincipal: seniorBook, morphoRate: morphoRateFromCfg(), elapsedSec: Math.max(now - first, 0), gross: grossFees });
         const liveNote = coverOn
           ? 'Live UUPS vault — Maker waterfall + user-chosen cover (Wallet → Idle Carry → SellShares).'
-          : 'Product preview — Maker waterfall is not on live grant vault bytecode.';
+          : 'Product preview — enable product.onChain.earlyCoverPaths against the UUPS proxy to send cover-mode earlyExit.';
         const intro = `Fee split runs at early exit (not on fee-in). Applies to ${fx(tot(act))} MSTR still inside its 7-day term.` + (freeTotal > 0 ? ` The other ${fx(freeTotal)} MSTR leaves with no fee.` : '') +
           ' Choose how to cover senior accrual if fees are short.';
         const rows = waterfallRows(w, { liveNote }).concat([
@@ -597,7 +598,7 @@
         const grossFees = ready.reduce((x, r) => x + r.fee, 0);
         const w = waterfallPreview({ seniorPrincipal: seniorBook, morphoRate: morphoRateFromCfg(), elapsedSec: Math.max(now - first, 0), gross: grossFees });
         const intro = 'Fee split runs at settle (not on fee-in). Maker waterfall below.';
-        const rows = waterfallRows(w, { liveNote: onChainFlag('makerWaterfall') ? 'Live UUPS vault settle uses Maker Morpho-rate waterfall.' : 'Product preview — live grant vault may still settle with the legacy borrow-fee path.' });
+        const rows = waterfallRows(w, { liveNote: onChainFlag('makerWaterfall') ? 'Live UUPS vault settle uses Maker Morpho-rate waterfall.' : 'Product preview — enable product.onChain.makerWaterfall for live settle waterfall copy.' });
         const answer = confirm ? await confirm({ title: 'Confirm settle', intro, rows, confirmLabel: 'Confirm settle' }) : { ok: true };
         if (!answer || answer.ok === false) throw user('Settle cancelled. No funds were moved.');
       }
@@ -627,7 +628,7 @@
     } catch (e) { return fail(e); }
   }
 
-  // Live vault features (product.onChain). v2 PROXY enables claimFees/cover/waterfall; v1 0x72A0… does not.
+  // Live vault features (product.onChain). Product CA is UUPS PROXY in config; flags gate money paths.
   function onChainFlag(key) {
     const o = productCfg && productCfg.onChain;
     return !!(o && o[key] === true);
@@ -644,8 +645,8 @@
     };
   }
 
-  /// Fee claim: Maker waterfall is product preview. Against live grant vault, never send claimFees
-  /// (selector missing). Preview dialog is OK; money path stays soft-fail until redeploy + flag flip.
+  /// Fee claim against config chain.vault (UUPS PROXY). When product.onChain.claimFees is false,
+  /// show Maker waterfall preview only and do not send a tx.
   async function claimFees({ sym, onStep, confirm }) {
     try {
       guard();
@@ -661,11 +662,11 @@
       const liveOk = onChainFlag('claimFees');
       const intro = liveOk
         ? 'Fee split runs at claimFees only (not on fee-in). Preview uses Maker’s Morpho-rate waterfall.'
-        : 'Product preview only — Maker’s Morpho-rate waterfall at claim. Live grant vault bytecode has no claimFees selector, so nothing will be sent.';
+        : 'Product preview only — Maker’s Morpho-rate waterfall at claim. product.onChain.claimFees is off, so nothing will be sent.';
       const rows = waterfallRows(w, {
         liveNote: liveOk
-          ? 'On-chain claimFees is enabled for this deployment.'
-          : 'Live vault = legacy fee path. Waterfall / claimFees need a new vault address after Maker greenlights migration.',
+          ? 'On-chain claimFees is enabled for this deployment (UUPS proxy).'
+          : 'claimFees is disabled in config — preview only until the flag is enabled against the product vault.',
       });
       if (confirm) {
         const answer = await confirm({
@@ -680,10 +681,9 @@
         return {
           ok: false,
           previewOnly: true,
-          error: 'Fee claim is product preview on the live grant vault — no transaction was sent. Maker waterfall is not on this bytecode yet.',
+          error: 'Fee claim preview only — no transaction was sent (claimFees disabled in config).',
         };
       }
-      // Future path only (product.onChain.claimFees === true after a new vault is pointed in config).
       const before = sig();
       let hash, claimed = 0;
       for (const r of act) {
@@ -697,7 +697,7 @@
         } catch (e) {
           const msg = e.shortMessage || e.message || String(e);
           if (/ClaimThreshold|ZeroAmount|function|selector|returned no data|execution reverted/i.test(msg)) {
-            throw user('Fee claim failed on this deployment (missing selector or nothing to split). No further claim txs will be attempted.');
+            throw user('Fee claim failed on this deployment (nothing to split, or call reverted). No further claim txs will be attempted.');
           }
           throw e;
         }
