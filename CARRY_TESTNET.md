@@ -153,5 +153,12 @@ UUPS vault with Maker waterfall, partial match, early cover paths, deposit caps,
 
 ### Live settle watch (do not early-exit)
 
-Fully matched **Active** position **#5** on PROXY `0xc801…72bd` — 1 mMSTR / 100 mUSDG, matched **2026-10-10 03:37:51 UTC**, settle after **2026-10-17 03:37:51 UTC**. Details + tx links: [`docs/SETTLE_WATCH.md`](./docs/SETTLE_WATCH.md).
+Fully matched **Active** position **#5** on PROXY `0xc801…72bd` — 1 mMSTR / 100 mUSDG + **1 mUSDG fees**, matched **2026-10-10 03:37:51 UTC**, settle after **2026-10-17 03:37:51 UTC**. Impl `v2.1-maker-fixes` (`0x13C365…`). Details + tx links: [`docs/SETTLE_WATCH.md`](./docs/SETTLE_WATCH.md).
+
+### Wallet early-exit path (E2E)
+
+1. Connect MetaMask on 46630; deposit junior MSTR + match with senior USDG.
+2. Before term: Withdraw stock → confirm dialog → choose **Wallet USDG** (default).
+3. UI calls `previewEarlyExit(id, 0)`, then **approves mUSDG** to the vault with headroom if `coverUsdg > 0`, then `earlyExit(id, 0)`.
+4. Idle Carry / SellShares skip the wallet approve; SellShares uses mode `2`.
 

@@ -7,7 +7,7 @@ on Robinhood Chain Testnet **46630** (no DualPool, no Morpho sleeve).
 
 **Fee waterfall (source of truth):** [`MAKER_FEE_WATERFALL.md`](./MAKER_FEE_WATERFALL.md).
 That doc supersedes older claimFees / flat 4%-pace / protocol-cut-on-fee-in
-product stories. Live vault bytecode may still follow the old split until redeploy.
+product stories. Live UUPS product PROXY now follows the Maker Morpho-rate waterfall.
 
 ---
 
@@ -66,7 +66,7 @@ session bands stay in config under `product.researchRanges` for keeper/DualPool 
 
 | Piece | Testnet 46630 today | Product intent |
 | --- | --- | --- |
-| Vault | `LeveredLpVault` custody + 7d term; fee-in still cuts ~20% to backstop; early exit / settle still use fixed 4% pace / 5% borrow | Maker waterfall at claim/exit/settle only; Morpho-rate senior floor |
+| Vault | Legacy v1 grant vault still on fixed borrow/cut paths | Live UUPS: Maker waterfall at claim/exit/settle; Morpho-rate senior floor (3.9%, ≤5%); settle does not sell junior MSTR |
 | Pool | Fee donor / inventory held in vault | DualPool hook + keeper `remark()` |
 | Morpho | UI display rate from config (Steakhouse native supply stub) | Steakhouse USDG sleeve on matched/idle USDG |
 | Ranges / recenter | Display-only | Keeper + hook on mainnet |

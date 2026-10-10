@@ -8,14 +8,17 @@ Live 7-day **fully matched / Active** position on the product vault for end-of-t
 | --- | --- |
 | Network | Robinhood Chain Testnet **46630** |
 | Vault PROXY (product CA) | [`0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd`](https://explorer.testnet.chain.robinhood.com/address/0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd) |
+| Implementation | [`0x13C365D87f33Be5F51df934c691382dEF3D2ff2A`](https://explorer.testnet.chain.robinhood.com/address/0x13C365D87f33Be5F51df934c691382dEF3D2ff2A) (`version` = `v2.1-maker-fixes`) |
 | **positionId** | **5** |
 | State | Active (`isMatched` + `isFullyMatched` = true; `settled` = false) |
 | Junior wallet (owner) | [`0xcA44F2dbB2D43b93b39F01B88E0f0e2966983c57`](https://explorer.testnet.chain.robinhood.com/address/0xcA44F2dbB2D43b93b39F01B88E0f0e2966983c57) |
 | Senior wallet (lender) | same deployer address (pool senior) |
 | Junior amount (MSTR) | `1e18` (1 mMSTR) |
 | Senior principal (USDG) | `100e18` (100 mUSDG) — full match at oracle `$100` |
+| **Gross LP fees on position** | `1e18` (1 mUSDG) — raw fee-in, no cut until settle |
 | `term` | `604800` (7 days) |
-| `morphoRateWad` | `0.039e18` (3.9%) |
+| `morphoRateWad` (global) | `0.039e18` (3.9%) |
+| `morphoRateLocked` on #5 | `0` (opened before rate-lock upgrade → uses live `morphoRateWad`) |
 | `matchedAt` / `openedAt` | `1791603471` → **2026-10-10 03:37:51 UTC** |
 | **Expected settle after** | `1792208271` → **2026-10-17 03:37:51 UTC** |
 
@@ -29,7 +32,10 @@ Live 7-day **fully matched / Active** position on the product vault for end-of-t
 | approve USDG | [`0xfa0952e7b25e885391c767dfd22a4d089b27ce07af7f3469d63ee820503ddfa4`](https://explorer.testnet.chain.robinhood.com/tx/0xfa0952e7b25e885391c767dfd22a4d089b27ce07af7f3469d63ee820503ddfa4) |
 | `depositSenior(100e18)` | [`0x97a42865623d02909ad823beee44b9e7a6216edf00aecd560c27f7c5a71022da`](https://explorer.testnet.chain.robinhood.com/tx/0x97a42865623d02909ad823beee44b9e7a6216edf00aecd560c27f7c5a71022da) |
 | `depositJunior(1e18)` → position **5** | [`0x8834b69b4631da3ceded13c1472591388a0af1c63606f96edd13869fa61b422a`](https://explorer.testnet.chain.robinhood.com/tx/0x8834b69b4631da3ceded13c1472591388a0af1c63606f96edd13869fa61b422a) |
+| UUPS upgrade → `v2.1-maker-fixes` | [`0xb77cef0aa5584ba850c3f02e05d1845280caf20e6e90880376a7235c6398434a`](https://explorer.testnet.chain.robinhood.com/tx/0xb77cef0aa5584ba850c3f02e05d1845280caf20e6e90880376a7235c6398434a) |
+| `setDepositCaps($25k/$2.5k)` | [`0x8a92de75abfc410a6c0948bc0f64008790637173094d34aff9cf6e122f6c3fa6`](https://explorer.testnet.chain.robinhood.com/tx/0x8a92de75abfc410a6c0948bc0f64008790637173094d34aff9cf6e122f6c3fa6) |
+| `payFee` 1 mUSDG onto #5 | [`0x010f29cd78e9f739915c021500fcdbd8bd11a55d63f4b95884878f39df1dedac`](https://explorer.testnet.chain.robinhood.com/tx/0x010f29cd78e9f739915c021500fcdbd8bd11a55d63f4b95884878f39df1dedac) |
 
 ### After maturity
 
-Anyone may call `settle(5)` once `block.timestamp >= openedAt + term`. Proceeds go to junior + senior accounting — not the caller. Until then, `TermNotElapsed` is expected.
+Anyone may call `settle(5)` once `block.timestamp >= openedAt + term`. Proceeds go to junior + senior accounting — not the caller. Junior keeps all MSTR; unpaid Morpho accrual (if any after fees) comes from treasury/`backstop` only. Until then, `TermNotElapsed` is expected.

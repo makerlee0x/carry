@@ -18,7 +18,7 @@
     "rpcUrl": "https://rpc.testnet.chain.robinhood.com",
     "explorerUrl": "https://explorer.testnet.chain.robinhood.com",
     "vault": "0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd",
-    "vaultImplementation": "0xe8a8406d860aCd8c348377D5342bCAcD5770D84b",
+    "vaultImplementation": "0x13C365D87f33Be5F51df934c691382dEF3D2ff2A",
     "vaultUpgradeability": "UUPS",
     "deployBlock": 131985800,
     "mstr": "0x762019309B536bbb89577422FaaFBeC9659f8728",
@@ -45,6 +45,7 @@
     "juniorTargetAprPct": 5,
     "seniorTargetAprPct": 12,
     "earlyExitFloorAprPct": 3.9,
+    "_earlyExitFloorNote": "Aligns with morphoFloorAprPct / morphoRateWad 3.9% (not legacy 4% coupon).",
     "claimFeeBps": 50,
     "ranges": {
       "MSTR": {

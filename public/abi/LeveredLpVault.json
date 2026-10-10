@@ -947,6 +947,16 @@
         "name": "boosted",
         "type": "bool",
         "internalType": "bool"
+      },
+      {
+        "name": "unpaidSeniorAccrual",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "morphoRateLocked",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
     "stateMutability": "view"
@@ -1240,6 +1250,35 @@
       }
     ],
     "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "previewSeniorAccrual",
+    "inputs": [
+      {
+        "name": "principal",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "elapsed",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "rateWad",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "pure"
   },
   {
     "type": "function",

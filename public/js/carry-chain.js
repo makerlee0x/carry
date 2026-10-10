@@ -182,7 +182,7 @@
     const ids = [...new Set(logs.map((l) => l.args.positionId))];
     const raw = await Promise.all(ids.map(async (id) => {
       const [p, matched] = await Promise.all([rd('positions', [id]), rd('isMatched', [id])]);
-      // v2 Position: owner,mstr,senior,targetSenior,entry,fee,openedAt,lastFeeSplitAt,settled,boosted
+      // v2 Position: owner,mstr,senior,targetSenior,entry,fee,openedAt,lastFeeSplitAt,settled,boosted[,unpaid,rateLocked]
       // v1 Position: owner,mstr,senior,entry,fee,openedAt,settled
       const v2 = p.length >= 10;
       return {
@@ -555,34 +555,37 @@
       const steps = [[open, 'withdrawUnmatched', 'Confirm the withdrawal in MetaMask…'], [ready, 'settle', 'Confirm settlement in MetaMask…']];
       if (all && act.length) {
         const coverOn = onChainFlag('earlyCoverPaths');
-        const prev = await Promise.all(act.map((r) => {
+        const previewMode = async (mode) => Promise.all(act.map((r) => {
           if (coverOn) {
-            return pub.readContract({ address: cfg.vault, abi: vaultAbi, functionName: 'previewEarlyExit', args: [r.id, 2] })
+            return pub.readContract({ address: cfg.vault, abi: vaultAbi, functionName: 'previewEarlyExit', args: [r.id, mode] })
               .catch(() => pub.readContract({ address: cfg.vault, abi: vaultAbi, functionName: 'previewEarlyExit', args: [r.id] }));
           }
           return pub.readContract({ address: cfg.vault, abi: vaultAbi, functionName: 'previewEarlyExit', args: [r.id] });
         }));
-        const sum = (k) => prev.reduce((x, p) => x + num(p[k] != null ? p[k] : 0), 0);
+        // Dialog defaults to Wallet cover; preview that mode (not always SellShares).
+        let prev = await previewMode(coverOn ? 0 : 2);
+        const sum = (list, k) => list.reduce((x, p) => x + num(p[k] != null ? p[k] : 0), 0);
         const fs = (n) => (n === 0 ? '0' : n < 0.0001 ? n.toFixed(9).replace(/0+$/, '') : fx(n));
         const first = Math.min(...act.map((r) => r.openedAt));
         const seniorBook = act.reduce((x, r) => x + r.senior, 0);
         const grossFees = act.reduce((x, r) => x + r.fee, 0);
-        const accrual = sum('accrual') || sum('couponOwed');
-        const sold = sum('mstrSold');
+        const accrual = sum(prev, 'accrual') || sum(prev, 'couponOwed');
+        const soldIfShares = sum(await previewMode(2), 'mstrSold');
         const w = waterfallPreview({ seniorPrincipal: seniorBook, morphoRate: morphoRateFromCfg(), elapsedSec: Math.max(now - first, 0), gross: grossFees });
         const liveNote = coverOn
           ? 'Live UUPS vault — Maker waterfall + user-chosen cover (Wallet → Idle Carry → SellShares).'
           : 'Product preview — enable product.onChain.earlyCoverPaths against the UUPS proxy to send cover-mode earlyExit.';
         const intro = `Fee split runs at early exit (not on fee-in). Applies to ${fx(tot(act))} MSTR still inside its 7-day term.` + (freeTotal > 0 ? ` The other ${fx(freeTotal)} MSTR leaves with no fee.` : '') +
-          ' Choose how to cover senior accrual if fees are short.';
+          ' Choose how to cover senior accrual if fees are short. Wallet USDG is the default — MetaMask will ask you to approve USDG if that path needs a pull.';
         const rows = waterfallRows(w, { liveNote }).concat([
           { k: 'Senior accrual owed', v: `${fs(accrual)} USDG` },
-          { k: 'Stock sold to cover (if SellShares)', v: `${fs(sold)} MSTR` + (sold > 0 ? ` (≈ $${fs(sold * S.vault.price)})` : '') },
-          { k: 'Stock returned to you', v: `${fs(sum('mstrReturned'))} MSTR` },
-          { k: 'Fees returned to you', v: `${fs(sum('juniorLeftoverFees'))} USDG` },
+          { k: 'Wallet / Idle cover (if selected)', v: `${fs(sum(prev, 'coverUsdg'))} USDG` },
+          { k: 'Stock sold to cover (if SellShares)', v: `${fs(soldIfShares)} MSTR` + (soldIfShares > 0 ? ` (≈ $${fs(soldIfShares * S.vault.price)})` : '') },
+          { k: 'Stock returned (Wallet/Idle path)', v: `${fs(sum(prev, 'mstrReturned'))} MSTR` },
+          { k: 'Fees returned to you', v: `${fs(sum(prev, 'juniorLeftoverFees'))} USDG` },
         ]);
         const payOptions = [
-          { id: 'wallet', label: 'Wallet USDG', hint: 'Default first. Pay the shortfall from USDG in your wallet.' },
+          { id: 'wallet', label: 'Wallet USDG', hint: 'Default first. Pay the shortfall from USDG in your wallet (approve + pull).' },
           { id: 'idle', label: 'Idle USDG on Carry', hint: 'Use unmatched USDG you already deposited on Carry.' },
           { id: 'sell', label: 'Sell from position', hint: 'Sell junior shares from this position to cover the rest.' },
         ];
@@ -590,6 +593,21 @@
         if (!answer || answer.ok === false) throw user('Early exit cancelled. No funds were moved.');
         const payWith = answer.payWith || 'wallet';
         const coverMode = payWith === 'wallet' ? 0 : payWith === 'idle' ? 1 : 2;
+        // Re-preview for the mode the user actually picked (cover amounts differ by path).
+        prev = await previewMode(coverOn ? coverMode : 2);
+        if (coverOn && coverMode === 0) {
+          const need = prev.reduce((x, p) => x + (p.coverUsdg != null ? BigInt(p.coverUsdg) : 0n), 0n);
+          if (need > 0n) {
+            // Headroom for accrual drift between preview and confirm (~1% + 1e12 wei dust).
+            const approveAmt = need + need / 100n + 10n ** 12n;
+            const bal = await pub.readContract({ address: cfg.usdg, abi: ERC20(), functionName: 'balanceOf', args: [S.account] });
+            if (bal < need) throw user(`Not enough mUSDG in your wallet to cover early-exit shortfall. Need ~${num(need)} USDG.`);
+            const have = await pub.readContract({ address: cfg.usdg, abi: ERC20(), functionName: 'allowance', args: [S.account, cfg.vault] });
+            if (have < need) {
+              await send({ address: cfg.usdg, abi: ERC20(), functionName: 'approve', args: [cfg.vault, approveAmt] }, onStep, 'Approve mUSDG cover in MetaMask…');
+            }
+          }
+        }
         const label = payWith === 'wallet' ? 'Confirm early exit in MetaMask (wallet USDG cover)…' : payWith === 'idle' ? 'Confirm early exit in MetaMask (Idle Carry USDG cover)…' : 'Confirm early exit in MetaMask (sell from position)…';
         steps.push([act, coverOn ? 'earlyExitCover' : 'earlyExit', label, coverMode]);
       } else if (all && ready.length) {

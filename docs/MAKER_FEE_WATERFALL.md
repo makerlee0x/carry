@@ -2,9 +2,9 @@
 
 Locked with Maker Lee (Oct 5, 2026). This supersedes older docs that describe a
 flat **20% protocol cut on every fee-in**, a fixed **4% early-exit coupon**, and
-**claimFees skimming surplus above a 4% pace**. Those remain accurate as
-**live testnet vault bytecode** behavior until a redeploy; they are no longer
-the product rule.
+**claimFees skimming surplus above a 4% pace**. The live UUPS product PROXY
+implements this Morpho-rate waterfall (rate stub **3.9%**, owner cap **≤5%**,
+locked per position at first match).
 
 Product narrative: [`MAKER_V1_NOTES.md`](./MAKER_V1_NOTES.md).  
 On-chain today: [`CARRY_CONTRACT.md`](../CARRY_CONTRACT.md) + [`CARRY_TESTNET.md`](../CARRY_TESTNET.md).
@@ -80,8 +80,8 @@ junior        = 8.44
 senior total  = 13.04
 ```
 
-Use this as the fee-preview reference in the UI. Live vault bytecode may still
-use the old 4% pace / flat cut until redeploy — preview copy must say so.
+Use this as the fee-preview reference in the UI. Live rate on testnet is the
+**3.9%** Morpho stub (sheet math above uses 4% for round numbers).
 
 ---
 
@@ -95,9 +95,14 @@ use the old 4% pace / flat cut until redeploy — preview copy must say so.
 
 ---
 
-## On-chain status (2026-10-10)
+## On-chain status
 
-**Landed on testnet PROXY** `0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd` (UUPS; impl `0xe8a840…`): Maker waterfall at claimFees/earlyExit/settle, partial match, early cover chooser, Boosted treasury-tier stub.
+**Landed on testnet PROXY** `0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd` (UUPS): Maker waterfall at claimFees/earlyExit/settle, unpaid accrual carry, partial-match accrual checkpoint, no match-after-term, settle without selling junior MSTR, early cover chooser, Boosted treasury-tier stub, deposit caps. Implementation address in `public/config.json`.
+
+### Early cover vs settle
+
+- **Early exit:** user chooses Wallet / Idle Carry / SellShares when fees &lt; accrual.
+- **Settle (maturity):** junior keeps all remaining MSTR; unpaid accrual covered from treasury/`backstop` only (no share sale).
 
 ## Explicitly later
 

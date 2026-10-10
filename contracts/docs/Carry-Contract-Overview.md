@@ -52,13 +52,12 @@ Inventory is held inside the vault. `mark()` reports 2× equity vs an unlevered 
 
 ## 3. Lifecycle
 
-1. **Deposit stock** — `depositJunior(mstrAmount)`. If no idle USDG → Open queue. If idle USDG ≥ oracle notional → match immediately (Active, `openedAt = now`).
-2. **Lend USDG** — `depositSenior(amount)`. Credits senior principal; FIFO-matches Open juniors; each match sets `seniorPrincipal`, `entryPriceWad`, `openedAt`, increases `reservedSenior`.
-3. **Active** — Position earns when matched. Timer = `term` from match.
-4. **Fee accrual** — Caller pushes USDG via `accrueLpFee`. `protocolCutWad` → `backstop`; remainder → `position.feeUsdg`.
-5. **Early exit** (junior, before term) — Coupon `principal × 0.04 × elapsed/365`. Fees first; gap → sell MSTR from position; return remaining shares. Releases `reservedSenior`.
-6. **Maturity settle** (after term) — Borrow fee `principal × borrowApr × term/365`. Waterfall: position fees → backstop → minimum MSTR. Junior gets leftover MSTR + leftover fees.
-7. **Lender replace / exit** — `freePrincipal(senior) = seniorPrincipal × freeSenior / totalSeniorPrincipal`. Extra senior deposits raise idle capacity. Matched size unlocks on early exit/settle when `reservedSenior` drops.
+1. **Deposit stock** — `depositJunior(mstrAmount)`. Partial match OK; residual stays in Open queue.
+2. **Lend USDG** — `depositSenior(amount)`. FIFO-matches Open juniors; first match locks `morphoRateLocked` and starts the term clock. No further match after term.
+3. **Active** — Timer = `term` from first match. Accrual uses locked Morpho rate (≤5%).
+4. **Fee accrual** — `accrueLpFee` pulls raw USDG onto the position (no cut on fee-in).
+5. **claimFees / early exit / settle** — Maker waterfall only here. Unpaid senior accrual (fees &lt; accrual) carries on the position. Early exit cover: Wallet → Idle Carry → SellShares. **Settle never sells junior MSTR** (backstop/treasury only).
+6. **Lender replace / exit** — `freePrincipal` pro-rata of idle capacity; matched size unlocks when `reservedSenior` drops.
 
 ---
 
@@ -91,15 +90,16 @@ Inventory is held inside the vault. `mark()` reports 2× equity vs an unlevered 
 
 | Function | Who | Preconditions | Effects / funds |
 | --- | --- | --- | --- |
-| `accrueLpFee(positionId, amount)` | anyone | Matched, not settled | Pulls exact USDG; cut → backstop; rest → position |
+| `accrueLpFee(positionId, amount)` | anyone | Matched, not settled | Pulls exact USDG raw onto position (no cut) |
+| `claimFees(positionId)` | junior | Matched, before term | Maker waterfall; unpaid accrual carries forward |
 | `fundBackstop(amount)` | anyone | amount > 0 | Pulls USDG into `backstop` |
 
 ### Settlement / views
 
 | Function | Who | Preconditions | Effects / funds |
 | --- | --- | --- | --- |
-| `settle(positionId)` | anyone | Matched, term elapsed, not settled | Maturity waterfall; pushes to junior; credits senior accumulators |
-| `previewEarlyExit` / `previewEarlyExitCoupon` | view | — | Coupon + share sale preview |
+| `settle(positionId)` | anyone | Matched, term elapsed, not settled | Maturity waterfall; **no MSTR sold**; shortfall from backstop |
+| `previewEarlyExit` / `previewEarlyExitCoupon` | view | — | Accrual + cover preview (mode-aware) |
 | `previewBorrowFee` / `previewSeniorAssets` / `previewMstrToCover` | view | — | Quoting helpers |
 | `freeSenior` / `freePrincipal` / `isMatched` / `mark` | view | — | Capacity / MTM |
 | `joinPool(bytes)` | anyone | — | Reverts `ExternalLpForbidden` |

@@ -26,7 +26,8 @@ import {IPriceOracle} from "./interfaces/IPriceOracle.sol";
 contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, ReentrancyGuardUpgradeable {
     uint256 public constant WAD = 1e18;
     uint256 public constant YEAR = 365 days;
-    uint256 public constant MAX_MORPHO_RATE_WAD = 0.25e18;
+    /// @notice Owner-settable Morpho rate cap (docs: fixed ≤5%). Positions lock rate at first match.
+    uint256 public constant MAX_MORPHO_RATE_WAD = 0.05e18;
     uint256 public constant MAX_TREASURY_CUT_WAD = 0.2e18;
     uint256 public constant SENIOR_PERF_CUT_WAD = 0.2e18;
     uint256 public constant DEFAULT_TREASURY_CUT_WAD = 0.2e18;
@@ -59,6 +60,10 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         uint64 lastFeeSplitAt;
         bool settled;
         bool boosted;
+        /// @notice Unpaid senior Morpho accrual when a claim/split paid less than accrual (carries forward).
+        uint256 unpaidSeniorAccrual;
+        /// @notice Morpho rate WAD locked at first match; 0 = legacy / use live morphoRateWad.
+        uint256 morphoRateLocked;
     }
 
     struct WaterfallSplit {
@@ -382,7 +387,9 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
             openedAt: 0,
             lastFeeSplitAt: 0,
             settled: false,
-            boosted: boostStaked[msg.sender]
+            boosted: boostStaked[msg.sender],
+            unpaidSeniorAccrual: 0,
+            morphoRateLocked: 0
         });
         _enqueueOpen(positionId);
         totalJuniorUsdg += notional;
@@ -456,7 +463,7 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         uint256 gross = position.feeUsdg;
         if (gross == 0) revert ZeroGross();
         result.elapsed = _elapsedSinceSplit(position);
-        WaterfallSplit memory split = previewWaterfall(gross, position.seniorPrincipal, result.elapsed, position.boosted);
+        WaterfallSplit memory split = _waterfallFromGross(gross, _accrualFor(position), position.boosted);
         result.accrual = split.accrual;
         result.seniorFloor = split.seniorFloor;
         result.treasury = split.treasury;
@@ -472,10 +479,8 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         if (position.seniorPrincipal == 0) revert NotMatched();
         if (block.timestamp < uint256(position.openedAt) + term) revert TermNotElapsed();
 
-        uint256 price = _price();
-        uint256 elapsed = _elapsedSinceSplit(position);
         uint256 gross = position.feeUsdg;
-        WaterfallSplit memory split = previewWaterfall(gross, position.seniorPrincipal, elapsed, position.boosted);
+        WaterfallSplit memory split = _waterfallFromGross(gross, _accrualFor(position), position.boosted);
 
         result.accrual = split.accrual;
         result.seniorFloor = split.seniorFloor;
@@ -483,26 +488,23 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         result.seniorPerf = split.seniorPerf;
         result.juniorYield = split.junior;
 
+        // Maturity: never sell junior MSTR. Cover unpaid accrual from treasury/backstop only;
+        // residual shortfall is recorded (seniors absorb via feeShortfallUsdg accounting).
         uint256 shortfall = split.accrual > split.seniorFloor ? split.accrual - split.seniorFloor : 0;
         uint256 fromBs = backstop < shortfall ? backstop : shortfall;
         result.fromBackstop = fromBs;
         result.coverUsdg = fromBs;
         shortfall -= fromBs;
-
-        if (shortfall > 0) {
-            result.mstrSold = previewMstrToCover(shortfall, price);
-            if (result.mstrSold > position.mstrAmount) {
-                result.mstrSold = position.mstrAmount;
-                result.feeShortfallUsdg = shortfall - _usdgValue(result.mstrSold, price);
-            }
-        }
-        result.mstrKept = position.mstrAmount - result.mstrSold;
+        result.feeShortfallUsdg = shortfall;
+        result.mstrSold = 0;
+        result.mstrKept = position.mstrAmount;
 
         address junior = position.owner;
         uint256 matchedPrincipal = position.seniorPrincipal;
 
         position.settled = true;
         position.feeUsdg = 0;
+        position.unpaidSeniorAccrual = 0;
         position.mstrAmount = result.mstrKept;
         backstop = backstop - fromBs + split.treasury;
         reservedSenior -= matchedPrincipal;
@@ -512,9 +514,6 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         uint256 seniorUsdg = split.seniorTotal + fromBs;
         if (seniorUsdg > 0 && totalSeniorPrincipal > 0) {
             accYieldPerPrincipal += seniorUsdg * WAD / totalSeniorPrincipal;
-        }
-        if (result.mstrSold > 0 && totalSeniorPrincipal > 0) {
-            accMstrPerPrincipal += result.mstrSold * WAD / totalSeniorPrincipal;
         }
 
         emit WaterfallApplied(
@@ -551,7 +550,7 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         result.elapsed = _elapsedSinceSplit(position);
         result.coverMode = mode;
         WaterfallSplit memory split =
-            previewWaterfall(position.feeUsdg, position.seniorPrincipal, result.elapsed, position.boosted);
+            _waterfallFromGross(position.feeUsdg, _accrualFor(position), position.boosted);
         result.accrual = split.accrual;
         result.seniorFloor = split.seniorFloor;
         result.treasury = split.treasury;
@@ -578,6 +577,10 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         return principal * morphoRateWad * elapsed / (WAD * YEAR);
     }
 
+    function previewSeniorAccrual(uint256 principal, uint256 elapsed, uint256 rateWad) public pure returns (uint256) {
+        return principal * rateWad * elapsed / (WAD * YEAR);
+    }
+
     function previewEarlyExitCoupon(uint256 principal, uint256 elapsed) public view returns (uint256) {
         return previewSeniorAccrual(principal, elapsed);
     }
@@ -587,17 +590,7 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         view
         returns (WaterfallSplit memory s)
     {
-        s.accrual = previewSeniorAccrual(seniorPrincipal_, elapsed);
-        s.seniorFloor = gross < s.accrual ? gross : s.accrual;
-        uint256 left = gross - s.seniorFloor;
-        uint256 cut = _treasuryCut(boosted);
-        uint256 treasuryCap = gross * cut / WAD;
-        s.treasury = left < treasuryCap ? left : treasuryCap;
-        left -= s.treasury;
-        uint256 perfCap = gross * SENIOR_PERF_CUT_WAD / WAD;
-        s.seniorPerf = left < perfCap ? left : perfCap;
-        s.junior = left - s.seniorPerf;
-        s.seniorTotal = s.seniorFloor + s.seniorPerf;
+        return _waterfallFromGross(gross, previewSeniorAccrual(seniorPrincipal_, elapsed), boosted);
     }
 
     function positionState(uint256 positionId) public view returns (PositionState) {
@@ -753,6 +746,7 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
 
         position.settled = true;
         position.feeUsdg = 0;
+        position.unpaidSeniorAccrual = 0;
         reservedSenior -= matchedPrincipal;
         _dequeueOpen(positionId);
         _releaseJuniorCap(junior, positionId);
@@ -774,12 +768,13 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
     }
 
     /// @dev Split position fees via Maker waterfall; credit seniors + treasury; clear feeUsdg.
+    ///      Unpaid accrual (accrual − seniorFloor) is stored on the position for the next claim/exit/settle.
     function _splitAndClearFees(uint256 positionId) internal returns (WaterfallSplit memory split) {
         Position storage position = positions[positionId];
         uint256 gross = position.feeUsdg;
-        uint256 elapsed = _elapsedSinceSplit(position);
-        split = previewWaterfall(gross, position.seniorPrincipal, elapsed, position.boosted);
+        split = _waterfallFromGross(gross, _accrualFor(position), position.boosted);
         position.feeUsdg = 0;
+        position.unpaidSeniorAccrual = split.accrual - split.seniorFloor;
         backstop += split.treasury;
         if (split.seniorTotal > 0 && totalSeniorPrincipal > 0) {
             accYieldPerPrincipal += split.seniorTotal * WAD / totalSeniorPrincipal;
@@ -787,6 +782,44 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         emit WaterfallApplied(
             positionId, gross, split.accrual, split.seniorFloor, split.treasury, split.seniorPerf, split.junior
         );
+    }
+
+    function _waterfallFromGross(uint256 gross, uint256 accrual, bool boosted)
+        internal
+        view
+        returns (WaterfallSplit memory s)
+    {
+        s.accrual = accrual;
+        s.seniorFloor = gross < accrual ? gross : accrual;
+        uint256 left = gross - s.seniorFloor;
+        uint256 cut = _treasuryCut(boosted);
+        uint256 treasuryCap = gross * cut / WAD;
+        s.treasury = left < treasuryCap ? left : treasuryCap;
+        left -= s.treasury;
+        uint256 perfCap = gross * SENIOR_PERF_CUT_WAD / WAD;
+        s.seniorPerf = left < perfCap ? left : perfCap;
+        s.junior = left - s.seniorPerf;
+        s.seniorTotal = s.seniorFloor + s.seniorPerf;
+    }
+
+    function _rateFor(Position storage position) internal view returns (uint256) {
+        return position.morphoRateLocked != 0 ? position.morphoRateLocked : morphoRateWad;
+    }
+
+    /// @dev unpaid gap + principal × locked rate × elapsed since last split.
+    function _accrualFor(Position storage position) internal view returns (uint256) {
+        uint256 elapsed = _elapsedSinceSplit(position);
+        return position.unpaidSeniorAccrual
+            + position.seniorPrincipal * _rateFor(position) * elapsed / (WAD * YEAR);
+    }
+
+    /// @dev On incremental match, bank accrual for currently matched principal so new capital is not backdated.
+    function _checkpointMatchAccrual(Position storage position) internal {
+        uint256 elapsed = _elapsedSinceSplit(position);
+        if (elapsed == 0 || position.seniorPrincipal == 0) return;
+        position.unpaidSeniorAccrual +=
+            position.seniorPrincipal * _rateFor(position) * elapsed / (WAD * YEAR);
+        position.lastFeeSplitAt = uint64(block.timestamp);
     }
 
     /// @dev Burn caller's senior principal against global idle USDG to fund early-exit cover.
@@ -816,10 +849,12 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
     }
 
     /// @dev Match min(freeSenior, residual). Keeps position in open queue if still short.
+    ///      Does not match after term once the clock has started (openedAt set).
     function _tryMatch(uint256 positionId) internal returns (bool matched) {
         Position storage position = positions[positionId];
         if (position.owner == address(0) || position.settled) return false;
         if (position.seniorPrincipal >= position.targetSenior) return false;
+        if (position.openedAt != 0 && block.timestamp >= uint256(position.openedAt) + term) return false;
 
         uint256 free = freeSenior();
         if (free == 0) return false;
@@ -833,6 +868,9 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
             position.entryPriceWad = price;
             position.openedAt = uint64(block.timestamp);
             position.lastFeeSplitAt = uint64(block.timestamp);
+            position.morphoRateLocked = morphoRateWad;
+        } else {
+            _checkpointMatchAccrual(position);
         }
 
         position.seniorPrincipal += delta;
