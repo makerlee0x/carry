@@ -17,14 +17,20 @@
     "chainName": "Robinhood Chain Testnet",
     "rpcUrl": "https://rpc.testnet.chain.robinhood.com",
     "explorerUrl": "https://explorer.testnet.chain.robinhood.com",
-    "vault": "0x72A053120f03B10c5506d2325f92F59B0FfC36c8",
-    "deployBlock": 126757000,
+    "vault": "0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd",
+    "vaultImplementation": "0xe8a8406d860aCd8c348377D5342bCAcD5770D84b",
+    "vaultUpgradeability": "UUPS",
+    "deployBlock": 131985800,
     "mstr": "0x762019309B536bbb89577422FaaFBeC9659f8728",
     "usdg": "0x25030Bff74764aD72b912276a603717DB1C00644",
     "oracle": "0xc74Af7E23A2B4b46B5Fe05E5c7c5ec0BB5dbc5B7",
     "feePool": "0xa4122524aD97Aab05cAC7F99c04Cd060D02F0771",
     "vaultOwner": "0xcA44F2dbB2D43b93b39F01B88E0f0e2966983c57",
-    "decimals": 18
+    "decimals": 18,
+    "vaultV1GrantReference": "0x72A053120f03B10c5506d2325f92F59B0FfC36c8",
+    "vaultV1Note": "Non-upgradeable v1 grant reference vault. Leave in place; not the product CA.",
+    "abandonedTestProxy": "0x0e4e59b1eb9bA2EE1630ccf720Ea7bC071d21522",
+    "abandonedTestProxyNote": "First UUPS proxy from deploy session; contaminated by lost E2E keys. Superseded by chain.vault."
   },
   "analytics": {
     "simulate": true,
@@ -38,7 +44,7 @@
     "usdgIdleApyPct": 3.9,
     "juniorTargetAprPct": 5,
     "seniorTargetAprPct": 12,
-    "earlyExitFloorAprPct": 4,
+    "earlyExitFloorAprPct": 3.9,
     "claimFeeBps": 50,
     "ranges": {
       "MSTR": {
@@ -50,7 +56,7 @@
         "source": "maker"
       }
     },
-    "researchRangesNote": "Research uses session-vol bands (\u00b11\u00d7 five-session); UI follows Maker until he picks.",
+    "researchRangesNote": "Research uses session-vol bands (±1× five-session); UI follows Maker until he picks.",
     "recenter": {
       "termDays": 7,
       "oracleDriftFromCenterPct": 80
@@ -58,7 +64,7 @@
     "caps": {
       "totalUsd": 25000,
       "perWalletUsd": 2500,
-      "enforcedOnChain": false
+      "enforcedOnChain": true
     },
     "inventoryBandPct": 5,
     "baseFeeBps": 20,
@@ -71,19 +77,19 @@
       "weekend": 100
     },
     "morphoFloorAprPct": 3.9,
-    "seniorBorrowAprPctOnChain": 5,
+    "seniorBorrowAprPctOnChain": 3.9,
     "morphoRateSource": "steakhouse-native-supply",
     "morphoRateLabel": "Steakhouse Morpho native supply",
-    "morphoRateNote": "Config stub of Steakhouse Morpho native supply APY (not Merkl rewards). Dynamic live rate wiring comes later.",
+    "morphoRateNote": "On-chain morphoRateWad (owner/keeper settable stub). Dynamic live rate wiring comes later.",
     "usdgIdleApyNote": "Testnet Idle USDG Morpho APY stub (same Steakhouse native supply figure for now).",
     "onChain": {
-      "_comment": "What the live grant vault bytecode (chain.vault) actually supports. False = UI preview / soft-fail only — do not send money txs that assume Maker waterfall.",
-      "claimFees": false,
-      "previewClaimFees": false,
-      "makerWaterfall": false,
-      "earlyCoverPaths": false,
-      "partialMatch": false,
-      "boostedStake": false
+      "_comment": "Live product vault = UUPS proxy chain.vault (v2). All Maker paths enabled.",
+      "claimFees": true,
+      "previewClaimFees": true,
+      "makerWaterfall": true,
+      "earlyCoverPaths": true,
+      "partialMatch": true,
+      "boostedStake": true
     }
   }
 }

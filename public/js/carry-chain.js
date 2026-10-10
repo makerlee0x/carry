@@ -87,7 +87,7 @@
   const num = (v, d = 18) => Number(viem.formatUnits(v, d));
   const round = (n, dp) => Number(n.toFixed(dp));
 
-  // Maker fee waterfall preview (product truth). Live vault bytecode may still use the old 4% pace /
+  // Maker fee waterfall preview (product truth). Live UUPS vault applies this on-chain;
   // fee-in cut until redeploy — callers must say so in UI copy. Split runs only at claim/exit/settle.
   function waterfallPreview({ seniorPrincipal, morphoRate, elapsedSec, gross }) {
     const year = 365 * 86400;
@@ -148,8 +148,10 @@
   // ---- Public vault data ---------------------------------------------------
   async function readVault() {
     const rd = (functionName, args = []) => pub.readContract({ address: cfg.vault, abi: vaultAbi, functionName, args });
+    // v2 UUPS vault uses morphoRateWad; fall back to borrowAprWad for legacy 0x72A0… reads if ever pointed there.
+    const rateP = rd('morphoRateWad').catch(() => rd('borrowAprWad'));
     const [paused, term, apr, price, next, senior, reserved, free, backstop] = await Promise.all([
-      rd('paused'), rd('term'), rd('borrowAprWad'),
+      rd('paused'), rd('term'), rateP,
       pub.readContract({ address: cfg.oracle, abi: viem.parseAbi(['function mstrPriceWad() view returns (uint256)']), functionName: 'mstrPriceWad' }),
       rd('nextPositionId'), rd('totalSeniorPrincipal'), rd('reservedSenior'), rd('freeSenior'), rd('backstop'),
     ]);
@@ -180,7 +182,19 @@
     const ids = [...new Set(logs.map((l) => l.args.positionId))];
     const raw = await Promise.all(ids.map(async (id) => {
       const [p, matched] = await Promise.all([rd('positions', [id]), rd('isMatched', [id])]);
-      return { id, mstr: num(p[1]), senior: num(p[2]), fee: num(p[4]), openedAt: Number(p[5]), settled: p[6], matched };
+      // v2 Position: owner,mstr,senior,targetSenior,entry,fee,openedAt,lastFeeSplitAt,settled,boosted
+      // v1 Position: owner,mstr,senior,entry,fee,openedAt,settled
+      const v2 = p.length >= 10;
+      return {
+        id,
+        mstr: num(p[1]),
+        senior: num(p[2]),
+        fee: num(v2 ? p[5] : p[4]),
+        openedAt: Number(v2 ? p[6] : p[5]),
+        settled: !!(v2 ? p[8] : p[6]),
+        boosted: v2 ? !!p[9] : false,
+        matched,
+      };
     }));
 
     const now = Math.floor(Date.now() / 1000), term = S.vault.termSec, price = S.vault.price;
@@ -539,20 +553,30 @@
       }
       const steps = [[open, 'withdrawUnmatched', 'Confirm the withdrawal in MetaMask…'], [ready, 'settle', 'Confirm settlement in MetaMask…']];
       if (all && act.length) {
-        const prev = await Promise.all(act.map((r) => pub.readContract({ address: cfg.vault, abi: vaultAbi, functionName: 'previewEarlyExit', args: [r.id] })));
-        const sum = (k) => prev.reduce((x, p) => x + num(p[k]), 0);
-        const fs = (n) => (n === 0 ? '0' : n < 0.0001 ? n.toFixed(9).replace(/0+$/, '') : fx(n));   // tiny amounts need more decimals to show up
-        const sold = sum('mstrSold');
+        const coverOn = onChainFlag('earlyCoverPaths');
+        const prev = await Promise.all(act.map((r) => {
+          if (coverOn) {
+            return pub.readContract({ address: cfg.vault, abi: vaultAbi, functionName: 'previewEarlyExit', args: [r.id, 2] })
+              .catch(() => pub.readContract({ address: cfg.vault, abi: vaultAbi, functionName: 'previewEarlyExit', args: [r.id] }));
+          }
+          return pub.readContract({ address: cfg.vault, abi: vaultAbi, functionName: 'previewEarlyExit', args: [r.id] });
+        }));
+        const sum = (k) => prev.reduce((x, p) => x + num(p[k] != null ? p[k] : 0), 0);
+        const fs = (n) => (n === 0 ? '0' : n < 0.0001 ? n.toFixed(9).replace(/0+$/, '') : fx(n));
         const first = Math.min(...act.map((r) => r.openedAt));
         const seniorBook = act.reduce((x, r) => x + r.senior, 0);
         const grossFees = act.reduce((x, r) => x + r.fee, 0);
+        const accrual = sum('accrual') || sum('couponOwed');
+        const sold = sum('mstrSold');
         const w = waterfallPreview({ seniorPrincipal: seniorBook, morphoRate: morphoRateFromCfg(), elapsedSec: Math.max(now - first, 0), gross: grossFees });
-        const liveNote = 'Product preview — Maker waterfall is not on live grant vault bytecode. Live path may still sell from the position.';
+        const liveNote = coverOn
+          ? 'Live UUPS vault — Maker waterfall + user-chosen cover (Wallet → Idle Carry → SellShares).'
+          : 'Product preview — Maker waterfall is not on live grant vault bytecode.';
         const intro = `Fee split runs at early exit (not on fee-in). Applies to ${fx(tot(act))} MSTR still inside its 7-day term.` + (freeTotal > 0 ? ` The other ${fx(freeTotal)} MSTR leaves with no fee.` : '') +
           ' Choose how to cover senior accrual if fees are short.';
         const rows = waterfallRows(w, { liveNote }).concat([
-          { k: 'Live preview · coupon owed (legacy bytecode)', v: `${fs(sum('couponOwed'))} USDG` },
-          { k: 'Live preview · stock sold to cover', v: `${fs(sold)} MSTR` + (sold > 0 ? ` (≈ $${fs(sold * S.vault.price)})` : '') },
+          { k: 'Senior accrual owed', v: `${fs(accrual)} USDG` },
+          { k: 'Stock sold to cover (if SellShares)', v: `${fs(sold)} MSTR` + (sold > 0 ? ` (≈ $${fs(sold * S.vault.price)})` : '') },
           { k: 'Stock returned to you', v: `${fs(sum('mstrReturned'))} MSTR` },
           { k: 'Fees returned to you', v: `${fs(sum('juniorLeftoverFees'))} USDG` },
         ]);
@@ -564,20 +588,30 @@
         const answer = confirm ? await confirm({ title: 'Confirm early exit', intro, rows, confirmLabel: 'Confirm early exit', payOptions, payWith: 'wallet' }) : { ok: true, payWith: 'wallet' };
         if (!answer || answer.ok === false) throw user('Early exit cancelled. No funds were moved.');
         const payWith = answer.payWith || 'wallet';
-        // Live bytecode still sells from the position; payWith is the product choice until Redeploy wires wallet/idle cover.
-        steps.push([act, 'earlyExit', payWith === 'wallet' ? 'Confirm early exit in MetaMask (wallet USDG cover preferred)…' : payWith === 'idle' ? 'Confirm early exit in MetaMask (Idle Carry USDG cover preferred)…' : 'Confirm early exit in MetaMask (sell from position)…']);
+        const coverMode = payWith === 'wallet' ? 0 : payWith === 'idle' ? 1 : 2;
+        const label = payWith === 'wallet' ? 'Confirm early exit in MetaMask (wallet USDG cover)…' : payWith === 'idle' ? 'Confirm early exit in MetaMask (Idle Carry USDG cover)…' : 'Confirm early exit in MetaMask (sell from position)…';
+        steps.push([act, coverOn ? 'earlyExitCover' : 'earlyExit', label, coverMode]);
       } else if (all && ready.length) {
         const first = Math.min(...ready.map((r) => r.openedAt));
         const seniorBook = ready.reduce((x, r) => x + r.senior, 0);
         const grossFees = ready.reduce((x, r) => x + r.fee, 0);
         const w = waterfallPreview({ seniorPrincipal: seniorBook, morphoRate: morphoRateFromCfg(), elapsedSec: Math.max(now - first, 0), gross: grossFees });
-        const intro = 'Fee split runs at settle (not on fee-in). Maker waterfall preview below.';
-        const rows = waterfallRows(w, { liveNote: 'Product preview — live grant vault may still settle with the legacy borrow-fee path.' });
+        const intro = 'Fee split runs at settle (not on fee-in). Maker waterfall below.';
+        const rows = waterfallRows(w, { liveNote: onChainFlag('makerWaterfall') ? 'Live UUPS vault settle uses Maker Morpho-rate waterfall.' : 'Product preview — live grant vault may still settle with the legacy borrow-fee path.' });
         const answer = confirm ? await confirm({ title: 'Confirm settle', intro, rows, confirmLabel: 'Confirm settle' }) : { ok: true };
         if (!answer || answer.ok === false) throw user('Settle cancelled. No funds were moved.');
       }
       let hash;
-      for (const [group, fn, label] of steps) for (const r of group) hash = await send({ address: cfg.vault, abi: vaultAbi, functionName: fn, args: [r.id] }, onStep, label);
+      for (const step of steps) {
+        const [group, fn, label, coverMode] = step;
+        for (const r of group) {
+          if (fn === 'earlyExitCover') {
+            hash = await send({ address: cfg.vault, abi: vaultAbi, functionName: 'earlyExit', args: [r.id, coverMode] }, onStep, label);
+          } else {
+            hash = await send({ address: cfg.vault, abi: vaultAbi, functionName: fn, args: [r.id] }, onStep, label);
+          }
+        }
+      }
       await settleAfterTx(before);
       return { ok: true, hash, msg: all && act.length ? 'Withdrawn. The early-exit fee was applied to the portion still inside its term.' : 'Stock withdrawn to your wallet with no early-exit fee.' };
     } catch (e) { return fail(e); }
@@ -593,8 +627,7 @@
     } catch (e) { return fail(e); }
   }
 
-  // Live grant vault features (product.onChain). Read once from config; default false so missing
-  // selectors never get a MetaMask prompt. Confirmed: 0x72A0… has no claimFees / previewClaimFees.
+  // Live vault features (product.onChain). v2 PROXY enables claimFees/cover/waterfall; v1 0x72A0… does not.
   function onChainFlag(key) {
     const o = productCfg && productCfg.onChain;
     return !!(o && o[key] === true);
