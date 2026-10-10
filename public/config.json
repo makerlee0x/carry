@@ -75,6 +75,15 @@
     "morphoRateSource": "steakhouse-native-supply",
     "morphoRateLabel": "Steakhouse Morpho native supply",
     "morphoRateNote": "Config stub of Steakhouse Morpho native supply APY (not Merkl rewards). Dynamic live rate wiring comes later.",
-    "usdgIdleApyNote": "Testnet Idle USDG Morpho APY stub (same Steakhouse native supply figure for now)."
+    "usdgIdleApyNote": "Testnet Idle USDG Morpho APY stub (same Steakhouse native supply figure for now).",
+    "onChain": {
+      "_comment": "What the live grant vault bytecode (chain.vault) actually supports. False = UI preview / soft-fail only — do not send money txs that assume Maker waterfall.",
+      "claimFees": false,
+      "previewClaimFees": false,
+      "makerWaterfall": false,
+      "earlyCoverPaths": false,
+      "partialMatch": false,
+      "boostedStake": false
+    }
   }
 }

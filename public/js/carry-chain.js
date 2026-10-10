@@ -547,7 +547,7 @@
         const seniorBook = act.reduce((x, r) => x + r.senior, 0);
         const grossFees = act.reduce((x, r) => x + r.fee, 0);
         const w = waterfallPreview({ seniorPrincipal: seniorBook, morphoRate: morphoRateFromCfg(), elapsedSec: Math.max(now - first, 0), gross: grossFees });
-        const liveNote = 'Live vault bytecode may still sell from the position until redeploy. Your cover choice is recorded for the product path.';
+        const liveNote = 'Product preview — Maker waterfall is not on live grant vault bytecode. Live path may still sell from the position.';
         const intro = `Fee split runs at early exit (not on fee-in). Applies to ${fx(tot(act))} MSTR still inside its 7-day term.` + (freeTotal > 0 ? ` The other ${fx(freeTotal)} MSTR leaves with no fee.` : '') +
           ' Choose how to cover senior accrual if fees are short.';
         const rows = waterfallRows(w, { liveNote }).concat([
@@ -572,7 +572,7 @@
         const grossFees = ready.reduce((x, r) => x + r.fee, 0);
         const w = waterfallPreview({ seniorPrincipal: seniorBook, morphoRate: morphoRateFromCfg(), elapsedSec: Math.max(now - first, 0), gross: grossFees });
         const intro = 'Fee split runs at settle (not on fee-in). Maker waterfall preview below.';
-        const rows = waterfallRows(w, { liveNote: 'Live vault may still settle with the old borrow-fee path until redeploy.' });
+        const rows = waterfallRows(w, { liveNote: 'Product preview — live grant vault may still settle with the legacy borrow-fee path.' });
         const answer = confirm ? await confirm({ title: 'Confirm settle', intro, rows, confirmLabel: 'Confirm settle' }) : { ok: true };
         if (!answer || answer.ok === false) throw user('Settle cancelled. No funds were moved.');
       }
@@ -593,7 +593,26 @@
     } catch (e) { return fail(e); }
   }
 
-  /// Claim fees on active matched legs. Product split is Maker waterfall at claim only; live bytecode may still be legacy claimFees.
+  // Live grant vault features (product.onChain). Read once from config; default false so missing
+  // selectors never get a MetaMask prompt. Confirmed: 0x72A0… has no claimFees / previewClaimFees.
+  function onChainFlag(key) {
+    const o = productCfg && productCfg.onChain;
+    return !!(o && o[key] === true);
+  }
+
+  function features() {
+    return {
+      claimFees: onChainFlag('claimFees'),
+      previewClaimFees: onChainFlag('previewClaimFees'),
+      makerWaterfall: onChainFlag('makerWaterfall'),
+      earlyCoverPaths: onChainFlag('earlyCoverPaths'),
+      partialMatch: onChainFlag('partialMatch'),
+      boostedStake: onChainFlag('boostedStake'),
+    };
+  }
+
+  /// Fee claim: Maker waterfall is product preview. Against live grant vault, never send claimFees
+  /// (selector missing). Preview dialog is OK; money path stays soft-fail until redeploy + flag flip.
   async function claimFees({ sym, onStep, confirm }) {
     try {
       guard();
@@ -601,30 +620,53 @@
       await refresh(true);
       const now = Math.floor(Date.now() / 1000), term = S.vault.termSec;
       const act = S.raw.filter((r) => r.matched && r.openedAt + term > now);
-      if (!act.length) throw user('No active matched stock position to claim from.');
+      if (!act.length) throw user('No active matched stock position to preview a fee claim from.');
       const first = Math.min(...act.map((r) => r.openedAt));
       const seniorBook = act.reduce((x, r) => x + r.senior, 0);
       const grossFees = act.reduce((x, r) => x + r.fee, 0);
       const w = waterfallPreview({ seniorPrincipal: seniorBook, morphoRate: morphoRateFromCfg(), elapsedSec: Math.max(now - first, 0), gross: grossFees });
-      const intro = 'Fee split runs at claimFees only (not on fee-in). Preview uses Maker’s Morpho-rate waterfall.';
-      const rows = waterfallRows(w, { liveNote: 'Live vault bytecode may still skim surplus above a 4% pace until redeploy.' });
+      const liveOk = onChainFlag('claimFees');
+      const intro = liveOk
+        ? 'Fee split runs at claimFees only (not on fee-in). Preview uses Maker’s Morpho-rate waterfall.'
+        : 'Product preview only — Maker’s Morpho-rate waterfall at claim. Live grant vault bytecode has no claimFees selector, so nothing will be sent.';
+      const rows = waterfallRows(w, {
+        liveNote: liveOk
+          ? 'On-chain claimFees is enabled for this deployment.'
+          : 'Live vault = legacy fee path. Waterfall / claimFees need a new vault address after Maker greenlights migration.',
+      });
       if (confirm) {
-        const answer = await confirm({ title: 'Confirm fee claim', intro, rows, confirmLabel: 'Confirm claim' });
-        if (!answer || answer.ok === false) throw user('Claim cancelled. No funds were moved.');
+        const answer = await confirm({
+          title: liveOk ? 'Confirm fee claim' : 'Fee claim preview',
+          intro,
+          rows,
+          confirmLabel: liveOk ? 'Confirm claim' : 'Close preview',
+        });
+        if (!answer || answer.ok === false) throw user('Claim preview closed. No funds were moved.');
       }
+      if (!liveOk) {
+        return {
+          ok: false,
+          previewOnly: true,
+          error: 'Fee claim is product preview on the live grant vault — no transaction was sent. Maker waterfall is not on this bytecode yet.',
+        };
+      }
+      // Future path only (product.onChain.claimFees === true after a new vault is pointed in config).
       const before = sig();
       let hash, claimed = 0;
       for (const r of act) {
         try {
-          const prev = await pub.readContract({ address: cfg.vault, abi: vaultAbi, functionName: 'previewClaimFees', args: [r.id] });
+          let prev = null;
+          if (onChainFlag('previewClaimFees')) {
+            prev = await pub.readContract({ address: cfg.vault, abi: vaultAbi, functionName: 'previewClaimFees', args: [r.id] });
+          }
           hash = await send({ address: cfg.vault, abi: vaultAbi, functionName: 'claimFees', args: [r.id] }, onStep, 'Confirm fee claim in MetaMask…');
-          claimed += num(prev.toJunior != null ? prev.toJunior : prev[4]);
+          if (prev) claimed += num(prev.toJunior != null ? prev.toJunior : prev[4]);
         } catch (e) {
           const msg = e.shortMessage || e.message || String(e);
-          if (/ClaimThreshold|ZeroAmount|function|selector|returned no data|execution reverted/i.test(msg) && act.length === 1) {
-            throw user('Fee claim needs vault support on this deployment (and accrued fees to split). Live bytecode may still use the legacy 4% pace path until redeploy.');
+          if (/ClaimThreshold|ZeroAmount|function|selector|returned no data|execution reverted/i.test(msg)) {
+            throw user('Fee claim failed on this deployment (missing selector or nothing to split). No further claim txs will be attempted.');
           }
-          if (!/ClaimThreshold|ZeroAmount/i.test(msg)) throw e;
+          throw e;
         }
       }
       if (!hash) throw user('No position had claimable fees on this deployment yet.');
@@ -779,7 +821,7 @@
     return { ok: false, error: 'No answer from MetaMask. Open the MetaMask app, approve the network request, and come back (or switch to Robinhood Chain Testnet there yourself).' };
   }
 
-  window.CarryChain = { last: snapshot(), connect, switchNetwork, disconnect, refresh, afterTx, leftText, deposit, withdraw, mint, claimFees, needsApp: () => isMobile() && !findMetaMask(), appLink };
+  window.CarryChain = { last: snapshot(), connect, switchNetwork, disconnect, refresh, afterTx, leftText, deposit, withdraw, mint, claimFees, features, needsApp: () => isMobile() && !findMetaMask(), appLink };
   const initP = init();
   initP.catch((e) => { S.error = (e && e.message) || String(e); console.warn('[CarryChain]', (e && (e.shortMessage || e.message)) || e); readyResolve(); emit(); });
 })();
