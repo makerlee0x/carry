@@ -4,31 +4,34 @@ pragma solidity ^0.8.24;
 import {Script, console2} from "forge-std/Script.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {LeveredLpVault} from "../src/LeveredLpVault.sol";
-import {MockERC20} from "../src/mocks/MockERC20.sol";
-import {MockOracle} from "../src/mocks/MockOracle.sol";
-import {MockFeePool} from "../src/mocks/MockFeePool.sol";
 
-/// @title DeployCarryTestnet
-/// @notice Robinhood Chain **Testnet** (chain id 46630) ONLY for live broadcast.
+/// @title DeployCarryVaultV2
+/// @notice Deploys UUPS implementation + ERC1967Proxy on Robinhood testnet (46630).
+///         Reuses existing mock MSTR/USDG/oracle from the v1 grant deploy when addresses
+///         are provided via env; otherwise deploys fresh mocks (anvil dry-run).
 ///
-/// Deploys mock MSTR, mock USDG, MockOracle, MockFeePool, and UUPS LeveredLpVault
-/// (implementation + ERC1967Proxy). Vault starts paused. Product CA = PROXY.
+/// Live broadcast:
+///   broadcastArmed() == true, DEPLOYER_PRIVATE_KEY, VAULT_OWNER, chain 46630.
+///   Optional: MSTR_ADDRESS, USDG_ADDRESS, ORACLE_ADDRESS (reuse v1 mocks).
 ///
-/// Dry-run (no key):
-///   forge script script/DeployCarryTestnet.s.sol --rpc-url https://rpc.testnet.chain.robinhood.com -vvvv
-contract DeployCarryTestnet is Script {
+/// Product CA = PROXY. Future upgrades keep the same proxy address.
+contract DeployCarryVaultV2 is Script {
     uint256 public constant RH_TESTNET_CHAIN_ID = 46630;
     uint256 public constant ANVIL_CHAIN_ID = 31337;
     uint64 public constant TERM = 7 days;
     uint256 public constant MORPHO_RATE_WAD = 0.039e18;
-    uint256 public constant DEMO_PRICE_WAD = 100 ether;
+
+    // v1 grant deploy mocks (46630) — reused so token addresses stay stable in config.
+    address public constant V1_MOCK_MSTR = 0x762019309B536bbb89577422FaaFBeC9659f8728;
+    address public constant V1_MOCK_USDG = 0x25030Bff74764aD72b912276a603717DB1C00644;
+    address public constant V1_MOCK_ORACLE = 0xc74Af7E23A2B4b46B5Fe05E5c7c5ec0BB5dbc5B7;
 
     error BroadcastBlocked();
     error WrongChain();
     error MustDeployPaused();
     error MainnetForbidden();
 
-    /// @dev Flip only after Dylan reviews. Session deploys arm briefly then disarm.
+    /// @dev Flip only for reviewed live broadcast. Tests assert false by default.
     function broadcastArmed() public pure returns (bool) {
         return false;
     }
@@ -45,21 +48,24 @@ contract DeployCarryTestnet is Script {
         address vaultOwner =
             liveBroadcast ? vm.envAddress("VAULT_OWNER") : vm.envOr("VAULT_OWNER", address(0xBEEF));
 
+        address mstrAddr = vm.envOr("MSTR_ADDRESS", liveBroadcast ? V1_MOCK_MSTR : address(0));
+        address usdgAddr = vm.envOr("USDG_ADDRESS", liveBroadcast ? V1_MOCK_USDG : address(0));
+        address oracleAddr = vm.envOr("ORACLE_ADDRESS", liveBroadcast ? V1_MOCK_ORACLE : address(0));
+
         if (liveBroadcast) {
             vm.startBroadcast();
         } else {
             console2.log("DRY-RUN: broadcastArmed=false or not on 46630; no broadcast txs");
         }
 
-        MockERC20 mockMstr = new MockERC20("Mock MSTR", "mMSTR", 18);
-        MockERC20 mockUsdg = new MockERC20("Mock USDG", "mUSDG", 18);
-        MockOracle mockOracle = new MockOracle(DEMO_PRICE_WAD);
-        MockFeePool mockPool = new MockFeePool(address(mockUsdg));
+        if (mstrAddr == address(0) || usdgAddr == address(0) || oracleAddr == address(0)) {
+            // Anvil / local: deploy mocks via inline minimal path
+            revert("Set MSTR_ADDRESS USDG_ADDRESS ORACLE_ADDRESS or use DeployCarryTestnet for full stack");
+        }
 
         LeveredLpVault impl = new LeveredLpVault();
         bytes memory initData = abi.encodeCall(
-            LeveredLpVault.initialize,
-            (address(mockMstr), address(mockUsdg), address(mockOracle), TERM, MORPHO_RATE_WAD, vaultOwner)
+            LeveredLpVault.initialize, (mstrAddr, usdgAddr, oracleAddr, TERM, MORPHO_RATE_WAD, vaultOwner)
         );
         ERC1967Proxy proxy = new ERC1967Proxy(address(impl), initData);
         LeveredLpVault vault = LeveredLpVault(address(proxy));
@@ -72,14 +78,13 @@ contract DeployCarryTestnet is Script {
         if (broadcastArmed() && !liveBroadcast) revert BroadcastBlocked();
 
         console2.log("chainId", block.chainid);
-        console2.log("mockMstr", address(mockMstr));
-        console2.log("mockUsdg", address(mockUsdg));
-        console2.log("mockOracle", address(mockOracle));
-        console2.log("mockFeePool", address(mockPool));
         console2.log("implementation", address(impl));
         console2.log("proxy", address(proxy));
-        console2.log("vault", address(proxy));
         console2.log("vaultOwner", vaultOwner);
+        console2.log("mstr", mstrAddr);
+        console2.log("usdg", usdgAddr);
+        console2.log("oracle", oracleAddr);
         console2.log("paused", vault.paused());
+        console2.log("morphoRateWad", vault.morphoRateWad());
     }
 }

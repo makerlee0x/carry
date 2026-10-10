@@ -17,3 +17,10 @@ contracts/foundry.lock
 # Foundry build artifacts (source + broadcast run-latest are tracked)
 contracts/cache/
 contracts/out/
+
+# Deployer secrets (never commit)
+contracts/.deployer.key
+contracts/.deployer.address
+contracts/.env*
+.env.carry*
+*.key
