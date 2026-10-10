@@ -108,7 +108,8 @@
     "chainId": 46630,
     "vault": "LeveredLpVaultV2",
     "proxy": "0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd",
-    "version": "v2.1-maker-fixes",
+    "version": "v2.2-maker-answers",
+    "implementation": "0xC9C8d0741ce25cf46a8989f58AeC74dD8e0F1240",
     "termDays": 7,
     "morphoRatePct": 3.9,
     "morphoRateCapPct": 5,
@@ -121,7 +122,10 @@
     "depositCapsEnforced": true,
     "maxTotalUsdg": 25000,
     "maxPerWalletUsdg": 2500,
-    "settleSellsJuniorMstr": false,
+    "settleSellsJuniorMstr": "only-on-residual-shortfall-after-backstop",
+    "matchCapDefault": 25,
+    "timeWeightedSeniorYield": true,
+    "ownerBackstopWithdraw": true,
     "layer": "on-chain"
   }
 }

@@ -6,7 +6,7 @@ Historical build notes: [`LEVERED_LP_BUILD.md`](./LEVERED_LP_BUILD.md).
 Maker-locked product rules + research sync: [`docs/MAKER_V1_NOTES.md`](./docs/MAKER_V1_NOTES.md).  
 **Fee waterfall (product source of truth):** [`docs/MAKER_FEE_WATERFALL.md`](./docs/MAKER_FEE_WATERFALL.md) — Morpho-rate senior floor, treasury/seniorPerf/junior split **only** at claimFees / earlyExit / settle.
 
-**Live product CA (UUPS PROXY):** [`0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd`](https://explorer.testnet.chain.robinhood.com/address/0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd) — `version() = v2.1-maker-fixes`. Maker waterfall, unpaid-accrual carry, rate lock ≤5%, settle without selling junior MSTR, deposit caps.  
+**Live product CA (UUPS PROXY):** [`0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd`](https://explorer.testnet.chain.robinhood.com/address/0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd) — `version() = v2.2-maker-answers`. Maker waterfall, unpaid-accrual carry, rate lock ≤5%, settle/early shortfall cover (backstop first then junior), time-weighted senior yield, owner backstop withdraw, matchCap, deposit caps.  
 **v1 grant reference (not product):** `0x72A0…36c8` (immutable; old 4%/5%/fee-in cut story applies only there).
 
 **Status:** EVM testnet. DualPool hook is **NOT IMPLEMENTED** (`dualPoolAdapter() == address(0)`). LP fees on testnet are pushed via `accrueLpFee` / `MockFeePool` (fee-donor path for demos). No Yieldz, Morpho idle sleeve, or STRATEGY burn/boost wiring.
