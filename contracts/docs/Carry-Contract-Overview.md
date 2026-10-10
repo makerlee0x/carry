@@ -29,7 +29,7 @@ Carry pairs a stock-token holder (**junior**) with a USDG lender (**senior**) in
 | Contract | `LeveredLpVault` / `LeveredLpVaultV2` (UUPS PROXY product CA; v1 grant vault was non-upgradeable) |
 | Tokens / oracle | Immutable `mstr`, `usdg`; immutable `IPriceOracle` |
 | Term / Morpho rate | Immutable `term` ≤ 7 days; `morphoRateWad` ≤ 5%, locked at first match |
-| Fee cuts | Treasury ALWAYS 20% + senior perf 20% of gross (after seniorFloor); Boosted does not reduce treasury |
+| Fee cuts | Treasury base 20% / Boosted MSTR 10% + senior perf 20% of gross (after seniorFloor) |
 | Unpaid accrual | Carried on position when fees &lt; accrual |
 | Pause / reentrancy | Owner pause gates deposits; `nonReentrant` on value paths |
 | External LP | No PoolManager approvals; `joinPool` reverts |
@@ -127,12 +127,12 @@ Waterfall at claim/exit/settle (Maker):
 
 ```
 seniorFloor = min(gross, accrual)
-treasury    = min(left, gross × 0.20)   // ALWAYS 20%, including Boosted
+treasury    = min(left, gross × cut)   // base 20%; Boosted MSTR 10%
 seniorPerf  = min(left, gross × 0.20)
 junior      = remainder
 ```
 
-Early-exit shortfall: junior Wallet / IdleCarry / SellShares (NO backstop). Settle: backstop first, then junior cover; treasury-on-cover ALWAYS 20%. Testnet SellShares → extra MSTR to seniors (mainnet AMM later).
+Early-exit shortfall: junior Wallet / IdleCarry / SellShares (NO backstop); Wallet/Idle without cover REVERTS. Settle: backstop first, then junior cover; treasury-on-cover uses base/Boosted cut. Testnet SellShares → extra MSTR to seniors; mainnet sets sellSharesRouter (Uniswap stub).
 
 ### Senior claims
 
