@@ -47,6 +47,9 @@ No need to migrate testnet ownership unless it is cheap and Maker wants the rehe
 
 ## Residual testnet risks (accepted)
 
+0. **v2.5 impl runtime size (~32KB) exceeds EIP-170 (24KB).** Robinhood testnet accepted the CREATE; **mainnet must shrink** (more library extraction / feature split) before production deploy.
+
+
 1. **MockOracle has `setPrice`** — owner/deployer can move mark for demos. Not a production oracle.
 2. **MockERC20 `mint` is open to deployer** — test tokens only; anyone who holds the mint key can inflate demo balances.
 3. **Public mempool / MEV** — testnet; no keeper private mempool. Fee donors and settle callers are public.
