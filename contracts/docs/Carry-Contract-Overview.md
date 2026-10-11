@@ -1,14 +1,18 @@
 ---
 title: "Carry / Levered LP Vault — Contract Overview"
-subtitle: "Robinhood Chain Testnet (46630) — for Maker Lee review"
+subtitle: "Robinhood Chain Testnet (46630) — live UUPS v2.5-funder-idle"
 ---
 
 # Carry / Levered LP Vault — Contract Overview
 
 Grant and audit reference for `LeveredLpVault` on **Robinhood Chain Testnet (chain id 46630)**.
 
-**Product vault (PROXY):** [`0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd`](https://explorer.testnet.chain.robinhood.com/address/0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd?tab=contract) (UUPS; Sourcify match)  
-**v1 grant/history reference (not product CA):** [`0x72A053120f03B10c5506d2325f92F59B0FfC36c8`](https://explorer.testnet.chain.robinhood.com/address/0x72A053120f03B10c5506d2325f92F59B0FfC36c8?tab=contract)
+**Product vault (PROXY):** [`0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd`](https://explorer.testnet.chain.robinhood.com/address/0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd?tab=contract) (UUPS)  
+**Implementation:** [`0xe498F43ED10a37E22Fe046A3FDAAFD4E9080d0e8`](https://explorer.testnet.chain.robinhood.com/address/0xe498F43ED10a37E22Fe046A3FDAAFD4E9080d0e8?tab=contract) (`version()` = **`v2.5-funder-idle`**)  
+**Site:** [usecarry.io](https://usecarry.io)  
+**v1 grant/history reference (not in use):** [`0x72A053120f03B10c5506d2325f92F59B0FfC36c8`](https://explorer.testnet.chain.robinhood.com/address/0x72A053120f03B10c5506d2325f92F59B0FfC36c8?tab=contract)
+
+Full pack: [`../../CARRY_CONTRACT.md`](../../CARRY_CONTRACT.md). Accounting: [`../../docs/ACCOUNTING_V25.md`](../../docs/ACCOUNTING_V25.md).
 
 ---
 
@@ -16,20 +20,22 @@ Grant and audit reference for `LeveredLpVault` on **Robinhood Chain Testnet (cha
 
 Carry pairs a stock-token holder (**junior**) with a USDG lender (**senior**) into a **50/50 book**: junior posts MSTR, senior posts matching USDG. Equity tracks the stock while the book accrues LP fees over a fixed term. This vault is the **custody and accounting layer**.
 
-- Junior deposits MSTR → **Open** until USDG matches, then **Active** for **7 days**.
+- Junior deposits MSTR → **Idle** until USDG matches, then **Active** for **7 days**. Product states: Idle / Active / Boosted / Closed.
 - Senior accrual = locked Morpho native supply rate (stub **3.9%**, owner cap **≤5%**) × elapsed.
 - Fee waterfall runs only at `claimFees` / `earlyExit` / `settle` (no cut on fee-in).
-- **Early exit** cover: Wallet / IdleCarry / SellShares (junior only, NO backstop). **Settle:** backstop first, then junior Wallet / IdleCarry / SellShares.
-- Lenders withdraw **idle** USDG anytime; **matched** USDG unlocks via replacement liquidity or position close.
+- **Early exit** cover: Wallet / IdleCarry / SellShares (junior only, NO backstop). **Settle:** backstop first, then junior Wallet / IdleCarry / SellShares; **default = IdleCarry**.
+- Lenders withdraw **their own idle** USDG anytime; matched USDG returns to that lender’s idle on close.
 
 ### Contract snapshot
 
 | Item | Value |
 | --- | --- |
-| Contract | `LeveredLpVault` / `LeveredLpVaultV2` (UUPS PROXY product CA; v1 grant vault was non-upgradeable) |
+| Contract | `LeveredLpVault` / `LeveredLpVaultV2` (UUPS PROXY product CA) |
 | Tokens / oracle | Immutable `mstr`, `usdg`; immutable `IPriceOracle` |
 | Term / Morpho rate | Immutable `term` ≤ 7 days; `morphoRateWad` ≤ 5%, locked at first match |
-| Fee cuts | Treasury base 20% / Boosted MSTR 10% + senior perf 20% of gross (after seniorFloor) |
+| Fee cuts | Treasury base 20% + Boosted STRATEGY tiers (15/10/5%) + senior perf 20% |
+| Accounting | Per-lender idle; FIFO funders; yield to position funders |
+| Caps | Min $25; market $25k senior/junior; no per-wallet cap |
 | Unpaid accrual | Carried on position when fees &lt; accrual |
 | Pause / reentrancy | Owner pause gates deposits; `nonReentrant` on value paths |
 | External LP | No PoolManager approvals; `joinPool` reverts |
@@ -42,22 +48,22 @@ Inventory is held inside the vault. `mark()` reports 2× equity vs an unlevered 
 
 | Actor | Role | Key actions |
 | --- | --- | --- |
-| **Junior** (stock depositor) | Posts MSTR | `depositJunior`, `withdrawUnmatched`, `earlyExit`; receives leftover MSTR/fees on settle |
-| **Senior** (lender) | Posts USDG | `depositSenior`, `withdrawSenior` (idle + claims) |
-| **Owner / protocol** | Pause + rescue key | `pause`, `unpause`, `rescueToken` (non-principal only). Cannot set oracle/term/APR/cut; cannot pull MSTR/USDG |
-| **Fee source** | Accrues LP fees | `accrueLpFee` / `MockFeePool.payFee` pushes USDG into the vault |
-| **Anyone** | Keepers | `settle` after term (proceeds go to junior + seniors, not the caller) |
+| **Junior** (stock depositor) | Posts MSTR | `depositJunior`, `withdrawUnmatched`, `earlyExit`, gasCredit, auto-compound |
+| **Senior** (lender) | Posts USDG | `depositSenior`, `withdrawSenior` (own idle + claims), `seniorEarlyExit` |
+| **Owner / protocol** | Pause + upgrade + knobs | `pause`, `unpause`, UUPS upgrade, caps/tiers; cannot pull MSTR/USDG principal |
+| **Fee source** | Accrues LP fees | `accrueLpFee` / `MockFeePool.payFee` |
+| **Anyone** | Keepers | `settle` after term when residual cover is zero |
 
 ---
 
 ## 3. Lifecycle
 
-1. **Deposit stock** — `depositJunior(mstrAmount)`. Partial match OK; residual stays in Open queue.
-2. **Lend USDG** — `depositSenior(amount)`. FIFO-matches Open juniors; first match locks `morphoRateLocked` and starts the term clock. No further match after term.
+1. **Deposit stock** — `depositJunior(mstrAmount)`. Partial match OK; residual stays Idle.
+2. **Lend USDG** — `depositSenior(amount)`. FIFO-matches Idle juniors; records funder slices; first match locks rate/cut and starts the term clock.
 3. **Active** — Timer = `term` from first match. Accrual uses locked Morpho rate (≤5%).
 4. **Fee accrual** — `accrueLpFee` pulls raw USDG onto the position (no cut on fee-in).
-5. **claimFees / early exit / settle** — Maker waterfall only here. Unpaid senior accrual (fees &lt; accrual) carries on the position. Early exit: junior cover only (NO backstop). Settle: backstop first, then junior cover.
-6. **Lender replace / exit** — `freePrincipal` pro-rata of idle capacity; matched size unlocks when `reservedSenior` drops.
+5. **claimFees / early exit / settle** — Maker waterfall only here. Early exit: junior cover only (NO backstop). Settle: backstop first, then junior cover; default IdleCarry.
+6. **Lender exit** — `freePrincipal = seniorIdle` (own idle only); matched size returns to that lender’s idle on close.
 
 ---
 
@@ -67,76 +73,53 @@ Inventory is held inside the vault. `mark()` reports 2× equity vs an unlevered 
 
 | Function | Who | Preconditions | Effects / funds |
 | --- | --- | --- | --- |
-| `pause()` | owner | — | `paused = true`; new deposits revert |
-| `unpause()` | owner | — | `paused = false` |
+| `pause()` / `unpause()` | owner | — | Gates new deposits |
 | `rescueToken(token,to,amount)` | owner | `token ∉ {mstr,usdg}` | Transfers non-principal token |
+| Caps / tiers / rate | owner | — | `setDepositCaps`, `setMinDepositUsdg`, `setBoostTiers`, `setMorphoRate`, … |
 
 ### Junior
 
 | Function | Who | Preconditions | Effects / funds |
 | --- | --- | --- | --- |
-| `depositJunior(mstrAmount)` | anyone (when unpaused) | amount > 0 | Pulls exact MSTR; enqueues Open; tries match |
-| `withdrawUnmatched(positionId)` | position owner | Open, not settled | Returns all MSTR; no coupon |
-| `earlyExit(positionId[, mode])` | position owner | Matched, before term, not settled | Closes position; Maker waterfall; cover mode Wallet / Idle / SellShares; leftover MSTR/USDG to junior |
+| `depositJunior(mstrAmount)` | anyone (when unpaused) | min notional | Pulls MSTR; enqueues Idle; tries match |
+| `withdrawUnmatched(positionId)` | position owner | Idle | Returns all MSTR; gasCredit refund |
+| `earlyExit(positionId[, mode])` | position owner | Matched, before term | Maker waterfall; cover Wallet / Idle / SellShares |
 
 ### Senior
 
 | Function | Who | Preconditions | Effects / funds |
 | --- | --- | --- | --- |
-| `depositSenior(amount)` | anyone (when unpaused) | amount > 0 | Pulls exact USDG; increases principal; FIFO match |
-| `withdrawSenior(principalAmount)` | senior | `principalAmount ≤ freePrincipal` | Returns idle principal + claimable yield USDG + claimable MSTR |
+| `depositSenior(amount)` | anyone (when unpaused) | min | Credits own idle; FIFO match |
+| `withdrawSenior(principalAmount)` | senior | `≤ freePrincipal` (own idle) | Idle principal + claimable yield/MSTR |
 
-### Fees / backstop
-
-| Function | Who | Preconditions | Effects / funds |
-| --- | --- | --- | --- |
-| `accrueLpFee(positionId, amount)` | anyone | Matched, not settled | Pulls exact USDG raw onto position (no cut) |
-| `claimFees(positionId)` | junior | Matched, before term | Maker waterfall; unpaid accrual carries forward |
-| `fundBackstop(amount)` | anyone | amount > 0 | Pulls USDG into `backstop` |
-
-### Settlement / views
+### Fees / settle / views
 
 | Function | Who | Preconditions | Effects / funds |
 | --- | --- | --- | --- |
-| `settle(positionId)` | anyone | Matched, term elapsed, not settled | Maturity waterfall; **no MSTR sold**; shortfall from backstop |
-| `previewEarlyExit` / `previewEarlyExitCoupon` | view | — | Accrual + cover preview (mode-aware) |
-| `previewBorrowFee` / `previewSeniorAssets` / `previewMstrToCover` | view | — | Quoting helpers |
-| `freeSenior` / `freePrincipal` / `isMatched` / `mark` | view | — | Capacity / MTM |
+| `accrueLpFee` / `claimFees` / `fundBackstop` | see full pack | — | Raw fee-in; waterfall on claim |
+| `settle(positionId[, mode])` | anyone / junior | term elapsed | Default IdleCarry; no MSTR sold unless SellShares |
+| `seniorIdle` / `freePrincipal` / `isMatched` / `mark` | view | — | Per-lender idle / MTM |
 | `joinPool(bytes)` | anyone | — | Reverts `ExternalLpForbidden` |
-
-Initializer immutables / config: `mstr`, `usdg`, `oracle`, `term`, `morphoRateWad` (≤5%), owner.
 
 ---
 
 ## 5. Accounting
-
-### What “whole” means
-
-If fees cover Morpho-rate senior accrual for the matched window, then after the Maker waterfall seniors are made whole on opportunity cost and juniors keep remaining MSTR (settle never sells shares).
-
-### Senior accrual / early-exit cover
 
 ```
 accrual = unpaidSeniorAccrual
         + seniorPrincipal * morphoRateLocked * elapsed / (WAD * YEAR)
 ```
 
-(rate falls back to live `morphoRateWad` when `morphoRateLocked == 0`, e.g. pre-upgrade positions)
-
-Waterfall at claim/exit/settle (Maker):
+Waterfall at claim/exit/settle:
 
 ```
 seniorFloor = min(gross, accrual)
-treasury    = min(left, gross × cut)   // base 20%; Boosted MSTR 10%
+treasury    = min(left, gross × cut)   // base 20%; Boosted tiers 15/10/5%
 seniorPerf  = min(left, gross × 0.20)
 junior      = remainder
 ```
 
-Early-exit shortfall: junior Wallet / IdleCarry / SellShares (NO backstop); Wallet/Idle without cover REVERTS. Settle: backstop first, then junior cover; treasury-on-cover uses base/Boosted cut. Testnet SellShares → extra MSTR to seniors; mainnet sets sellSharesRouter (Uniswap stub).
-
-### Senior claims
-
-On claim/exit/settle, USDG paid toward seniorFloor + seniorPerf increases `accYieldPerPrincipal`; SellShares cover can increase `accMstrPerPrincipal`. Seniors harvest via `withdrawSenior`.
+v2.5: per-lender idle, FIFO funders, yield to position funders only. See [`ACCOUNTING_V25.md`](../../docs/ACCOUNTING_V25.md).
 
 ---
 
@@ -144,63 +127,31 @@ On claim/exit/settle, USDG paid toward seniorFloor + seniorPerf increases `accYi
 
 | Control | Behavior |
 | --- | --- |
-| Pause | Blocks `depositJunior` / `depositSenior` only. Exit, settle, and withdraw remain available |
-| Owner powers | Pause/unpause + rescue of non-principal tokens |
-| Owner cannot | Withdraw MSTR/USDG, change oracle/term/APR/cut, or pull principal via rescue |
-| Reentrancy | `nonReentrant` on deposits, withdraws, fees, early exit, settle, rescue |
-| CEI | State + events updated before external token pushes on exit paths |
-| Fee-on-transfer | Rejected (`FeeOnTransfer`) on pulls |
-| External LP | `joinPool` forbidden; no PoolManager allowance |
-| Oracle | Immutable oracle address on the vault |
+| Pause | Blocks deposits only; exits/settle/withdraw remain |
+| Owner cannot | Pull MSTR/USDG principal via rescue |
+| Reentrancy | `nonReentrant` on value paths |
+| Fee-on-transfer | Rejected on pulls |
+| External LP | Forbidden |
+| Impl size | ~32KB exceeds EIP-170; OK on RH testnet; shrink before mainnet |
 
-### Invariants
-
-1. `reservedSenior ≤ totalSeniorPrincipal`
-2. Settled positions never pay twice (`settled` latch)
-3. Owner rescue cannot touch `mstr` / `usdg`
-4. Matched MSTR leaves only via junior payout or senior MSTR claims after sale-to-cover
-5. No external PoolManager approvals from the vault
+Details: [`SECURITY_V2.md`](../../docs/SECURITY_V2.md).
 
 ---
 
-## 7. Threat notes
-
-| Attack / misuse | Mitigation | Test |
-| --- | --- | --- |
-| Random drains senior/junior funds | No open withdraw; settle pays owners not caller | `test_randomAddressCannotPullFunds` |
-| Owner steals principal via rescue | `PrincipalToken` revert | `test_ownerCannotStealPrincipal` |
-| Double early exit / settle | `AlreadySettled` | `test_earlyExitCannotDoubleExit` |
-| Attacker early-exits someone else | `NotJunior` | `test_earlyExitOnlyJunior` |
-| Early exit after term | `TermElapsed`; must `settle` | `test_earlyExitBlockedAfterTerm` |
-| Fee on unmatched position | `NotMatched` | `test_accrueFeesRequiresMatched` |
-| Deposit while paused | `Paused` | `test_pauseBlocksNewDeposits` |
-| External LP beside vault | `ExternalLpForbidden` | `test_externalCannotLpBesideVault` |
-| Lender pulls matched USDG | `InsufficientFree` until replace/close | `test_lenderReplaceUnlocksExit` |
-| Reentrancy on token callbacks | `nonReentrant` | Covered by modifier on value paths |
-| Fee-on-transfer silent credit | Balance delta check | `FeeOnTransfer` in `_pullExact` |
-| Wrong-chain broadcast | Deploy script refuses chain ids 4663 and 1 | `DeployCarryTestnet` guards |
-
----
-
-## 8. Carry UI → contract mapping
+## 7. Carry UI → contract mapping
 
 | Carry screen / control | Vault call | Notes |
 | --- | --- | --- |
-| Deposit MSTR / Deposit {sym} | `mstr.approve` → `depositJunior(amount)` | Pause-gated; Open if no USDG |
-| Position badge **Open** | `!isMatched(id)` | Unmatched; no fees yet |
-| Position badge **Active** | `isMatched(id)` | 7-day timer from `openedAt` |
-| Lend / deposit USDG (lender) | `usdg.approve` → `depositSenior(amount)` | FIFO-matches Open queue |
-| Active position view | `positions(id)`, `mark(id)`, `previewEarlyExit(id)` | Read-only |
-| **Withdraw Early** (stock) | `earlyExit(id)` | Junior only; fees then MSTR from position |
-| Withdraw (Open / unmatched stock) | `withdrawUnmatched(id)` | Full MSTR back, no coupon |
-| Withdraw after 7d / settle | `settle(id)` then junior already paid | Anyone can call settle |
-| Lender withdraw **idle** | `withdrawSenior(freePrincipal(me))` | Available when idle > 0 |
-| Lender withdraw **matched** | More `depositSenior` (replace) or wait for close | Else `InsufficientFree` |
-| Fee / rewards display | Driven by `accrueLpFee` | USDG pushed into position fees |
+| Deposit MSTR | `depositJunior` | Idle if no USDG; min $25 |
+| Badge **Idle** / **Active** / **Boosted** / **Closed** | match + settled + boost flags | Not Open/Settled |
+| Lend USDG | `depositSenior` | Own idle + FIFO match |
+| Withdraw Early | `earlyExit(id, mode)` | Wallet / Idle / SellShares |
+| Settle | `settle(id[, mode])` | Default IdleCarry |
+| Lender idle withdraw | `withdrawSenior(freePrincipal(me))` | Own idle only |
 
 ---
 
-## 9. Testnet addresses (Robinhood Chain Testnet 46630)
+## 8. Testnet addresses (Robinhood Chain Testnet 46630)
 
 | Item | Value |
 | --- | --- |
@@ -208,26 +159,29 @@ On claim/exit/settle, USDG paid toward seniorFloor + seniorPerf increases `accYi
 | Chain ID | **46630** |
 | RPC | `https://rpc.testnet.chain.robinhood.com` |
 | Explorer | `https://explorer.testnet.chain.robinhood.com` |
+| Site | [usecarry.io](https://usecarry.io) |
 
 ### Product vault (UUPS proxy)
 
-| Name | Address | Explorer |
-| --- | --- | --- |
-| **LeveredLpVault (PROXY)** | `0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd` | [Sourcify match](https://explorer.testnet.chain.robinhood.com/address/0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd?tab=contract) |
-| implementation | `0x09D2371be36b4910968f675d005e04825dCB74d6` (`v2.4-maker-leftovers`) | [contract](https://explorer.testnet.chain.robinhood.com/address/0x09D2371be36b4910968f675d005e04825dCB74d6?tab=contract) |
-| v1 grant/history reference | `0x72A053120f03B10c5506d2325f92F59B0FfC36c8` | [verified](https://explorer.testnet.chain.robinhood.com/address/0x72A053120f03B10c5506d2325f92F59B0FfC36c8?tab=contract) |
+| Name | Address |
+| --- | --- |
+| **LeveredLpVault (PROXY)** | `0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd` |
+| implementation (`v2.5-funder-idle`) | `0xe498F43ED10a37E22Fe046A3FDAAFD4E9080d0e8` |
+| CarryBook | `0x2988DFc48BE4AB47B40Ad151f1F213619cdB0794` |
+| CarryMath | `0x98574A1719E647775BE39Ec713B657c2CF27Adc5` |
+| v1 grant reference (not in use) | `0x72A053120f03B10c5506d2325f92F59B0FfC36c8` |
 
 ### Supporting contracts
 
-| Name | Address | Explorer |
-| --- | --- | --- |
-| mockMstr (stock token) | `0x762019309B536bbb89577422FaaFBeC9659f8728` | [verified](https://explorer.testnet.chain.robinhood.com/address/0x762019309B536bbb89577422FaaFBeC9659f8728?tab=contract) |
-| mockUsdg | `0x25030Bff74764aD72b912276a603717DB1C00644` | [verified](https://explorer.testnet.chain.robinhood.com/address/0x25030Bff74764aD72b912276a603717DB1C00644?tab=contract) |
-| mockOracle ($100 WAD) | `0xc74Af7E23A2B4b46B5Fe05E5c7c5ec0BB5dbc5B7` | [verified](https://explorer.testnet.chain.robinhood.com/address/0xc74Af7E23A2B4b46B5Fe05E5c7c5ec0BB5dbc5B7?tab=contract) |
-| mockFeePool | `0xa4122524aD97Aab05cAC7F99c04Cd060D02F0771` | [verified](https://explorer.testnet.chain.robinhood.com/address/0xa4122524aD97Aab05cAC7F99c04Cd060D02F0771?tab=contract) |
-| vaultOwner | `0xcA44F2dbB2D43b93b39F01B88E0f0e2966983c57` | [view](https://explorer.testnet.chain.robinhood.com/address/0xcA44F2dbB2D43b93b39F01B88E0f0e2966983c57) |
+| Name | Address |
+| --- | --- |
+| mockMstr | `0x762019309B536bbb89577422FaaFBeC9659f8728` |
+| mockUsdg | `0x25030Bff74764aD72b912276a603717DB1C00644` |
+| mockOracle ($100 WAD) | `0xc74Af7E23A2B4b46B5Fe05E5c7c5ec0BB5dbc5B7` |
+| mockFeePool | `0xa4122524aD97Aab05cAC7F99c04Cd060D02F0771` |
+| vaultOwner | `0xcA44F2dbB2D43b93b39F01B88E0f0e2966983c57` |
 
-Deploy constants: term **7 days**, borrow APR **5%**, protocol cut **20%**, oracle **$100** WAD.
+Live deploy constants: term **7 days**, Morpho rate stub **3.9%** (≤5%), treasury base **20%** + Boosted tiers, oracle **$100** WAD, min **$25**, market totals **$25k**, no per-wallet cap.
 
 ---
 
@@ -236,10 +190,7 @@ Deploy constants: term **7 days**, borrow APR **5%**, protocol cut **20%**, orac
 | Path | Role |
 | --- | --- |
 | `contracts/src/LeveredLpVault.sol` | Vault |
-| `contracts/src/mocks/MockERC20.sol` | Testnet tokens |
-| `contracts/src/mocks/MockOracle.sol` | Testnet price feed |
-| `contracts/src/mocks/MockFeePool.sol` | Fee pusher |
-| `contracts/test/LeveredLpVault.t.sol` | Foundry tests |
-| `contracts/script/DeployCarryTestnet.s.sol` | RH testnet 46630 deploy |
-| `CARRY_CONTRACT.md` | Full contract pack (repo root) |
-| `CARRY_TESTNET.md` | Deploy addresses + explorer links |
+| `CARRY_CONTRACT.md` | Full contract pack |
+| `CARRY_TESTNET.md` | Deploy + upgrade addresses |
+| `docs/ACCOUNTING_V25.md` | Live accounting model |
+| `docs/SETTLE_WATCH.md` | Live Active positions / multi-lender case |

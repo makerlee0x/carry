@@ -57,7 +57,7 @@ No need to migrate testnet ownership unless it is cheap and Maker wants the rehe
 5. **SellShares cover** — testnet: MSTR credited to seniors. Mainnet: set `sellSharesRouter` (`IMstrSellRouter` / Uniswap adapter). See [`SELL_SHARES_AMM.md`](./SELL_SHARES_AMM.md).
 6. **Abandoned proxy** `0x0e4e59…` — first UUPS proxy contaminated by lost E2E keys; do not use. Leave funds alone until term settle or owner decides otherwise.
 7. **v1 grant vault** `0x72A0…` — left unchanged; not the product CA.
-8. **Time-weighted yield dust** — integer math rounds senior credits down; dust USDG/MSTR can remain in the vault (cannot overpay seniors).
+8. **Funder yield dust** — integer math rounds position-funder credits down; dust USDG/MSTR can remain in the vault (cannot overpay seniors).
 9. **Open-queue gas** — junior on-chain `gasCredit` shipped (see [`GAS_CREDIT.md`](./GAS_CREDIT.md)). Off-chain idle DB not used.
 
 ## Keeper / ops

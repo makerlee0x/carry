@@ -1,6 +1,7 @@
 # Carry — Robinhood Testnet Deploy
 
-Deploy notes for Robinhood Chain Testnet. Full product + security write-up: [`CARRY_CONTRACT.md`](./CARRY_CONTRACT.md).
+Deploy notes for Robinhood Chain Testnet. Full product + security write-up: [`CARRY_CONTRACT.md`](./CARRY_CONTRACT.md).  
+Docs index: [`docs/README.md`](./docs/README.md). Live site: [usecarry.io](https://usecarry.io).
 
 **Do not broadcast without a deployer key Dylan provides in a local shell.** No keys in git. No mainnet.
 
@@ -47,16 +48,18 @@ Script does **not** unpause, seed user funds, or deploy a hook. Refuses chain id
 
 ---
 
-## Product vault v2 (UUPS) — current CA (2026-10-10)
+## Product vault v2.5 (UUPS) — current CA
 
 **Product CA = PROXY** (future logic upgrades keep this address).  
+`version()` = **`v2.5-funder-idle`**.  
 Owner / upgrade authority: [`0xcA44F2dbB2D43b93b39F01B88E0f0e2966983c57`](https://explorer.testnet.chain.robinhood.com/address/0xcA44F2dbB2D43b93b39F01B88E0f0e2966983c57)  
-Security notes: [`docs/SECURITY_V2.md`](./docs/SECURITY_V2.md). Maker waterfall: [`docs/MAKER_FEE_WATERFALL.md`](./docs/MAKER_FEE_WATERFALL.md).
+Security notes: [`docs/SECURITY_V2.md`](./docs/SECURITY_V2.md). Accounting: [`docs/ACCOUNTING_V25.md`](./docs/ACCOUNTING_V25.md). Maker waterfall: [`docs/MAKER_FEE_WATERFALL.md`](./docs/MAKER_FEE_WATERFALL.md).
 
 | Name | Address | Explorer |
 | --- | --- | --- |
 | **vault (PROXY / product CA)** | `0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd` | [Sourcify match](https://explorer.testnet.chain.robinhood.com/address/0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd?tab=contract) |
-| implementation (`v2.4-maker-leftovers`) | `0x09D2371be36b4910968f675d005e04825dCB74d6` | [contract](https://explorer.testnet.chain.robinhood.com/address/0x09D2371be36b4910968f675d005e04825dCB74d6?tab=contract) |
+| implementation (`v2.5-funder-idle`) | `0xe498F43ED10a37E22Fe046A3FDAAFD4E9080d0e8` | [contract](https://explorer.testnet.chain.robinhood.com/address/0xe498F43ED10a37E22Fe046A3FDAAFD4E9080d0e8?tab=contract) |
+| CarryBook library | `0x2988DFc48BE4AB47B40Ad151f1F213619cdB0794` | [contract](https://explorer.testnet.chain.robinhood.com/address/0x2988DFc48BE4AB47B40Ad151f1F213619cdB0794?tab=contract) |
 | CarryMath library | `0x98574A1719E647775BE39Ec713B657c2CF27Adc5` | [contract](https://explorer.testnet.chain.robinhood.com/address/0x98574A1719E647775BE39Ec713B657c2CF27Adc5?tab=contract) |
 | mockMstr (reused) | `0x762019309B536bbb89577422FaaFBeC9659f8728` | [verified](https://explorer.testnet.chain.robinhood.com/address/0x762019309B536bbb89577422FaaFBeC9659f8728?tab=contract) |
 | mockUsdg (reused) | `0x25030Bff74764aD72b912276a603717DB1C00644` | [verified](https://explorer.testnet.chain.robinhood.com/address/0x25030Bff74764aD72b912276a603717DB1C00644?tab=contract) |
@@ -65,10 +68,21 @@ Security notes: [`docs/SECURITY_V2.md`](./docs/SECURITY_V2.md). Maker waterfall:
 
 | Step | Tx |
 | --- | --- |
-| implementation | [`0x90b8d55d2fcc257507f826cd8642604db09970eaababa3a480fa357408597743`](https://explorer.testnet.chain.robinhood.com/tx/0x90b8d55d2fcc257507f826cd8642604db09970eaababa3a480fa357408597743) |
-| product proxy | [`0x457a1dc042a52f494d4b9a913ec8ad7d3348e02ef0825088dafc51cb232d0355`](https://explorer.testnet.chain.robinhood.com/tx/0x457a1dc042a52f494d4b9a913ec8ad7d3348e02ef0825088dafc51cb232d0355) |
+| CarryBook library | [`0x3049b2d373cbe832449d3cbdbaa6268e8f7721096c8b84bb3f41fc98354f374b`](https://explorer.testnet.chain.robinhood.com/tx/0x3049b2d373cbe832449d3cbdbaa6268e8f7721096c8b84bb3f41fc98354f374b) |
+| implementation | [`0xf18028450d770292b0e0f607cec562b515cc254ec83caf17494f973bcc87fe29`](https://explorer.testnet.chain.robinhood.com/tx/0xf18028450d770292b0e0f607cec562b515cc254ec83caf17494f973bcc87fe29) |
+| `upgradeToAndCall` → v2.5 | [`0x8ba69da6801b22d9d2b30135c14ba86cede4e6a4dc8600ed8d9a03b5d23a44fb`](https://explorer.testnet.chain.robinhood.com/tx/0x8ba69da6801b22d9d2b30135c14ba86cede4e6a4dc8600ed8d9a03b5d23a44fb) |
+| `migrateAccountingV25` | [`0x9f90d8d55932b39948b0eb8a98f6f49d88455adb9a44284497782b71418b1602`](https://explorer.testnet.chain.robinhood.com/tx/0x9f90d8d55932b39948b0eb8a98f6f49d88455adb9a44284497782b71418b1602) |
+| product proxy (original create) | [`0x457a1dc042a52f494d4b9a913ec8ad7d3348e02ef0825088dafc51cb232d0355`](https://explorer.testnet.chain.robinhood.com/tx/0x457a1dc042a52f494d4b9a913ec8ad7d3348e02ef0825088dafc51cb232d0355) |
 
-`public/config.json` → `chain.vault` = PROXY. UI money paths (`claimFees`, cover-mode `earlyExit`, settle) point here.
+`public/config.json` → `chain.vault` = PROXY, `chain.vaultImplementation` = `0xe498…d0e8`. UI money paths (`claimFees`, cover-mode `earlyExit`, settle) point here.
+
+### Confirm live bytecode
+
+```bash
+cast call 0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd "version()(string)" \
+  --rpc-url https://rpc.testnet.chain.robinhood.com
+# => "v2.5-funder-idle"
+```
 
 ### Abandoned test proxy (do not use)
 
@@ -78,7 +92,7 @@ Security notes: [`docs/SECURITY_V2.md`](./docs/SECURITY_V2.md). Maker waterfall:
 
 ## v1 / grant reference vault (2026-10-01) — keep history
 
-**Not the product CA.** Non-upgradeable LeveredLpVault used for the original grant/demo pack. Left on-chain unchanged.
+**Not the product CA. Not in use.** Non-upgradeable LeveredLpVault used for the original grant/demo pack. Left on-chain unchanged.
 
 | Name | Address | Explorer |
 | --- | --- | --- |
@@ -93,7 +107,7 @@ Security notes: [`docs/SECURITY_V2.md`](./docs/SECURITY_V2.md). Maker waterfall:
 | mockFeePool | [`0xe6e834b5407bcac86f6e901408ceac2d37123cc5bea1c2f4cdbfa3f816430e1e`](https://explorer.testnet.chain.robinhood.com/tx/0xe6e834b5407bcac86f6e901408ceac2d37123cc5bea1c2f4cdbfa3f816430e1e) |
 | vault v1 | [`0x444e85ea4ab84816c68ca2defad343068f68758c019506a997d52bf4639f58e6`](https://explorer.testnet.chain.robinhood.com/tx/0x444e85ea4ab84816c68ca2defad343068f68758c019506a997d52bf4639f58e6) |
 
-Printable overview for review: [`contracts/docs/Carry-Contract-Overview.pdf`](./contracts/docs/Carry-Contract-Overview.pdf)
+Printable overview for review: [`contracts/docs/Carry-Contract-Overview.md`](./contracts/docs/Carry-Contract-Overview.md) (prefer over PDF if they diverge).
 
 ---
 
@@ -147,14 +161,25 @@ Then owner calls `unpause()` when ready for deposits. Mint mock tokens via `Mock
 - No Yieldz. No mainnet custody of real Stock Tokens for this script.  
 - `DeployLeveredLpVault.s.sol` (4663) stays **disarmed** — not used for Carry testnet.
 
+---
 
-## v2 status
+## v2.5 status
 
-UUPS vault with Maker waterfall (base 20% / Boosted MSTR 10%), partial match, early/settle cover paths, early-exit cover revert, junior `gasCredit` + auto-refund, SellShares AMM stub (`sellSharesRouter=0` on testnet), auto-compound, deposit caps, and Boosted STRATEGY stake stub is **live** at the PROXY above. `public/config.json` points at PROXY with `product.onChain.* = true`. Idle USDG Morpho on testnet remains an APY stub (no ERC-4626 sleeve). Settle after full 7-day term is forge-covered; live E2E confirmed `TermNotElapsed` before term.
+UUPS vault with Maker waterfall, **v2.5 funder-idle accounting**, Boosted STRATEGY stake **tiers** (15/10/5%), partial match, early/settle cover paths, early-exit cover revert, junior `gasCredit` + auto-refund, SellShares AMM stub (`sellSharesRouter=0` on testnet), auto-compound, $25 min deposit, $25k market totals, **no per-wallet cap**, and settle default **IdleCarry** is **live** at the PROXY above. `public/config.json` points at PROXY with `product.onChain.* = true`. Idle USDG Morpho on testnet remains a rate stub (no ERC-4626 sleeve). Do **not** advertise a promised APY.
 
-### Live settle watch (do not early-exit)
+Note: v2.5 implementation runtime size (~32KB) exceeds EIP-170 (24KB). Robinhood testnet accepted the CREATE; **mainnet must shrink** before production deploy. See [`docs/SECURITY_V2.md`](./docs/SECURITY_V2.md).
 
-Fully matched **Active** position **#5** on PROXY `0xc801…72bd` — 1 mMSTR / 100 mUSDG + **1 mUSDG fees**, matched **2026-10-10 03:37:51 UTC**, settle after **2026-10-17 03:37:51 UTC**. Impl `v2.4-maker-leftovers` (`0x09D2…74d6`). Details + tx links: [`docs/SETTLE_WATCH.md`](./docs/SETTLE_WATCH.md).
+### Live settle watch / multi-lender case (do not early-exit)
+
+Fully matched **Active** positions on PROXY `0xc801…72bd` (impl `v2.5-funder-idle` / `0xe498…d0e8`):
+
+- **#5** — 1 mMSTR / 100 mUSDG + 1 mUSDG fees; settle after **2026-10-17 03:37:51 UTC**
+- **#6** — multi-lender idle case (A matched / B idle); settle after **2026-10-18 02:07:41 UTC**
+
+Details + tx links + Central-time windows: [`docs/SETTLE_WATCH.md`](./docs/SETTLE_WATCH.md).  
+Accounting rewrite / multi-lender idle fix: [`docs/ACCOUNTING_V25.md`](./docs/ACCOUNTING_V25.md).
+
+No separate multi-wallet retest results file is checked into this repo; link those two docs for the live multi-lender scenario.
 
 ### Wallet early-exit path (E2E)
 
@@ -162,4 +187,3 @@ Fully matched **Active** position **#5** on PROXY `0xc801…72bd` — 1 mMSTR / 
 2. Before term: Withdraw stock → confirm dialog → choose **Wallet USDG** (default).
 3. UI calls `previewEarlyExit(id, 0)`, then **approves mUSDG** to the vault with headroom if `coverUsdg > 0`, then `earlyExit(id, 0)`.
 4. Idle Carry / SellShares skip the wallet approve; SellShares uses mode `2`.
-

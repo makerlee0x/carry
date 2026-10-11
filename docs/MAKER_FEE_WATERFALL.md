@@ -24,7 +24,7 @@ Then, on **gross** LP fees for the period:
 ```
 seniorFloor = min(gross, accrual)
 left        = gross − seniorFloor
-treasury    = min(left, gross × treasuryCut)   // base 20%; Boosted MSTR 10%
+treasury    = min(left, gross × treasuryCut)   // base 20%; Boosted tiers 15/10/5%
 left        = left − treasury
 seniorPerf  = min(left, gross × 0.20)
 junior      = left − seniorPerf
@@ -82,7 +82,7 @@ Wallet / IdleCarry with cover require the junior. SellShares requires junior opt
 
 | Network | Behavior |
 | --- | --- |
-| Testnet (`sellSharesRouter == 0`) | Extra MSTR credited to seniors (time-weighted). |
+| Testnet (`sellSharesRouter == 0`) | Extra MSTR credited to **position funders** (amount × time matched on that position). |
 | Mainnet (router set) | `IMstrSellRouter` Uniswap AMM stub: swap MSTR→USDG, cover seniors/treasury, remainder to junior (or auto-compound). |
 
 ---
@@ -108,24 +108,30 @@ See [`GAS_CREDIT.md`](./GAS_CREDIT.md).
 
 ---
 
-## Senior yield timing
+## Senior yield timing (v2.5)
 
-USDG (and testnet SellShares MSTR) credits to seniors are **time-weighted by deposit time**:
+USDG (and testnet SellShares MSTR) credits go to **that position’s funders only**,
+weighted by amount × time matched on the position:
 
 ```
-weight_i = principal_i × (creditTime − joinedAt_i)
+weight_i = funderAmount_i × (creditTime − matchedAt_i)
 share_i  ∝ weight_i
 ```
+
+Pure idle lenders (not funders of the position) earn nothing from it.
+Legacy global TW indices are frozen (no new credits). See [`ACCOUNTING_V25.md`](./ACCOUNTING_V25.md).
 
 ---
 
 ## On-chain status
 
-**Landed on testnet PROXY** `0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd` (UUPS, `v2.4-maker-leftovers`):
-Maker waterfall, Boosted MSTR reduced treasury cut (10%), STRATEGY stake path stub,
-gasCredit + auto-refund on close, early-exit cover revert, SellShares router interface
-(testnet router=0), auto-compound flag, time-weighted senior credits, matchCap, deposit caps.
-Implementation address in `public/config.json`.
+**Landed on testnet PROXY** `0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd` (UUPS, **`v2.5-funder-idle`**).  
+Implementation: `0xe498F43ED10a37E22Fe046A3FDAAFD4E9080d0e8` (also in `public/config.json`).
+
+Live: Maker waterfall, Boosted STRATEGY **tiers** (15/10/5%), gasCredit + auto-refund,
+early-exit cover revert, SellShares router interface (testnet router=0), auto-compound,
+per-lender idle + FIFO funders + yield to position funders, settle default IdleCarry,
+$25 min, $25k market totals, no per-wallet cap, matchCap.
 
 ## Explicitly later
 

@@ -167,7 +167,7 @@
       <p class="muted" style="margin:0">Anyone can mint the mock tokens. They have no value.</p>
       <div class="field"><input id="mintMstr" inputmode="decimal" value="10" aria-label="mMSTR amount"><button class="btn secondary" data-act="mint-mstr">Mint mMSTR</button></div>
       <div class="field"><input id="mintUsdg" inputmode="decimal" value="2000" aria-label="mUSDG amount"><button class="btn secondary" data-act="mint-usdg">Mint mUSDG</button></div>
-      <p class="muted" style="margin-bottom:0">The vault caps each wallet at $2,500 per side, so deposits above that revert. Max in steps 4 and 5 stays under the cap.</p>
+      <p class="muted" style="margin-bottom:0">Live vault: $25 min deposit/match, $25k market totals, <strong>no per-wallet cap</strong>. Steps 4 and 5 stay under the market totals.</p>
     </section>
 
     <section class="card">
@@ -433,7 +433,7 @@ async function refreshVault() {
 
 const STATE_NAMES = ['Idle', 'Active', 'Boosted', 'Closed'];   // LeveredLpVault.PositionState
 const STATUS_CLASS = { Idle: 'warn', Active: 'ok', Boosted: 'ok', Closed: '' };
-// v2.4 Position: owner, mstrAmount, seniorPrincipal, targetSenior, entryPriceWad, feeUsdg, openedAt, lastFeeSplitAt,
+// v2.5 Position: owner, mstrAmount, seniorPrincipal, targetSenior, entryPriceWad, feeUsdg, openedAt, lastFeeSplitAt,
 // settled, boosted, unpaidSeniorAccrual, morphoRateLocked
 const toPos = (id, p) => ({ id, owner: p[0], mstr: p[1], senior: p[2], target: p[3], fee: p[5], openedAt: Number(p[6]), lastSplit: Number(p[7]), settled: p[8], boosted: p[9], unpaid: p[10] ?? 0n, rateLocked: p[11] ?? 0n });
 async function readPos(id) {

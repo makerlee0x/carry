@@ -1,13 +1,17 @@
-# Vault v2 delta (spec only — no deploy)
+# Vault v2 delta (historical research note)
 
-Diff of current testnet [`LeveredLpVault`](../contracts/src/LeveredLpVault.sol) vs research
+> **Superseded for live bytecode.** The product CA is now UUPS PROXY
+> `0xc801…72bd` at `version() = v2.5-funder-idle`. See [`ACCOUNTING_V25.md`](./ACCOUNTING_V25.md),
+> [`MAKER_FEE_WATERFALL.md`](./MAKER_FEE_WATERFALL.md), and [`CARRY_TESTNET.md`](../CARRY_TESTNET.md).
+> Keep this file only as an Oct 2 research conversation artifact.
+
+Original framing: diff of early testnet [`LeveredLpVault`](../contracts/src/LeveredLpVault.sol) vs research
 **Carry Vault v2 / option B** (Pool v1 Build Plan + Keeper Research, 2 Oct 2026).
-Keeps the Maker conversation concrete without coding DualPool.
 
-**Fee product truth** is now Maker’s Morpho-rate waterfall at claim/exit/settle only —
+**Fee product truth** is Maker’s Morpho-rate waterfall at claim/exit/settle only —
 see [`MAKER_FEE_WATERFALL.md`](./MAKER_FEE_WATERFALL.md). Rows below that still say
-“4% early-exit floor” or “20% cut on fee-in” describe **legacy live bytecode** or older
-research wording; do not treat them as the current product split.
+“4% early-exit floor”, “20% cut on fee-in”, or “$2.5k per wallet” describe **legacy /
+research wording**; do not treat them as the current product split.
 
 Frontend can keep the same function names (`depositJunior`, `depositSenior`,
 `withdrawUnmatched`, `earlyExit`, `settle`, `withdrawSenior`) where possible.
