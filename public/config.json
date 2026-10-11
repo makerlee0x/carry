@@ -18,7 +18,7 @@
     "rpcUrl": "https://rpc.testnet.chain.robinhood.com",
     "explorerUrl": "https://explorer.testnet.chain.robinhood.com",
     "vault": "0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd",
-    "vaultImplementation": "0x09D2371be36b4910968f675d005e04825dCB74d6",
+    "vaultImplementation": "0xe498F43ED10a37E22Fe046A3FDAAFD4E9080d0e8",
     "carryMathLibrary": "0x98574A1719E647775BE39Ec713B657c2CF27Adc5",
     "vaultUpgradeability": "UUPS",
     "deployBlock": 131985800,
@@ -31,7 +31,8 @@
     "vaultV1GrantReference": "0x72A053120f03B10c5506d2325f92F59B0FfC36c8",
     "vaultV1Note": "Non-upgradeable v1 grant reference vault. Leave in place; not the product CA.",
     "abandonedTestProxy": "0x0e4e59b1eb9bA2EE1630ccf720Ea7bC071d21522",
-    "abandonedTestProxyNote": "First UUPS proxy from deploy session; contaminated by lost E2E keys. Superseded by chain.vault."
+    "abandonedTestProxyNote": "First UUPS proxy from deploy session; contaminated by lost E2E keys. Superseded by chain.vault.",
+    "carryBookLibrary": "0x2988DFc48BE4AB47B40Ad151f1F213619cdB0794"
   },
   "analytics": {
     "simulate": true,
@@ -65,8 +66,10 @@
     },
     "caps": {
       "totalUsd": 25000,
-      "perWalletUsd": 2500,
-      "enforcedOnChain": true
+      "perWalletUsd": 0,
+      "minDepositUsd": 25,
+      "enforcedOnChain": true,
+      "_note": "perWalletUsd 0 = unlimited on-chain (maxPerWalletUsdg=0). minDepositUsd $25. Market totals $25k."
     },
     "inventoryBandPct": 5,
     "baseFeeBps": 20,
@@ -93,12 +96,16 @@
       "partialMatch": true,
       "boostedStake": true,
       "gasCredit": true,
-      "autoCompound": true
+      "autoCompound": true,
+      "funderIdleAccounting": true,
+      "minDeposit": true,
+      "boostTiers": true
     },
     "gasCreditNote": "Junior fundGasCredit() ETH escrow; depositSenior refunds gasRefundWei from open-queue junior. Unused credit auto-refunds on withdraw Idle / settle / early exit. See docs/GAS_CREDIT.md.",
-    "treasuryCutNote": "Base treasury cut 20% of gross and on shortfall cover. Boosted MSTR (STRATEGY stake before open) uses reduced cut 10%. Creator fee boost is later (not this cut).",
+    "treasuryCutNote": "Treasury cut is % of fees / cover residual, never position size. Base 20%. Boosted STRATEGY stake tiers (owner-configurable): 15% / 10% / 5% at >=100 / >=1k / >=10k stake. Creator fee later.",
     "earlyExitCoverNote": "Early exit: junior Wallet / IdleCarry / SellShares only. NO backstop. Wallet/Idle without enough cover REVERTS (position stays open).",
-    "settleCoverNote": "Settle: backstop first, then junior Wallet / IdleCarry / SellShares. Testnet SellShares credits extra MSTR to seniors; mainnet sets sellSharesRouter (Uniswap AMM). Auto-compound can reopen capital+fees as Idle.",
-    "autoCompoundNote": "setAutoCompound(bool). On exit/withdraw with flag on: MSTR reopens junior Idle; USDG compounds as senior idle waiting match. Off: yield to wallet."
+    "settleCoverNote": "Settle default = IdleCarry (USDG). Backstop first, then junior Wallet / IdleCarry. SellShares only if junior enabled sellSharesEnabled or chooses it. Auto-compound can reopen Idle.",
+    "autoCompoundNote": "setAutoCompound(bool). claimFees compounds junior fee share to senior idle; full exit reopens Idle; senior early-exit rematches junior when idle allows. Pause/caps do not block exits.",
+    "accountingNote": "v2.5: per-lender seniorIdle + FIFO position funders. freePrincipal = own idle only. Yield to funders by amount x time matched on that position. See docs/ACCOUNTING_V25.md."
   }
 }

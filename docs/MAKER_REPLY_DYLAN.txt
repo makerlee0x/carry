@@ -1,0 +1,41 @@
+Maker update for Dylan (Carry vault v2.5)
+
+What shipped
+- UUPS upgrade LIVE on the same product CA 0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd.
+  New impl 0xe498F43ED10a37E22Fe046A3FDAAFD4E9080d0e8 (version v2.5-funder-idle). accountingMigrated=true.
+- Critical accounting rewrite: per-lender idle USDG, FIFO match with position funder attribution, yield only to funders of that position by amount x time matched.
+- Removed global freePrincipal pro-rata and the broken global time-weighted yield index path for new credits.
+- $25 minimum deposit/match for junior notional and senior. matchCap kept. Per-wallet $2500 removed (unlimited). $25k market totals kept.
+- Boosted STRATEGY stake tiers for treasury cut of fees (not position size): 0->20%, >=100->15%, >=1k->10%, >=10k->5%. Owner-configurable. Creator fee later.
+- Auto-compound covers claimFees and full exit; senior early-exit rematches junior when idle allows. Pause and caps do not brick exits.
+- Settle default is IdleCarry (USDG). SellShares only if junior enables it or chooses it.
+- Senior early exit has no early-withdraw fee to the senior (they accept less than Morpho); treasury still takes its cut of interest earned via the waterfall.
+- Gas refunds use try-pull / pendingEthCredit so reject-ETH wallets cannot brick settle.
+
+How accounting works now
+1. Deposit senior credits that lender's seniorIdle. withdrawSenior pulls only from their idle (plus claimable yield/MSTR).
+2. Matching walks idle lenders in deposit order, fills open juniors, and records funder slices (lender, amount, matchedAt) on the position.
+3. At claimFees / earlyExit / settle, senior fee share and SellShares MSTR go only to that position's funders, weighted by amount x time matched on that position.
+4. On close, each funder's matched principal returns to their own idle (or stays in vault under auto-compound).
+5. IdleCarry burns only the junior's own idle. No cross-lender contamination.
+
+Live bug case (mirror of #6)
+- Junior needs ~771 USDG. Lender A deposits 1000 and matches most; leftover A idle is exact (228.3). Lender B deposits 500; B idle stays 500 and is fully withdrawable. freePrincipal is no longer a global pool. Forge test test_liveBug_perLenderIdle_noCrossContamination covers this.
+
+Position #5 / #6 / #7
+- Same PROXY CA. Upgrade is storage-additive plus one-shot migrateAccountingV25. Did not move principal, fees, or clocks.
+- #5: still Active, funder = deployer 100 mUSDG, fees 1 mUSDG. Do not earlyExit/settle before maturity.
+  Settle after: 2026-10-17 03:37:51 UTC = 2026-10-16 10:37:51 PM Central.
+- #6: still Active. Funders = dust slice + lender A (771.7 total). Do not earlyExit/settle before maturity.
+  Settle after: 2026-10-18 02:07:41 UTC = 2026-10-17 9:07:41 PM Central.
+- #7: still Active (308.68). Funders = A then B. After migration B idle ~421.62 fully withdrawable; lender C 2500 fully idle/withdrawable; A fully matched (idle 0). Do not earlyExit/settle before maturity.
+  Settle after: 2026-10-18 02:40:38 UTC = 2026-10-17 9:40:38 PM Central.
+
+Forge
+- Full suite green (60+ tests), including the live idle bug, funder-only yield, min $25, settle default IdleCarry, boost tiers, pendingEthCredit, pause/caps exit bypass.
+
+Docs
+- docs/ACCOUNTING_V25.md, updated SETTLE_WATCH.md, MAKER_FEE_WATERFALL.md, SECURITY_V2.md, UI config (no per-wallet cap, $25 min, settle default USDG).
+
+Leftover questions (only if blockers)
+- None blocking this money-safety fix. Optional later: live STRATEGY token balance read instead of owner stake stub; creator fee share.

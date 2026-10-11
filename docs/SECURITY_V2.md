@@ -4,6 +4,8 @@ Product CA = **UUPS proxy** `0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd`.
 Owner / upgrade authority (testnet): `0xcA44F2dbB2D43b93b39F01B88E0f0e2966983c57` (EOA).  
 Implementation address: see `chain.vaultImplementation` in [`public/config.json`](../public/config.json).
 
+Accounting rewrite: [`ACCOUNTING_V25.md`](./ACCOUNTING_V25.md). Live positions: [`SETTLE_WATCH.md`](./SETTLE_WATCH.md).
+
 ## Clean (verified this deploy)
 
 | Control | Status |
@@ -13,19 +15,20 @@ Implementation address: see `chain.vaultImplementation` in [`public/config.json`
 | Owner = vanity deployer | `0xcA44…` |
 | `rescueToken` | Reverts on MSTR/USDG (`PrincipalToken`) |
 | Treasury / backstop withdraw | Owner-only `withdrawFromBackstop` / `withdrawTreasuryFees`; cannot pull below `totalSeniorPrincipal + remaining backstop`; MSTR untouched |
-| Pause | Blocks new deposits; exits/claims/settle still work |
+| Pause | Blocks new deposits; exits/claims/settle still work (auto-compound reopen bypasses pause + caps) |
 | Reentrancy | `ReentrancyGuardUpgradeable` on value-moving paths |
 | Fee-on-transfer | Rejected on pulls |
 | Approval race on deposit | Standard ERC-20 approve+deposit; user-controlled amounts |
 | Morpho rate | Cap **≤5%**; rate **locked per position** at first match |
-| Settle shortfall | Backstop first, then junior Wallet / IdleCarry / SellShares + treasury-on-cover (base 20% / Boosted 10%) |
-| Early exit shortfall | Junior only (NO backstop); Wallet/Idle without cover **reverts** (position stays open); SellShares may close |
-| Treasury cut | Base **20%**; Boosted MSTR (STRATEGY stake) **10%** on waterfall + cover |
-| Senior yield | Time-weighted by deposit time (late seniors do not take full pre-arrival accrual) |
+| Settle shortfall | Backstop first, then junior Wallet / IdleCarry / SellShares + treasury-on-cover (base 20% / boost tiers) |
+| Early exit shortfall | Junior only (NO backstop); Wallet/Idle without cover **reverts** (position stays open); SellShares if enabled/chosen |
+| Treasury cut | **% of fees** (not size): base **20%**; STRATEGY stake tiers 15/10/5% |
+| Senior yield | Per-position funders by amount × time matched (no global freePrincipal / TW index) |
+| Senior idle | Per-lender `seniorIdle`; IdleCarry burns junior own idle only |
 | Open-queue gas | Junior `gasCreditWei` ETH escrow + `matchCap` (default 25); auto-refund on Idle withdraw / settle / early exit |
 | Auto-compound | Per-wallet `autoCompound`; exit capital+fees can reopen as Idle |
 | SellShares AMM | `sellSharesRouter` interface; testnet stays `address(0)` (MSTR→seniors) |
-| Forge suite | Green including Boosted 10%, cover revert, gas auto-refund, compound, AMM stub |
+| Forge suite | Green including live freePrincipal bug case, funder yield, min $25, tiers, pendingEthCredit |
 
 ## Upgrade authority — mainnet plan
 
@@ -47,7 +50,7 @@ No need to migrate testnet ownership unless it is cheap and Maker wants the rehe
 1. **MockOracle has `setPrice`** — owner/deployer can move mark for demos. Not a production oracle.
 2. **MockERC20 `mint` is open to deployer** — test tokens only; anyone who holds the mint key can inflate demo balances.
 3. **Public mempool / MEV** — testnet; no keeper private mempool. Fee donors and settle callers are public.
-4. **Boosted** — STRATEGY stake-before-open (owner flag and/or `strategyToken` balance). Activates **10%** treasury cut on MSTR market. Creator fee share later; no fake STRATEGY yield minted.
+4. **Boosted** — STRATEGY stake tiers (owner `setBoostStakeAmount` / `setBoostTiers`). Treasury cut of **fees** only. Creator fee share later; no fake STRATEGY yield minted.
 5. **SellShares cover** — testnet: MSTR credited to seniors. Mainnet: set `sellSharesRouter` (`IMstrSellRouter` / Uniswap adapter). See [`SELL_SHARES_AMM.md`](./SELL_SHARES_AMM.md).
 6. **Abandoned proxy** `0x0e4e59…` — first UUPS proxy contaminated by lost E2E keys; do not use. Leave funds alone until term settle or owner decides otherwise.
 7. **v1 grant vault** `0x72A0…` — left unchanged; not the product CA.

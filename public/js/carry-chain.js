@@ -97,7 +97,7 @@
     const seniorFloor = Math.min(g, accrual);
     let left = g - seniorFloor;
     // Base treasury 20%; Boosted MSTR (STRATEGY stake) reduced cut 10%.
-    const cut = boosted ? 0.1 : 0.2;
+    const cut = boosted ? 0.1 : 0.2; // display fallback; on-chain uses locked tier cut of fees
     const treasury = Math.min(left, g * cut);
     left -= treasury;
     const seniorPerf = Math.min(left, g * 0.2);
@@ -589,7 +589,7 @@
         const anyBoosted = act.some((r) => r.boosted);
         const w = waterfallPreview({ seniorPrincipal: seniorBook, morphoRate: morphoRateFromCfg(), elapsedSec: Math.max(now - first, 0), gross: grossFees, boosted: anyBoosted });
         const liveNote = coverOn
-          ? 'Live UUPS vault — Maker waterfall. Early exit: junior cover only (NO backstop). Wallet / Idle / SellShares. Base treasury 20%; Boosted MSTR 10%. Wallet/Idle without cover reverts (position stays open).'
+          ? 'Live UUPS vault — Maker waterfall + v2.5 funder-idle. Early exit: junior USDG cover (Idle/Wallet) or SellShares if enabled. Base treasury 20% of fees; Boosted STRATEGY tiers reduce fee cut. Wallet/Idle without cover reverts.'
           : 'Product preview — enable product.onChain.earlyCoverPaths against the UUPS proxy to send cover-mode earlyExit.';
         const intro = `Fee split runs at early exit (not on fee-in). Applies to ${fx(tot(act))} MSTR still inside its 7-day term.` + (freeTotal > 0 ? ` The other ${fx(freeTotal)} MSTR leaves with no fee.` : '') +
           ' Choose how to cover senior accrual if fees are short (junior pays; backstop is not used on early exit). Wallet/Idle without enough USDG reverts and leaves the position open — use Sell from position to force close. If auto-compound is on, capital+fees reopen as Idle instead of wallet.';
@@ -632,7 +632,7 @@
         const grossFees = ready.reduce((x, r) => x + r.fee, 0);
         const w = waterfallPreview({ seniorPrincipal: seniorBook, morphoRate: morphoRateFromCfg(), elapsedSec: Math.max(now - first, 0), gross: grossFees });
         const intro = 'Fee split runs at settle (not on fee-in). Maker waterfall below.';
-        const rows = waterfallRows(w, { liveNote: onChainFlag('makerWaterfall') ? 'Live UUPS vault settle: Maker Morpho-rate waterfall; shortfall uses backstop first, then junior Wallet / Idle Carry / SellShares. Base treasury 20%; Boosted MSTR 10% on cover.' : 'Product preview — enable product.onChain.makerWaterfall for live settle waterfall copy.' });
+        const rows = waterfallRows(w, { liveNote: onChainFlag('makerWaterfall') ? 'Live UUPS vault settle: Maker Morpho-rate waterfall; default IdleCarry (USDG). Backstop first, then junior Wallet / Idle. SellShares only if junior enabled it. Treasury cut is % of fees (base 20%; boost tiers).' : 'Product preview — enable product.onChain.makerWaterfall for live settle waterfall copy.' });
         const answer = confirm ? await confirm({ title: 'Confirm settle', intro, rows, confirmLabel: 'Confirm settle' }) : { ok: true };
         if (!answer || answer.ok === false) throw user('Settle cancelled. No funds were moved.');
       }

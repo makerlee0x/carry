@@ -11,6 +11,6 @@ contract LeveredLpVaultV2 is LeveredLpVault {
     }
 
     function version() external pure returns (string memory) {
-        return "v2.4-maker-leftovers";
+        return "v2.5-funder-idle";
     }
 }

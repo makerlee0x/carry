@@ -27,6 +27,12 @@
     "function mstr() view returns (address)",
     "function usdg() view returns (address)",
     "function freePrincipal(address) view returns (uint256)",
+    "function seniorIdle(address) view returns (uint256)",
+    "function minDepositUsdg() view returns (uint256)",
+    "function setSellSharesEnabled(bool)",
+    "function setAutoCompound(bool)",
+    "function seniorEarlyExit(uint256,uint256) returns (uint256,uint256,uint256)",
+    "function settle(uint256,uint8)",
     "function seniorPrincipal(address) view returns (uint256)",
     "function positions(uint256) view returns (address,uint256,uint256,uint256,uint256,uint64,bool)",
   ];

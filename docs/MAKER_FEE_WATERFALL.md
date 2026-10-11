@@ -1,8 +1,9 @@
 # Maker fee waterfall (source of truth)
 
-Locked with Maker Lee (Oct 5, 2026). Updated Oct 10 leftovers: Boosted reduced cut,
-gasCredit auto-refund, early-exit cover revert, SellShares AMM stub, auto-compound.
+Locked with Maker Lee (Oct 5, 2026). Updated Oct 10 leftovers + **v2.5 funder-idle accounting**
+(per-lender idle, FIFO funders, yield to position funders, settle default IdleCarry, boost tiers).
 
+Accounting model (v2.5): [`ACCOUNTING_V25.md`](./ACCOUNTING_V25.md).  
 Product narrative: [`MAKER_V1_NOTES.md`](./MAKER_V1_NOTES.md).  
 On-chain today: [`CARRY_CONTRACT.md`](../CARRY_CONTRACT.md) + [`CARRY_TESTNET.md`](../CARRY_TESTNET.md).
 
@@ -32,12 +33,13 @@ senior      = seniorFloor + seniorPerf
 
 **Treasury cut surface (Maker Oct 10 leftovers):**
 
-| Position | Treasury cut of gross / cover |
+| Position / stake | Treasury cut of **fees** (not position size) |
 | --- | --- |
-| Active (plain) | **20%** (`treasuryCutWad`) |
-| Boosted MSTR (STRATEGY stake before open) | **10%** (`boostedTreasuryCutWad`) |
+| Active (no STRATEGY stake) | **20%** (`treasuryCutWad`) |
+| Boosted tiers (STRATEGY stake stub, owner-configurable) | 15% / 10% / 5% at ≥100 / ≥1k / ≥10k |
+| Legacy `setBoostStaked` without amount | flat **10%** (`boostedTreasuryCutWad`) |
 
-Creator fee boost is **later** and is **not** this cut. Boosted is MSTR market only for now.
+Creator fee boost is **later** and is **not** this cut. Cut locks at first match (`treasuryCutLocked`).
 
 ---
 
@@ -65,7 +67,8 @@ If fees cannot cover senior accrual:
 3. **Treasury-on-cover:** same base/Boosted cut as waterfall.  
    `coverTotal = residualShortfall + treasuryOnCover`.
 
-Settle default mode = SellShares (permissionless). Wallet / IdleCarry require the junior caller.
+Settle default mode = **IdleCarry** (USDG path). Permissionless when residual cover is zero.
+Wallet / IdleCarry with cover require the junior. SellShares requires junior opt-in (`sellSharesEnabled`) or junior caller.
 
 ### Early exit (before term)
 
@@ -88,8 +91,8 @@ Settle default mode = SellShares (permissionless). Wallet / IdleCarry require th
 
 `setAutoCompound(bool)` per wallet:
 
-- **On:** junior exit / Idle withdraw compounds MSTR into a new Idle position; leftover USDG compounds as senior idle waiting match. Senior withdraw redeposits capital+fees as senior idle; MSTR credits open junior Idle.
-- **Off:** yield and capital go to the wallet on withdraw (prior default).
+- **On:** `claimFees` compounds junior fee share into senior idle; full exit / Idle withdraw reopens MSTR as junior Idle and USDG as senior idle; if senior early-exits, junior with auto-compound rematches when idle allows. Pause and deposit caps do **not** block exit compounds.
+- **Off:** yield and capital go to the wallet on withdraw.
 
 ---
 
