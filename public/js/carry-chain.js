@@ -476,6 +476,7 @@
     TermNotElapsed: 'The 7-day term has not ended yet.',
     BadPosition: 'Position not found.',
     FeeOnTransfer: 'This token takes a fee on transfer, which the vault rejects.',
+    CapExceeded: 'This deposit is over a vault cap (total or per wallet). Try a smaller amount.',
     JuniorCoverRequired: 'Not enough USDG or Idle Carry to cover senior accrual. Approve Wallet USDG, add Idle USDG, or choose Sell from position. The position stayed open.',
     InsufficientIdleCover: 'Not enough unmatched USDG on Carry to cover this exit.',
     SellRouterFailed: 'SellShares AMM swap failed. Try again or use Wallet / Idle cover.',

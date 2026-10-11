@@ -165,8 +165,9 @@
     <section class="card">
       <div class="card-head"><h2>3 · Get test tokens</h2><span class="pill">testnet mint</span></div>
       <p class="muted" style="margin:0">Anyone can mint the mock tokens. They have no value.</p>
-      <div class="field"><input id="mintMstr" inputmode="decimal" value="100" aria-label="mMSTR amount"><button class="btn secondary" data-act="mint-mstr">Mint mMSTR</button></div>
-      <div class="field"><input id="mintUsdg" inputmode="decimal" value="10000" aria-label="mUSDG amount"><button class="btn secondary" data-act="mint-usdg">Mint mUSDG</button></div>
+      <div class="field"><input id="mintMstr" inputmode="decimal" value="10" aria-label="mMSTR amount"><button class="btn secondary" data-act="mint-mstr">Mint mMSTR</button></div>
+      <div class="field"><input id="mintUsdg" inputmode="decimal" value="2000" aria-label="mUSDG amount"><button class="btn secondary" data-act="mint-usdg">Mint mUSDG</button></div>
+      <p class="muted" style="margin-bottom:0">The vault caps each wallet at $2,500 per side, so deposits above that revert. Max in steps 4 and 5 stays under the cap.</p>
     </section>
 
     <section class="card">
@@ -723,6 +724,23 @@ async function approveIfNeeded(token, symbol, amount, spender = cfg.contracts.va
   await sendTx(`Approve ${symbol}`, { address: token, abi: erc20Abi, functionName: 'approve', args: [spender, amount] });
 }
 
+// USDG room left under the vault caps for this wallet (same checks as _enforceJuniorCap / _enforceSeniorCap).
+// usdg === null means no cap applies.
+async function capRoom(side) {
+  const v = (functionName, args = []) => pub.readContract({ address: cfg.contracts.vault, abi: vaultAbi, functionName, args });
+  const junior = side === 'junior';
+  const [capTotal, capWallet, total, mine, price] = await Promise.all([
+    v(junior ? 'maxTotalJuniorUsdg' : 'maxTotalSeniorUsdg'), v('maxPerWalletUsdg'),
+    v(junior ? 'totalJuniorUsdg' : 'totalSeniorPrincipal'), v(junior ? 'walletJuniorUsdg' : 'walletSeniorUsdg', [account]),
+    pub.readContract({ address: cfg.contracts.oracle, abi: oracleAbi, functionName: 'mstrPriceWad' }),
+  ]);
+  const left = (cap, used) => (cap === 0n ? null : cap > used ? cap - used : 0n);
+  const t = left(capTotal, total), w = left(capWallet, mine);
+  if (t === null && w === null) return { usdg: null, price };
+  if (w !== null && (t === null || w <= t)) return { usdg: w, price, why: `${fmt(capWallet, 18, 0)} USDG per-wallet cap` };
+  return { usdg: t, price, why: `${fmt(capTotal, 18, 0)} USDG total ${side} cap` };
+}
+
 async function setBoost(on) {
   const raw = $('boostAddr').value.trim() || account;
   let who; try { who = getAddress(raw); } catch (e) { throw new Error('Enter a valid wallet address.'); }
@@ -931,17 +949,32 @@ const actions = {
     await approveIfNeeded(cfg.contracts.usdg, 'mUSDG', a, cfg.contracts.feePool);
     await sendTx(`Push ${fmt(a)} mUSDG fees to #${id}`, { address: cfg.contracts.feePool, abi: feePoolAbi, functionName: 'payFee', args: [cfg.contracts.vault, id, a] });
   }),
-  'max-mstr': async () => { if (account) $('depMstr').value = formatUnits(await balanceOf(cfg.contracts.mstr), DEC); },
-  'max-usdg': async () => { if (account) $('depUsdg').value = formatUnits(await balanceOf(cfg.contracts.usdg), DEC); },
+  'max-mstr': async () => {
+    if (!account) return;
+    const [bal, room] = await Promise.all([balanceOf(cfg.contracts.mstr), capRoom('junior')]);
+    const fit = room.usdg === null ? bal : (room.usdg * WAD) / room.price;   // USDG room → MSTR at the oracle price
+    $('depMstr').value = formatUnits(bal < fit ? bal : fit, DEC);
+  },
+  'max-usdg': async () => {
+    if (!account) return;
+    const [bal, room] = await Promise.all([balanceOf(cfg.contracts.usdg), capRoom('senior')]);
+    $('depUsdg').value = formatUnits(room.usdg !== null && room.usdg < bal ? room.usdg : bal, DEC);
+  },
   'deposit-mstr': (b) => run(b, async () => {
     const a = readAmount('depMstr');
     if ((await balanceOf(cfg.contracts.mstr)) < a) throw new Error('Not enough mMSTR. Mint some in step 3.');
+    // Check caps before the approval, so a deposit that will revert never gets an approval prompt.
+    const room = await capRoom('junior');
+    const notional = (a * room.price) / WAD;
+    if (room.usdg !== null && notional > room.usdg) throw new Error(`Over the vault cap: ${fmt(a)} mMSTR is about ${fmt(notional, 18, 0)} USDG at $${fmt(room.price, 18, 2)}, and you have ${fmt(room.usdg, 18, 0)} USDG of room left (${room.why}). Use Max.`);
     await approveIfNeeded(cfg.contracts.mstr, 'mMSTR', a);
     await sendTx(`Deposit ${fmt(a)} mMSTR`, { address: cfg.contracts.vault, abi: vaultAbi, functionName: 'depositJunior', args: [a] });
   }),
   'deposit-usdg': (b) => run(b, async () => {
     const a = readAmount('depUsdg');
     if ((await balanceOf(cfg.contracts.usdg)) < a) throw new Error('Not enough mUSDG. Mint some in step 3.');
+    const room = await capRoom('senior');
+    if (room.usdg !== null && a > room.usdg) throw new Error(`Over the vault cap: you have ${fmt(room.usdg, 18, 0)} USDG of room left (${room.why}). Use Max.`);
     await approveIfNeeded(cfg.contracts.usdg, 'mUSDG', a);
     await sendTx(`Lend ${fmt(a)} mUSDG`, { address: cfg.contracts.vault, abi: vaultAbi, functionName: 'depositSenior', args: [a] });
   }),
@@ -956,7 +989,9 @@ $('depMstr').addEventListener('input', async () => {
   try {
     const a = readAmount('depMstr');
     const price = await pub.readContract({ address: cfg.contracts.oracle, abi: oracleAbi, functionName: 'mstrPriceWad' });
-    set('depMstrHint', `Needs about ${fmt((a * price) / 10n ** 18n)} USDG from lenders to start earning (at the oracle price).`);
+    const room = account ? await capRoom('junior') : { usdg: null };
+    set('depMstrHint', `Needs about ${fmt((a * price) / 10n ** 18n)} USDG from lenders to start earning (at the oracle price of $${fmt(price, 18, 2)}).` +
+      (room.usdg !== null ? ` Cap room left: ${fmt(room.usdg, 18, 0)} USDG.` : ''));
   } catch (e) { set('depMstrHint', ''); }
 });
 
