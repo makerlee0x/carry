@@ -257,3 +257,117 @@
   .rt-mer-1 { transform: scaleX(1); } .rt-mer-2 { transform: scaleX(0.866); } .rt-mer-3 { transform: scaleX(0.5); }
   .rt-mer-4 { transform: scaleX(0.01); } .rt-mer-5 { transform: scaleX(-0.5); } .rt-mer-6 { transform: scaleX(-0.866); }
 }
+
+/* ---- Round 4 ------------------------------------------------------------------------------------------- */
+
+/* How it works: flow row as a schematic. Odd children are nodes (pin labels above), even children are traces. */
+.rt-flow {
+  gap: 0 !important; row-gap: 26px !important; padding: 34px 24px 22px !important;
+  background-image: radial-gradient(rgba(183, 255, 174, 0.12) 1px, transparent 1.4px) !important;
+  background-size: 16px 16px !important;
+}
+.rt-flow > span:nth-child(odd) {
+  position: relative; border: 1px solid rgba(183, 255, 174, 0.45); border-radius: 2px !important;
+  padding: 8px 14px !important; box-shadow: 0 0 10px rgba(61, 255, 90, 0.12);
+}
+.rt-flow > span:nth-child(odd)::before {
+  position: absolute; left: -1px; top: -17px; font-size: 9px; letter-spacing: 0.16em; color: #b6e3a8; opacity: 0.7;
+}
+.rt-flow > span:nth-child(1)::before { content: "IN\00B7 A"; }
+.rt-flow > span:nth-child(3)::before { content: "IN\00B7 B"; }
+.rt-flow > span:nth-child(5)::before { content: "POOL"; }
+.rt-flow > span:nth-child(7)::before { content: "OUT"; }
+.rt-flow > span:nth-child(odd)::after { /* solder pads on the node edges */
+  content: ""; position: absolute; top: 50%; left: -4px; right: -4px; height: 5px; margin-top: -2.5px; pointer-events: none;
+  background: linear-gradient(var(--rt-green), var(--rt-green)) left / 5px 5px no-repeat, linear-gradient(var(--rt-green), var(--rt-green)) right / 5px 5px no-repeat;
+}
+.rt-flow > span:nth-child(1)::after { background-size: 0 0, 5px 5px; }
+.rt-flow > span:last-child::after { background-size: 5px 5px, 0 0; }
+.rt-flow > span:nth-child(even) {
+  flex: 1 1 36px; min-width: 36px; display: flex; align-items: center; gap: 6px; color: var(--rt-green) !important; font-size: 13px;
+}
+.rt-flow > span:nth-child(even)::before, .rt-flow > span:nth-child(even)::after {
+  content: ""; flex: 1; height: 1px; background: rgba(183, 255, 174, 0.55); box-shadow: 0 0 4px rgba(61, 255, 90, 0.5);
+}
+
+/* Docs step lists as a schematic rail: boxed step nodes on a vertical trace. */
+.rt-steps > div { position: relative; border-top: 0 !important; }
+.rt-steps > div > span:first-child {
+  position: relative; z-index: 1; width: 36px !important; height: 26px; padding-top: 0 !important;
+  display: flex; align-items: center; justify-content: center;
+  border: 1px solid rgba(183, 255, 174, 0.5); background: var(--rt-panel); box-shadow: 0 0 8px rgba(61, 255, 90, 0.18);
+}
+.rt-steps > div::before {
+  content: ""; position: absolute; left: 18px; top: 0; bottom: 0; width: 1px; background: rgba(183, 255, 174, 0.3);
+}
+.rt-steps > div:first-child::before { top: 27px; }
+.rt-steps > div:last-child::before { bottom: calc(100% - 27px); }
+.rt-steps > div > span:first-child::after { /* stub from node to text */
+  content: ""; position: absolute; left: 100%; top: 50%; width: 10px; height: 1px; background: rgba(183, 255, 174, 0.4);
+}
+
+/* Toasts as terminal lines. */
+.rt-toast {
+  display: flex; align-items: center; gap: 10px; border-radius: 2px !important; border-left-width: 3px !important;
+  background-image: repeating-linear-gradient(0deg, rgba(183, 255, 174, 0.04) 0 1px, transparent 1px 3px) !important;
+  animation: rt-toast-in 0.22s ease-out both;
+}
+.rt-toast-p { color: #b6e3a8; opacity: 0.7; }
+.rt-toast::after { content: ""; width: 8px; height: 15px; flex: none; background: var(--rt-green); animation: rt-blink 1s steps(2) infinite; }
+@keyframes rt-toast-in { from { opacity: 0; transform: translate(-50%, 8px); } }
+
+/* Positions as a system table: row numbers, dashed header rule, [ STATUS ] brackets. */
+.rt-systable { counter-reset: rt-row; }
+.rt-systable > div:first-child { position: relative; padding-left: 46px !important; border-bottom: 1px dashed rgba(183, 255, 174, 0.3) !important; color: #b6e3a8 !important; }
+.rt-systable > div:first-child::before { content: "#"; position: absolute; left: 16px; top: 50%; transform: translateY(-50%); }
+.rt-systable > button { counter-increment: rt-row; position: relative; padding-left: 46px !important; border-bottom-style: dotted !important; }
+.rt-systable > button::before {
+  content: counter(rt-row, decimal-leading-zero); position: absolute; left: 16px; top: 50%; transform: translateY(-50%);
+  font-size: 11px; color: #6f6552;
+}
+.rt-systable > button:hover::before, .rt-systable > button:focus-visible::before { content: "\25B8"; color: var(--rt-green); }
+.rt-systable > button:hover { box-shadow: inset 2px 0 0 var(--rt-green); }
+.rt-systable > button > span:last-child::before { content: "[ "; color: #6f6552; }
+.rt-systable > button > span:last-child::after { content: " ]"; color: #6f6552; }
+
+/* 404: the one place to go all out. Big VFD code, RGB-split glitch heading, CRT noise, route error log. */
+.rt-404 { position: relative; isolation: isolate; }
+.rt-404::before {
+  content: ""; position: absolute; inset: 0 -100vw; z-index: -1; pointer-events: none;
+  background:
+    repeating-linear-gradient(0deg, rgba(183, 255, 174, 0.035) 0 1px, transparent 1px 3px),
+    radial-gradient(ellipse 60% 70% at 30% 45%, rgba(61, 255, 90, 0.07), transparent 70%);
+}
+.rt-404num {
+  font-size: clamp(72px, 14vw, 160px) !important; line-height: 1; color: var(--rt-green);
+  text-shadow: -3px 0 rgba(255, 42, 26, 0.55), 3px 0 rgba(45, 226, 230, 0.45), 0 0 24px rgba(61, 255, 90, 0.5);
+}
+.rt-404num::before { text-shadow: none; }
+.rt-glitch { position: relative; }
+.rt-glitch::before, .rt-glitch::after {
+  content: attr(data-text); position: absolute; left: 0; top: 0; pointer-events: none; text-shadow: none;
+}
+.rt-glitch::before { color: #ff2a1a; opacity: 0.7; transform: translateX(-2px); clip-path: inset(0 0 62% 0); animation: rt-glitch 3.2s steps(1) infinite; }
+.rt-glitch::after { color: #2de2e6; opacity: 0.6; transform: translateX(2px); clip-path: inset(58% 0 0 0); animation: rt-glitch 2.7s steps(1) infinite reverse; }
+@keyframes rt-glitch {
+  0%, 86%, 100% { transform: translateX(0); opacity: 0; }
+  88% { transform: translateX(-4px); opacity: 0.8; clip-path: inset(10% 0 55% 0); }
+  91% { transform: translateX(3px); opacity: 0.7; clip-path: inset(48% 0 20% 0); }
+  94% { transform: translateX(-2px); opacity: 0.6; clip-path: inset(70% 0 5% 0); }
+}
+.rt-errlog { width: min(100%, 560px); font: 500 13px/1.9 'JetBrains Mono', monospace; color: #d9ccad; padding: 14px 18px; border: 1px solid #2f2c27; border-left: 3px solid #ff2a1a; background: var(--rt-panel); }
+.rt-errlog:empty { display: none; }
+
+/* "Couldn't load data": red hazard edge and a glitching alert glyph. */
+.rt-alert { position: relative; overflow: hidden; padding-left: 40px !important; border-color: rgba(255, 42, 26, 0.45) !important; }
+.rt-alert::before {
+  content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 14px;
+  background: repeating-linear-gradient(-45deg, #ff2a1a 0 5px, #0b0c0a 5px 10px); opacity: 0.85;
+}
+.rt-alert-i { text-shadow: -1px 0 rgba(45, 226, 230, 0.55), 1px 0 rgba(255, 42, 26, 0.7); box-shadow: 0 0 12px rgba(255, 42, 26, 0.35); animation: rt-flicker 4s steps(1) infinite; }
+@keyframes rt-flicker { 0%, 92%, 100% { opacity: 1; } 93% { opacity: 0.4; } 95% { opacity: 1; } 96% { opacity: 0.6; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .rt-toast, .rt-toast::after, .rt-glitch::before, .rt-glitch::after, .rt-alert-i { animation: none; }
+  .rt-glitch::before, .rt-glitch::after { opacity: 0.35; }
+}

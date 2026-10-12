@@ -1,6 +1,7 @@
 /**
  * Boot log for loading panels. Fills every `.rt-boot` element (rendered by the bundle while data loads) with
  * real load status: config.json, the viem client, the first vault read over RPC, the oracle price, and the wallet.
+ * Also fills the 404 page's `.rt-errlog` with the unresolved route.
  * Status comes from window.CarryChain.last (see carry-chain.js), so a line only says OK once that step happened.
  */
 (function () {
@@ -51,12 +52,37 @@
     el.dataset.rt = '1';
   }
 
+  // 404 page: resolve the requested route against the routes that do exist. The app rewrites the hash after it
+  // routes to 404, so remember the last hash that was actually requested.
+  const blank = (h) => !h || h === '#' || h === '#/';
+  let requested = location.hash;
+  const onNav = () => {
+    if (!blank(location.hash)) requested = location.hash;
+    setTimeout(() => document.querySelectorAll('.rt-errlog').forEach(renderErr), 0);   // panel may stay mounted across routes
+  };
+  window.addEventListener('hashchange', onNav);
+  window.addEventListener('popstate', onNav);
+  function renderErr(el) {
+    const h = blank(location.hash) ? requested : location.hash;
+    const route = blank(h) ? '/' : h.slice(1);
+    const rows = [['RESOLVE', '#' + route, ['404', 'err']], ['HOME', '#', OK], ['MARKETS', '#markets', OK], ['DOCS', '#docs', OK]];
+    el.replaceChildren(...rows.map(([k, val, st]) => {
+      const row = document.createElement('div'); row.className = 'rt-boot-line';
+      const a = document.createElement('span'); a.className = 'rt-boot-k'; a.textContent = '> ' + k;
+      const b = document.createElement('span'); b.className = 'rt-boot-v'; b.textContent = val;
+      const c = document.createElement('span'); c.className = 'rt-boot-lead';
+      const d = document.createElement('span'); d.className = 'rt-boot-s rt-boot-' + st[1]; d.textContent = st[0];
+      row.append(a, b, c, d); return row;
+    }));
+    el.dataset.rt = '1';
+  }
+
   function renderAll() { document.querySelectorAll('.rt-boot').forEach(render); }
 
   // Panels mount and unmount with the bundle's loading state; render new ones as they appear.
   new MutationObserver(() => {
-    const fresh = document.querySelectorAll('.rt-boot:not([data-rt])');
-    if (fresh.length) fresh.forEach(render);
+    document.querySelectorAll('.rt-boot:not([data-rt])').forEach(render);
+    document.querySelectorAll('.rt-errlog:not([data-rt])').forEach(renderErr);
   }).observe(document, { childList: true, subtree: true });
   window.addEventListener('carrychain', renderAll);
 })();
