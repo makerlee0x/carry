@@ -89,15 +89,16 @@
 
   // Maker fee waterfall preview (product truth). Live UUPS vault applies this on-chain
   // at claimFees / earlyExit / settle only (no cut on fee-in).
-  function waterfallPreview({ seniorPrincipal, morphoRate, elapsedSec, gross, boosted }) {
+  function waterfallPreview({ seniorPrincipal, morphoRate, elapsedSec, gross, boosted, cut: cutOverride }) {
     const year = 365 * 86400;
     const rate = Number.isFinite(morphoRate) ? morphoRate : 0.039;
     const accrual = Math.max(0, seniorPrincipal) * rate * (Math.max(elapsedSec, 0) / year);
     const g = Math.max(0, gross);
     const seniorFloor = Math.min(g, accrual);
     let left = g - seniorFloor;
-    // Base treasury 20%; Boosted MSTR (STRATEGY stake) reduced cut 10%.
-    const cut = boosted ? 0.1 : 0.2; // display fallback; on-chain uses locked tier cut of fees
+    // Base treasury 20%. On-chain the cut is locked per position at first match from STRATEGY stake
+    // tiers (15/10/5%); cutOverride carries that. Flat 10% only as a fallback for legacy positions.
+    const cut = Number.isFinite(cutOverride) ? cutOverride : (boosted ? 0.1 : 0.2);
     const treasury = Math.min(left, g * cut);
     left -= treasury;
     const seniorPerf = Math.min(left, g * 0.2);
@@ -111,6 +112,14 @@
         accrual: 7.67, gross: 26.85, seniorFloor: 7.67, treasury: 5.37, seniorPerf: 5.37, junior: 8.44, senior: 13.04,
       },
     };
+  }
+
+  // Fee-weighted treasury cut across positions (each uses its locked tier cut when known).
+  function blendedCut(rows) {
+    const tot = rows.reduce((x, r) => x + r.fee, 0);
+    const cutOf = (r) => (r.cut != null ? r.cut : (r.boosted ? 0.1 : 0.2));
+    if (!(tot > 0)) return rows.length ? cutOf(rows[0]) : 0.2;
+    return rows.reduce((x, r) => x + cutOf(r) * r.fee, 0) / tot;
   }
 
   function morphoRateFromCfg() {
@@ -130,7 +139,7 @@
       { k: 'Senior accrual (Morpho opp. cost)', v: moneyUsdg(w.accrual) },
       { k: 'Gross LP fees (split now)', v: moneyUsdg(w.gross) },
       { k: 'Senior floor', v: moneyUsdg(w.seniorFloor) },
-      { k: 'Treasury (20% of gross)', v: moneyUsdg(w.treasury) },
+      { k: `Treasury (${round(w.treasuryCut * 100, 1)}% of gross)`, v: moneyUsdg(w.treasury) },
       { k: 'Senior performance', v: moneyUsdg(w.seniorPerf) },
       { k: 'Junior', v: moneyUsdg(w.junior) },
       { k: 'Example · ' + ex.label, v: `floor $${ex.seniorFloor} · treasury $${ex.treasury} · seniorPerf $${ex.seniorPerf} · junior $${ex.junior}` },
@@ -198,6 +207,8 @@
         openedAt: Number(v2 ? p[6] : p[5]),
         settled: !!(v2 ? p[8] : p[6]),
         boosted: v2 ? !!p[9] : false,
+        // v2.5 treasuryCutLocked (WAD) at index 12; 0 = not locked, fall back to flat display cut.
+        cut: p.length > 12 && p[12] > 0n ? num(p[12]) : null,
         matched,
       };
     }));
@@ -587,7 +598,7 @@
         const accrual = sum(prev, 'accrual') || sum(prev, 'couponOwed');
         const soldIfShares = sum(await previewMode(2), 'mstrSold');
         const anyBoosted = act.some((r) => r.boosted);
-        const w = waterfallPreview({ seniorPrincipal: seniorBook, morphoRate: morphoRateFromCfg(), elapsedSec: Math.max(now - first, 0), gross: grossFees, boosted: anyBoosted });
+        const w = waterfallPreview({ seniorPrincipal: seniorBook, morphoRate: morphoRateFromCfg(), elapsedSec: Math.max(now - first, 0), gross: grossFees, boosted: anyBoosted, cut: blendedCut(act) });
         const liveNote = coverOn
           ? 'Live UUPS vault — Maker waterfall + v2.5 funder-idle. Early exit: junior USDG cover (Idle/Wallet) or SellShares if enabled. Base treasury 20% of fees; Boosted STRATEGY tiers reduce fee cut. Wallet/Idle without cover reverts.'
           : 'Product preview — enable product.onChain.earlyCoverPaths against the UUPS proxy to send cover-mode earlyExit.';
@@ -630,7 +641,7 @@
         const first = Math.min(...ready.map((r) => r.openedAt));
         const seniorBook = ready.reduce((x, r) => x + r.senior, 0);
         const grossFees = ready.reduce((x, r) => x + r.fee, 0);
-        const w = waterfallPreview({ seniorPrincipal: seniorBook, morphoRate: morphoRateFromCfg(), elapsedSec: Math.max(now - first, 0), gross: grossFees });
+        const w = waterfallPreview({ seniorPrincipal: seniorBook, morphoRate: morphoRateFromCfg(), elapsedSec: Math.max(now - first, 0), gross: grossFees, cut: blendedCut(ready) });
         const intro = 'Fee split runs at settle (not on fee-in). Maker waterfall below.';
         const rows = waterfallRows(w, { liveNote: onChainFlag('makerWaterfall') ? 'Live UUPS vault settle: Maker Morpho-rate waterfall; default IdleCarry (USDG). Backstop first, then junior Wallet / Idle. SellShares only if junior enabled it. Treasury cut is % of fees (base 20%; boost tiers).' : 'Product preview — enable product.onChain.makerWaterfall for live settle waterfall copy.' });
         const answer = confirm ? await confirm({ title: 'Confirm settle', intro, rows, confirmLabel: 'Confirm settle' }) : { ok: true };
@@ -727,7 +738,7 @@
       const first = Math.min(...act.map((r) => r.openedAt));
       const seniorBook = act.reduce((x, r) => x + r.senior, 0);
       const grossFees = act.reduce((x, r) => x + r.fee, 0);
-      const w = waterfallPreview({ seniorPrincipal: seniorBook, morphoRate: morphoRateFromCfg(), elapsedSec: Math.max(now - first, 0), gross: grossFees });
+      const w = waterfallPreview({ seniorPrincipal: seniorBook, morphoRate: morphoRateFromCfg(), elapsedSec: Math.max(now - first, 0), gross: grossFees, cut: blendedCut(act) });
       const liveOk = onChainFlag('claimFees');
       const intro = liveOk
         ? 'Fee split runs at claimFees only (not on fee-in). Preview uses Maker’s Morpho-rate waterfall.'
