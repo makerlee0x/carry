@@ -6,9 +6,10 @@ Canonical pointers for what is **live** on Robinhood Chain Testnet **46630**.
 
 | Item | Value |
 | --- | --- |
-| Site | [usecarry.io](https://usecarry.io) |
-| Product CA (UUPS PROXY) | [`0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd`](https://explorer.testnet.chain.robinhood.com/address/0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd) |
-| Implementation | [`0xe498F43ED10a37E22Fe046A3FDAAFD4E9080d0e8`](https://explorer.testnet.chain.robinhood.com/address/0xe498F43ED10a37E22Fe046A3FDAAFD4E9080d0e8) (`version()` = **`v2.5-funder-idle`**) |
+| Site | [usecarry.io](https://usecarry.io) (sync Vercel to latest main for v3 CA) |
+| Product CA (UUPS PROXY) | [`0x24B799026AA7baa6856bCFD00c1Be1f583A83e35`](https://explorer.testnet.chain.robinhood.com/address/0x24B799026AA7baa6856bCFD00c1Be1f583A83e35) |
+| Implementation | [`0x7BeED7F65A9D4aF4E67553d984800F6268a3778E`](https://explorer.testnet.chain.robinhood.com/address/0x7BeED7F65A9D4aF4E67553d984800F6268a3778E) (`version()` = **`v3-lender-pool`**) |
+| Superseded v2.5 PROXY | [`0xc801…72bd`](https://explorer.testnet.chain.robinhood.com/address/0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd) — settle-watch only |
 | v1 grant reference | `0x72A053…36c8` — **not in use** |
 | UI config | [`../public/config.json`](../public/config.json) |
 
@@ -16,13 +17,15 @@ Canonical pointers for what is **live** on Robinhood Chain Testnet **46630**.
 
 | Doc | Role |
 | --- | --- |
-| [`ACCOUNTING_V25.md`](./ACCOUNTING_V25.md) | Live money-safety model: per-lender idle, FIFO funders, yield to position funders, caps, tiers |
+| [`ACCOUNTING_V3.md`](./ACCOUNTING_V3.md) | Live money-safety model: lender pool shares, withdraw queue, floating rate, cover order |
+| [`SECURITY_V3.md`](./SECURITY_V3.md) | v3 security review + residual testnet risks |
+| [`MAKER_REPLY_DYLAN.txt`](./MAKER_REPLY_DYLAN.txt) | Plain-text Maker update (evidence-based) |
 | [`MAKER_FEE_WATERFALL.md`](./MAKER_FEE_WATERFALL.md) | Fee split at claim / earlyExit / settle |
-| [`SECURITY_V2.md`](./SECURITY_V2.md) | Security notes for the UUPS product vault |
-| [`SETTLE_WATCH.md`](./SETTLE_WATCH.md) | Live Active positions (#5 / #6 / #7) — do not early-exit before maturity; multi-lender idle fix |
-| [`GAS_CREDIT.md`](./GAS_CREDIT.md) | Junior open-queue `gasCredit` ETH escrow |
-| [`MAKER_V1_NOTES.md`](./MAKER_V1_NOTES.md) | Maker product rules + live vs intent |
+| [`SETTLE_WATCH.md`](./SETTLE_WATCH.md) | v2.5 #5/#6/#7 on superseded PROXY (stale for v3 CA) |
+| [`GAS_CREDIT.md`](./GAS_CREDIT.md) | Gas credit (v3: refund only on match, scaled) |
 | [`V1_PARAMETERS.md`](./V1_PARAMETERS.md) | Parameter table (ui-display / on-chain / research) |
+| [`WORKSPACE.md`](./WORKSPACE.md) | Local workspace path for this Cursor session |
+| [`ACCOUNTING_V25.md`](./ACCOUNTING_V25.md) | Historical v2.5 funder-idle model (superseded) |
 
 ## Repo-root contract packs
 
