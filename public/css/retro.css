@@ -1,0 +1,164 @@
+/* Carry retro polish layer. Opt-in rt-* classes on bundle elements; green is the main glow, amber the secondary.
+   Bundle elements use inline styles, so overrides here need !important. Remove the <link> in index.html to roll back. */
+
+:root {
+  --rt-green: #b7ffae;
+  --rt-glow: #3dff5a;
+  --rt-amber: #ffc21a;
+  --rt-unlit: #22211d;
+  --rt-panel: #161613;
+}
+
+/* #5 VFD readout: DSEG7 digits (dseg@0.46.0) with the unlit 8-segment ghost behind them. data-ghost = value with digits as 8s.
+   unicode-range keeps "%" and other glyphs in JetBrains Mono. */
+@font-face {
+  font-family: 'DSEG7 Classic';
+  src: url('../assets/fonts/DSEG7Classic-Regular.woff2') format('woff2'); /* self-hosted, OFL-1.1: assets/fonts/DSEG-LICENSE.txt */
+  font-display: swap;
+  unicode-range: U+0020, U+002D-002E, U+0030-0039;
+}
+.rt-vfd {
+  position: relative; isolation: isolate;
+  font-family: 'DSEG7 Classic', 'JetBrains Mono', monospace !important;
+  font-size: clamp(38px, 5vw, 54px) !important; letter-spacing: 0.04em;
+  text-shadow: 0 0 14px rgba(61, 255, 90, 0.45);
+}
+.rt-vfd::before {
+  content: attr(data-ghost);
+  position: absolute; left: 0; top: 0; z-index: -1;
+  color: var(--rt-green); opacity: 0.09; text-shadow: none; pointer-events: none;
+}
+
+/* #2 Viewfinder corner brackets (top-left + bottom-right), brighten on hover. */
+.rt-brk { position: relative; }
+.rt-brk::before, .rt-brk::after {
+  content: ""; position: absolute; z-index: 2; width: 12px; height: 12px; pointer-events: none;
+  border: 1.5px solid var(--rt-green); opacity: 0.4;
+  transition: opacity 0.2s ease, filter 0.2s ease;
+}
+.rt-brk::before { top: -6px; left: -6px; border-right: 0; border-bottom: 0; }
+.rt-brk::after { bottom: -6px; right: -6px; border-left: 0; border-top: 0; }
+.rt-brk:hover::before, .rt-brk:hover::after, .rt-brk:focus-within::before, .rt-brk:focus-within::after {
+  opacity: 1; filter: drop-shadow(0 0 4px var(--rt-glow));
+}
+.rt-brk-sm::before, .rt-brk-sm::after { width: 9px; height: 9px; }
+.rt-brk-sm::before { top: -4px; left: -4px; }
+.rt-brk-sm::after { bottom: -4px; right: -4px; }
+
+/* #3 Chamfered panel: top-left and bottom-right corners cut. Edge and fill live on pseudo-elements, and the edge is
+   a notched gradient rather than a clip-path, so its outer glow survives. */
+.rt-chamfer {
+  --rt-cut: 10px; /* perpendicular cut depth; visible leg is about 14px */
+  position: relative; isolation: isolate;
+  background: transparent !important; border-color: transparent !important;
+  border-radius: 0 !important; box-shadow: none !important;
+}
+.rt-chamfer::before, .rt-chamfer::after { content: ""; position: absolute; z-index: -1; pointer-events: none; }
+.rt-chamfer::before { /* edge + glow: top half notched top-left, bottom half notched bottom-right */
+  inset: -1px;
+  background:
+    linear-gradient(135deg, transparent var(--rt-cut), var(--rt-green) calc(var(--rt-cut) + 0.6px)) top / 100% calc(50% + 1px) no-repeat,
+    linear-gradient(-45deg, transparent var(--rt-cut), var(--rt-green) calc(var(--rt-cut) + 0.6px)) bottom / 100% calc(50% + 1px) no-repeat;
+  filter: drop-shadow(0 0 1px rgba(183, 255, 174, 0.5)) drop-shadow(0 0 14px rgba(61, 255, 90, 0.3));
+}
+.rt-chamfer::after { /* fill, inset by the 1px border; leg trimmed so the diagonal edge stays 1px */
+  --leg: calc(var(--rt-cut) * 1.4142 - 0.58px);
+  inset: 0; background: var(--rt-panel);
+  clip-path: polygon(var(--leg) 0, 100% 0, 100% calc(100% - var(--leg)), calc(100% - var(--leg)) 100%, 0 100%, 0 var(--leg));
+}
+
+/* #7 Range ruler: tick scale under the track, bracketed in-range band. */
+.rt-ruler {
+  margin-bottom: 11px;
+  border-radius: 0 !important;
+  background: repeating-linear-gradient(90deg, #2f2c27 0 2px, transparent 2px 4px) !important;
+}
+.rt-ruler::after {
+  content: ""; position: absolute; left: 0; right: 0; top: calc(100% + 4px); height: 7px; pointer-events: none;
+  border-right: 1px solid rgba(183, 255, 174, 0.55);
+  background:
+    repeating-linear-gradient(90deg, rgba(183, 255, 174, 0.55) 0 1px, transparent 1px 10%) top / 100% 7px no-repeat,
+    repeating-linear-gradient(90deg, rgba(183, 255, 174, 0.25) 0 1px, transparent 1px 2.5%) top / 100% 3px no-repeat;
+}
+.rt-ruler > :first-child { /* the in-range band, drawn as [ ] */
+  top: -4px !important; bottom: -4px !important; border-width: 0 2px !important;
+  background:
+    linear-gradient(var(--rt-green), var(--rt-green)) top left / 5px 2px no-repeat,
+    linear-gradient(var(--rt-green), var(--rt-green)) bottom left / 5px 2px no-repeat,
+    linear-gradient(var(--rt-green), var(--rt-green)) top right / 5px 2px no-repeat,
+    linear-gradient(var(--rt-green), var(--rt-green)) bottom right / 5px 2px no-repeat,
+    linear-gradient(transparent 4px, rgba(183, 255, 174, 0.3) 4px calc(100% - 4px), transparent 0) !important;
+  filter: drop-shadow(0 0 3px rgba(61, 255, 90, 0.35));
+}
+
+/* #6 7-day term meter: the existing progress bar cut into 7 cells (one per day), matching the USDG segment meter. */
+.rt-seg7 {
+  height: 12px !important; border-radius: 0 !important;
+  -webkit-mask: repeating-linear-gradient(90deg, #000 0 calc((100% - 18px) / 7), transparent 0 calc((100% - 18px) / 7 + 3px));
+          mask: repeating-linear-gradient(90deg, #000 0 calc((100% - 18px) / 7), transparent 0 calc((100% - 18px) / 7 + 3px));
+}
+.rt-seg7 > * { box-shadow: 0 0 8px rgba(61, 255, 90, 0.6); }
+
+/* #1 Dot-matrix grid behind the hero, faded toward the edges. */
+.rt-dots { isolation: isolate; }
+.rt-dots::before {
+  content: ""; position: absolute; inset: 0; z-index: 0; pointer-events: none;
+  background-image: radial-gradient(rgba(183, 255, 174, 0.16) 1px, transparent 1.6px);
+  background-size: 24px 24px; background-position: 12px 12px;
+  -webkit-mask-image: radial-gradient(ellipse 80% 75% at 65% 45%, #000 15%, transparent 85%);
+          mask-image: radial-gradient(ellipse 80% 75% at 65% 45%, #000 15%, transparent 85%);
+}
+
+/* #4 Hatched amber capacity bar on a 10% tick track. */
+.rt-hatch-track {
+  height: 8px !important; border-radius: 0 !important; overflow: visible !important;
+  background: repeating-linear-gradient(90deg, #3c372f 0 1px, var(--rt-unlit) 1px 10%) !important;
+}
+.rt-hatch {
+  background: repeating-linear-gradient(-45deg, var(--rt-amber) 0 3px, rgba(255, 194, 26, 0.3) 3px 6px) !important;
+  box-shadow: 0 0 8px rgba(255, 194, 26, 0.45);
+}
+
+/* #8 Terminal readout rows: mono uppercase label, dotted leader, value. Chevrons mark a live-updating value. */
+.rt-readout { border-top: 0 !important; }
+.rt-readout > div { border-bottom: 0 !important; padding: 7px 0 !important; align-items: baseline; }
+.rt-readout > div > :first-child {
+  flex: 1 1 auto; display: flex; align-items: baseline; gap: 10px; white-space: nowrap;
+  font-family: 'JetBrains Mono', monospace; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase;
+  color: #a09173 !important;
+}
+.rt-readout > div > :first-child::after {
+  content: ""; flex: 1; min-width: 16px; transform: translateY(-3px);
+  border-bottom: 1px dotted rgba(183, 255, 174, 0.28);
+}
+.rt-readout > div > :last-child { text-align: right; }
+.rt-chev::before, .rt-chev::after { font-size: 0.6em; vertical-align: 0.15em; color: rgba(183, 255, 174, 0.5); }
+.rt-chev::before { content: "<<< "; }
+.rt-chev::after { content: " >>>"; }
+
+/* #9 Fine-print catalog strip with a CSS barcode. */
+.rt-fineprint {
+  display: inline-flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  font: 500 10px/1.4 'JetBrains Mono', monospace; letter-spacing: 0.16em; text-transform: uppercase; color: #6f6552;
+}
+.rt-barcode {
+  width: 72px; height: 12px; flex: none; opacity: 0.75;
+  background: repeating-linear-gradient(90deg, #a09173 0 1px, transparent 1px 3px, #a09173 3px 5px, transparent 5px 6px, #a09173 6px 7px, transparent 7px 10px);
+}
+
+/* #10 Hazard stripes, for warning states only. */
+.rt-hazard { position: relative; }
+.rt-hazard::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 5px; pointer-events: none;
+  background: repeating-linear-gradient(-45deg, #0f2a18 0 6px, transparent 6px 12px); opacity: 0.85;
+}
+.rt-hazard-top::before {
+  content: ""; position: absolute; left: 0; right: 0; top: 0; height: 6px; pointer-events: none;
+  border-radius: 9px 9px 0 0;
+  background: repeating-linear-gradient(-45deg, var(--rt-amber) 0 8px, transparent 8px 16px); opacity: 0.9;
+}
+.rt-hazard-note { position: relative; overflow: hidden; padding-left: 28px !important; }
+.rt-hazard-note::before {
+  content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 12px;
+  background: repeating-linear-gradient(-45deg, var(--rt-amber) 0 5px, #0f2a18 5px 10px);
+}
