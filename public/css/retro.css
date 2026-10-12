@@ -2,11 +2,11 @@
    Bundle elements use inline styles, so overrides here need !important. Remove the <link> in index.html to roll back. */
 
 :root {
-  --rt-green: #b7ffae;
-  --rt-glow: #3dff5a;
-  --rt-amber: #ffc21a;
-  --rt-unlit: #22211d;
-  --rt-panel: #161613;
+  --rt-green: var(--c-b7ffae);
+  --rt-glow: var(--c-3dff5a);
+  --rt-amber: var(--c-ffc21a);
+  --rt-unlit: var(--c-22211d);
+  --rt-panel: var(--c-161613);
 }
 
 /* #5 VFD readout: DSEG7 digits (dseg@0.46.0) with the unlit 8-segment ghost behind them. data-ghost = value with digits as 8s.
@@ -21,7 +21,7 @@
   position: relative; isolation: isolate;
   font-family: 'DSEG7 Classic', 'JetBrains Mono', monospace !important;
   font-size: clamp(38px, 5vw, 54px) !important; letter-spacing: 0.04em;
-  text-shadow: 0 0 14px rgba(61, 255, 90, 0.45);
+  text-shadow: 0 0 14px rgba(var(--rgb-61-255-90), 0.45);
 }
 .rt-vfd::before {
   content: attr(data-ghost);
@@ -59,7 +59,7 @@
   background:
     linear-gradient(135deg, transparent var(--rt-cut), var(--rt-green) calc(var(--rt-cut) + 0.6px)) top / 100% calc(50% + 1px) no-repeat,
     linear-gradient(-45deg, transparent var(--rt-cut), var(--rt-green) calc(var(--rt-cut) + 0.6px)) bottom / 100% calc(50% + 1px) no-repeat;
-  filter: drop-shadow(0 0 1px rgba(183, 255, 174, 0.5)) drop-shadow(0 0 14px rgba(61, 255, 90, 0.3));
+  filter: drop-shadow(0 0 1px rgba(var(--rgb-183-255-174), 0.5)) drop-shadow(0 0 14px rgba(var(--rgb-61-255-90), 0.3));
 }
 .rt-chamfer::after { /* fill, inset by the 1px border; leg trimmed so the diagonal edge stays 1px */
   --leg: calc(var(--rt-cut) * 1.4142 - 0.58px);
@@ -71,14 +71,14 @@
 .rt-ruler {
   margin-bottom: 11px;
   border-radius: 0 !important;
-  background: repeating-linear-gradient(90deg, #2f2c27 0 2px, transparent 2px 4px) !important;
+  background: repeating-linear-gradient(90deg, var(--c-2f2c27) 0 2px, transparent 2px 4px) !important;
 }
 .rt-ruler::after {
   content: ""; position: absolute; left: 0; right: 0; top: calc(100% + 4px); height: 7px; pointer-events: none;
-  border-right: 1px solid rgba(183, 255, 174, 0.55);
+  border-right: 1px solid rgba(var(--rgb-183-255-174), 0.55);
   background:
-    repeating-linear-gradient(90deg, rgba(183, 255, 174, 0.55) 0 1px, transparent 1px 10%) top / 100% 7px no-repeat,
-    repeating-linear-gradient(90deg, rgba(183, 255, 174, 0.25) 0 1px, transparent 1px 2.5%) top / 100% 3px no-repeat;
+    repeating-linear-gradient(90deg, rgba(var(--rgb-183-255-174), 0.55) 0 1px, transparent 1px 10%) top / 100% 7px no-repeat,
+    repeating-linear-gradient(90deg, rgba(var(--rgb-183-255-174), 0.25) 0 1px, transparent 1px 2.5%) top / 100% 3px no-repeat;
 }
 .rt-ruler > :first-child { /* the in-range band, drawn as [ ] */
   top: -4px !important; bottom: -4px !important; border-width: 0 2px !important;
@@ -87,8 +87,8 @@
     linear-gradient(var(--rt-green), var(--rt-green)) bottom left / 5px 2px no-repeat,
     linear-gradient(var(--rt-green), var(--rt-green)) top right / 5px 2px no-repeat,
     linear-gradient(var(--rt-green), var(--rt-green)) bottom right / 5px 2px no-repeat,
-    linear-gradient(transparent 4px, rgba(183, 255, 174, 0.3) 4px calc(100% - 4px), transparent 0) !important;
-  filter: drop-shadow(0 0 3px rgba(61, 255, 90, 0.35));
+    linear-gradient(transparent 4px, rgba(var(--rgb-183-255-174), 0.3) 4px calc(100% - 4px), transparent 0) !important;
+  filter: drop-shadow(0 0 3px rgba(var(--rgb-61-255-90), 0.35));
 }
 
 /* #6 7-day term meter: the existing progress bar cut into 7 cells (one per day), matching the USDG segment meter. */
@@ -97,13 +97,13 @@
   -webkit-mask: repeating-linear-gradient(90deg, #000 0 calc((100% - 18px) / 7), transparent 0 calc((100% - 18px) / 7 + 3px));
           mask: repeating-linear-gradient(90deg, #000 0 calc((100% - 18px) / 7), transparent 0 calc((100% - 18px) / 7 + 3px));
 }
-.rt-seg7 > * { box-shadow: 0 0 8px rgba(61, 255, 90, 0.6); }
+.rt-seg7 > * { box-shadow: 0 0 8px rgba(var(--rgb-61-255-90), 0.6); }
 
 /* #1 Dot-matrix grid behind the hero, faded toward the edges. */
 .rt-dots { isolation: isolate; }
 .rt-dots::before {
   content: ""; position: absolute; inset: 0; z-index: 0; pointer-events: none;
-  background-image: radial-gradient(rgba(183, 255, 174, 0.16) 1px, transparent 1.6px);
+  background-image: radial-gradient(rgba(var(--rgb-183-255-174), 0.16) 1px, transparent 1.6px);
   background-size: 24px 24px; background-position: 12px 12px;
   -webkit-mask-image: radial-gradient(ellipse 80% 75% at 65% 45%, #000 15%, transparent 85%);
           mask-image: radial-gradient(ellipse 80% 75% at 65% 45%, #000 15%, transparent 85%);
@@ -112,11 +112,11 @@
 /* #4 Hatched amber capacity bar on a 10% tick track. */
 .rt-hatch-track {
   height: 8px !important; border-radius: 0 !important; overflow: visible !important;
-  background: repeating-linear-gradient(90deg, #3c372f 0 1px, var(--rt-unlit) 1px 10%) !important;
+  background: repeating-linear-gradient(90deg, var(--c-3c372f) 0 1px, var(--rt-unlit) 1px 10%) !important;
 }
 .rt-hatch {
-  background: repeating-linear-gradient(-45deg, var(--rt-amber) 0 3px, rgba(255, 194, 26, 0.3) 3px 6px) !important;
-  box-shadow: 0 0 8px rgba(255, 194, 26, 0.45);
+  background: repeating-linear-gradient(-45deg, var(--rt-amber) 0 3px, rgba(var(--rgb-255-194-26), 0.3) 3px 6px) !important;
+  box-shadow: 0 0 8px rgba(var(--rgb-255-194-26), 0.45);
 }
 
 /* #8 Terminal readout rows: mono uppercase label, dotted leader, value. Chevrons mark a live-updating value. */
@@ -125,32 +125,32 @@
 .rt-readout > div > :first-child {
   flex: 1 1 auto; display: flex; align-items: baseline; gap: 10px; white-space: nowrap;
   font-family: 'JetBrains Mono', monospace; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase;
-  color: #a09173 !important;
+  color: var(--c-a09173) !important;
 }
 .rt-readout > div > :first-child::after {
   content: ""; flex: 1; min-width: 16px; transform: translateY(-3px);
-  border-bottom: 1px dotted rgba(183, 255, 174, 0.28);
+  border-bottom: 1px dotted rgba(var(--rgb-183-255-174), 0.28);
 }
 .rt-readout > div > :last-child { text-align: right; }
-.rt-chev::before, .rt-chev::after { font-size: 0.6em; vertical-align: 0.15em; color: rgba(183, 255, 174, 0.5); }
+.rt-chev::before, .rt-chev::after { font-size: 0.6em; vertical-align: 0.15em; color: rgba(var(--rgb-183-255-174), 0.5); }
 .rt-chev::before { content: "<<< "; }
 .rt-chev::after { content: " >>>"; }
 
 /* #9 Fine-print catalog strip with a CSS barcode. */
 .rt-fineprint {
   display: inline-flex; align-items: center; gap: 10px; flex-wrap: wrap;
-  font: 500 10px/1.4 'JetBrains Mono', monospace; letter-spacing: 0.16em; text-transform: uppercase; color: #6f6552;
+  font: 500 10px/1.4 'JetBrains Mono', monospace; letter-spacing: 0.16em; text-transform: uppercase; color: var(--c-6f6552);
 }
 .rt-barcode {
   width: 72px; height: 12px; flex: none; opacity: 0.75;
-  background: repeating-linear-gradient(90deg, #a09173 0 1px, transparent 1px 3px, #a09173 3px 5px, transparent 5px 6px, #a09173 6px 7px, transparent 7px 10px);
+  background: repeating-linear-gradient(90deg, var(--c-a09173) 0 1px, transparent 1px 3px, var(--c-a09173) 3px 5px, transparent 5px 6px, var(--c-a09173) 6px 7px, transparent 7px 10px);
 }
 
 /* #10 Hazard stripes, for warning states only. */
 .rt-hazard { position: relative; }
 .rt-hazard::after {
   content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 5px; pointer-events: none;
-  background: repeating-linear-gradient(-45deg, #0f2a18 0 6px, transparent 6px 12px); opacity: 0.85;
+  background: repeating-linear-gradient(-45deg, var(--c-0f2a18) 0 6px, transparent 6px 12px); opacity: 0.85;
 }
 .rt-hazard-top::before {
   content: ""; position: absolute; left: 0; right: 0; top: 0; height: 6px; pointer-events: none;
@@ -160,15 +160,15 @@
 .rt-hazard-note { position: relative; overflow: hidden; padding-left: 28px !important; }
 .rt-hazard-note::before {
   content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 12px;
-  background: repeating-linear-gradient(-45deg, var(--rt-amber) 0 5px, #0f2a18 5px 10px);
+  background: repeating-linear-gradient(-45deg, var(--rt-amber) 0 5px, var(--c-0f2a18) 5px 10px);
 }
 
 /* ---- Round 3 ------------------------------------------------------------------------------------------- */
 
 /* Oscilloscope graticule: 10 x 8 divisions, brighter center axes with minor ticks, glowing trace. */
 .rt-scope {
-  --g: rgba(183, 255, 174, 0.09); --ax: rgba(183, 255, 174, 0.22);
-  outline: 1px solid rgba(183, 255, 174, 0.2); outline-offset: 0;
+  --g: rgba(var(--rgb-183-255-174), 0.09); --ax: rgba(var(--rgb-183-255-174), 0.22);
+  outline: 1px solid rgba(var(--rgb-183-255-174), 0.2); outline-offset: 0;
   background:
     linear-gradient(90deg, transparent calc(50% - 0.5px), var(--ax) calc(50% - 0.5px) calc(50% + 0.5px), transparent 0),
     linear-gradient(transparent calc(50% - 0.5px), var(--ax) calc(50% - 0.5px) calc(50% + 0.5px), transparent 0),
@@ -180,12 +180,12 @@
 .rt-scope polyline, .rt-scope-sm svg polyline, .rt-scope-sm svg path { filter: drop-shadow(0 0 3px currentColor); } /* glow follows the trace color (red when down) */
 .rt-scope-axis {
   display: flex; justify-content: space-between; margin-top: -6px;
-  font: 500 10px/1.2 'JetBrains Mono', monospace; letter-spacing: 0.14em; color: #b6e3a8; opacity: 0.75;
+  font: 500 10px/1.2 'JetBrains Mono', monospace; letter-spacing: 0.14em; color: var(--c-b6e3a8); opacity: 0.75;
 }
 
 /* Labeled viewport frame: four corner ticks + a bottom field bar (TARGET / RANGE / CAP), like an instrument frame. */
 .rt-frame {
-  --t: rgba(183, 255, 174, 0.55);
+  --t: rgba(var(--rgb-183-255-174), 0.55);
   background-image:
     linear-gradient(var(--t), var(--t)), linear-gradient(var(--t), var(--t)),
     linear-gradient(var(--t), var(--t)), linear-gradient(var(--t), var(--t)),
@@ -199,33 +199,33 @@
 .rt-frame-bar { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 2px; }
 .rt-frame-bar > span {
   flex: 1 1 120px; display: flex; align-items: center; gap: 8px; min-width: 0;
-  padding: 6px 10px; border: 1px solid rgba(183, 255, 174, 0.28); border-top-width: 3px;
+  padding: 6px 10px; border: 1px solid rgba(var(--rgb-183-255-174), 0.28); border-top-width: 3px;
   font: 500 12px/1.2 'JetBrains Mono', monospace; color: var(--rt-green); white-space: nowrap;
 }
-.rt-frame-bar b { font-weight: 500; font-size: 10px; letter-spacing: 0.14em; color: #b6e3a8; opacity: 0.8; }
-.rt-batt { position: relative; display: inline-block; width: 34px; height: 10px; border: 1px solid rgba(183, 255, 174, 0.5); padding: 1px; flex: none; }
-.rt-batt::after { content: ""; position: absolute; right: -4px; top: 2px; width: 2px; height: 4px; background: rgba(183, 255, 174, 0.5); }
+.rt-frame-bar b { font-weight: 500; font-size: 10px; letter-spacing: 0.14em; color: var(--c-b6e3a8); opacity: 0.8; }
+.rt-batt { position: relative; display: inline-block; width: 34px; height: 10px; border: 1px solid rgba(var(--rgb-183-255-174), 0.5); padding: 1px; flex: none; }
+.rt-batt::after { content: ""; position: absolute; right: -4px; top: 2px; width: 2px; height: 4px; background: rgba(var(--rgb-183-255-174), 0.5); }
 .rt-batt > i {
-  display: block; height: 100%; max-width: 100%; background: var(--rt-green); box-shadow: 0 0 4px rgba(61, 255, 90, 0.6);
+  display: block; height: 100%; max-width: 100%; background: var(--rt-green); box-shadow: 0 0 4px rgba(var(--rgb-61-255-90), 0.6);
   -webkit-mask: repeating-linear-gradient(90deg, #000 0 5px, transparent 5px 6px);
           mask: repeating-linear-gradient(90deg, #000 0 5px, transparent 5px 6px);
 }
 
 /* Boot log loading panel (filled by js/carry-boot.js). */
 .rt-boot {
-  min-height: 220px; padding: 20px 24px; border: 1px solid #2f2c27; border-radius: 10px; background: var(--rt-panel);
-  font: 500 13px/1.9 'JetBrains Mono', monospace; color: #d9ccad;
+  min-height: 220px; padding: 20px 24px; border: 1px solid var(--c-2f2c27); border-radius: 10px; background: var(--rt-panel);
+  font: 500 13px/1.9 'JetBrains Mono', monospace; color: var(--c-d9ccad);
 }
 .rt-boot-line { display: flex; align-items: baseline; gap: 12px; animation: rt-boot-in 0.25s ease-out both; }
 .rt-boot-k { flex: none; width: 92px; color: var(--rt-green); letter-spacing: 0.06em; }
-.rt-boot-v { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #a09173; }
-.rt-boot-lead { flex: 1; min-width: 12px; border-bottom: 1px dotted rgba(183, 255, 174, 0.22); transform: translateY(-4px); }
+.rt-boot-v { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--c-a09173); }
+.rt-boot-lead { flex: 1; min-width: 12px; border-bottom: 1px dotted rgba(var(--rgb-183-255-174), 0.22); transform: translateY(-4px); }
 .rt-boot-s { flex: none; min-width: 48px; text-align: right; letter-spacing: 0.08em; }
-.rt-boot-ok { color: var(--rt-green); text-shadow: 0 0 8px rgba(61, 255, 90, 0.5); }
-.rt-boot-wait { color: #a09173; animation: rt-blink 1s steps(2) infinite; }
+.rt-boot-ok { color: var(--rt-green); text-shadow: 0 0 8px rgba(var(--rgb-61-255-90), 0.5); }
+.rt-boot-wait { color: var(--c-a09173); animation: rt-blink 1s steps(2) infinite; }
 .rt-boot-warn { color: var(--rt-amber); }
-.rt-boot-err { color: #ff2a1a; }
-.rt-boot-idle { color: #6f6552; }
+.rt-boot-err { color: var(--c-ff2a1a); }
+.rt-boot-idle { color: var(--c-6f6552); }
 .rt-boot-cursor { color: var(--rt-green); }
 .rt-boot-cursor::after { content: ""; display: inline-block; width: 8px; height: 14px; margin-left: 2px; background: var(--rt-green); vertical-align: -2px; animation: rt-blink 1s steps(2) infinite; }
 @keyframes rt-boot-in { from { opacity: 0; transform: translateY(3px); } }
@@ -241,10 +241,10 @@
           mask-image: radial-gradient(circle, #000 55%, transparent 72%);
 }
 .rt-globe-tilt { transform: rotate(-18deg); }
-.rt-globe ellipse, .rt-globe circle { fill: none; stroke: rgba(183, 255, 174, 0.2); stroke-width: 0.5; }
-.rt-globe .rt-rim { stroke: rgba(183, 255, 174, 0.34); stroke-width: 0.7; }
-.rt-globe .rt-eq { stroke: rgba(183, 255, 174, 0.36); }
-.rt-globe .rt-orbit { stroke: rgba(255, 194, 26, 0.28); stroke-dasharray: 2 4; }
+.rt-globe ellipse, .rt-globe circle { fill: none; stroke: rgba(var(--rgb-183-255-174), 0.2); stroke-width: 0.5; }
+.rt-globe .rt-rim { stroke: rgba(var(--rgb-183-255-174), 0.34); stroke-width: 0.7; }
+.rt-globe .rt-eq { stroke: rgba(var(--rgb-183-255-174), 0.36); }
+.rt-globe .rt-orbit { stroke: rgba(var(--rgb-255-194-26), 0.28); stroke-dasharray: 2 4; }
 .rt-mer { transform-box: fill-box; transform-origin: center; animation: rt-mer 36s cubic-bezier(0.37, 0, 0.63, 1) infinite alternate; }
 .rt-mer-1 { animation-delay: 0s; } .rt-mer-2 { animation-delay: -6s; } .rt-mer-3 { animation-delay: -12s; }
 .rt-mer-4 { animation-delay: -18s; } .rt-mer-5 { animation-delay: -24s; } .rt-mer-6 { animation-delay: -30s; }
@@ -263,15 +263,15 @@
 /* How it works: flow row as a schematic. Odd children are nodes (pin labels above), even children are traces. */
 .rt-flow {
   gap: 0 !important; row-gap: 26px !important; padding: 34px 24px 22px !important;
-  background-image: radial-gradient(rgba(183, 255, 174, 0.12) 1px, transparent 1.4px) !important;
+  background-image: radial-gradient(rgba(var(--rgb-183-255-174), 0.12) 1px, transparent 1.4px) !important;
   background-size: 16px 16px !important;
 }
 .rt-flow > span:nth-child(odd) {
-  position: relative; border: 1px solid rgba(183, 255, 174, 0.45); border-radius: 2px !important;
-  padding: 8px 14px !important; box-shadow: 0 0 10px rgba(61, 255, 90, 0.12);
+  position: relative; border: 1px solid rgba(var(--rgb-183-255-174), 0.45); border-radius: 2px !important;
+  padding: 8px 14px !important; box-shadow: 0 0 10px rgba(var(--rgb-61-255-90), 0.12);
 }
 .rt-flow > span:nth-child(odd)::before {
-  position: absolute; left: -1px; top: -17px; font-size: 9px; letter-spacing: 0.16em; color: #b6e3a8; opacity: 0.7;
+  position: absolute; left: -1px; top: -17px; font-size: 9px; letter-spacing: 0.16em; color: var(--c-b6e3a8); opacity: 0.7;
 }
 .rt-flow > span:nth-child(1)::before { content: "IN\00B7 A"; }
 .rt-flow > span:nth-child(3)::before { content: "IN\00B7 B"; }
@@ -287,7 +287,7 @@
   flex: 1 1 36px; min-width: 36px; display: flex; align-items: center; gap: 6px; color: var(--rt-green) !important; font-size: 13px;
 }
 .rt-flow > span:nth-child(even)::before, .rt-flow > span:nth-child(even)::after {
-  content: ""; flex: 1; height: 1px; background: rgba(183, 255, 174, 0.55); box-shadow: 0 0 4px rgba(61, 255, 90, 0.5);
+  content: ""; flex: 1; height: 1px; background: rgba(var(--rgb-183-255-174), 0.55); box-shadow: 0 0 4px rgba(var(--rgb-61-255-90), 0.5);
 }
 
 /* Docs step lists as a schematic rail: boxed step nodes on a vertical trace. */
@@ -295,59 +295,59 @@
 .rt-steps > div > span:first-child {
   position: relative; z-index: 1; width: 36px !important; height: 26px; padding-top: 0 !important;
   display: flex; align-items: center; justify-content: center;
-  border: 1px solid rgba(183, 255, 174, 0.5); background: var(--rt-panel); box-shadow: 0 0 8px rgba(61, 255, 90, 0.18);
+  border: 1px solid rgba(var(--rgb-183-255-174), 0.5); background: var(--rt-panel); box-shadow: 0 0 8px rgba(var(--rgb-61-255-90), 0.18);
 }
 .rt-steps > div::before {
-  content: ""; position: absolute; left: 18px; top: 0; bottom: 0; width: 1px; background: rgba(183, 255, 174, 0.3);
+  content: ""; position: absolute; left: 18px; top: 0; bottom: 0; width: 1px; background: rgba(var(--rgb-183-255-174), 0.3);
 }
 .rt-steps > div:first-child::before { top: 27px; }
 .rt-steps > div:last-child::before { bottom: calc(100% - 27px); }
 .rt-steps > div > span:first-child::after { /* stub from node to text */
-  content: ""; position: absolute; left: 100%; top: 50%; width: 10px; height: 1px; background: rgba(183, 255, 174, 0.4);
+  content: ""; position: absolute; left: 100%; top: 50%; width: 10px; height: 1px; background: rgba(var(--rgb-183-255-174), 0.4);
 }
 
 /* Toasts as terminal lines. */
 .rt-toast {
   display: flex; align-items: center; gap: 10px; border-radius: 2px !important; border-left-width: 3px !important;
-  background-image: repeating-linear-gradient(0deg, rgba(183, 255, 174, 0.04) 0 1px, transparent 1px 3px) !important;
+  background-image: repeating-linear-gradient(0deg, rgba(var(--rgb-183-255-174), 0.04) 0 1px, transparent 1px 3px) !important;
   animation: rt-toast-in 0.22s ease-out both;
 }
-.rt-toast-p { color: #b6e3a8; opacity: 0.7; }
+.rt-toast-p { color: var(--c-b6e3a8); opacity: 0.7; }
 .rt-toast::after { content: ""; width: 8px; height: 15px; flex: none; background: var(--rt-green); animation: rt-blink 1s steps(2) infinite; }
 @keyframes rt-toast-in { from { opacity: 0; transform: translate(-50%, 8px); } }
 
 /* Positions as a system table: row numbers, dashed header rule, [ STATUS ] brackets. */
 .rt-systable { counter-reset: rt-row; }
-.rt-systable > div:first-child { position: relative; padding-left: 46px !important; border-bottom: 1px dashed rgba(183, 255, 174, 0.3) !important; color: #b6e3a8 !important; }
+.rt-systable > div:first-child { position: relative; padding-left: 46px !important; border-bottom: 1px dashed rgba(var(--rgb-183-255-174), 0.3) !important; color: var(--c-b6e3a8) !important; }
 .rt-systable > div:first-child::before { content: "#"; position: absolute; left: 16px; top: 50%; transform: translateY(-50%); }
 .rt-systable > button { counter-increment: rt-row; position: relative; padding-left: 46px !important; border-bottom-style: dotted !important; }
 .rt-systable > button::before {
   content: counter(rt-row, decimal-leading-zero); position: absolute; left: 16px; top: 50%; transform: translateY(-50%);
-  font-size: 11px; color: #6f6552;
+  font-size: 11px; color: var(--c-6f6552);
 }
 .rt-systable > button:hover::before, .rt-systable > button:focus-visible::before { content: "\25B8"; color: var(--rt-green); }
 .rt-systable > button:hover { box-shadow: inset 2px 0 0 var(--rt-green); }
-.rt-systable > button > span:last-child::before { content: "[ "; color: #6f6552; }
-.rt-systable > button > span:last-child::after { content: " ]"; color: #6f6552; }
+.rt-systable > button > span:last-child::before { content: "[ "; color: var(--c-6f6552); }
+.rt-systable > button > span:last-child::after { content: " ]"; color: var(--c-6f6552); }
 
 /* 404: the one place to go all out. Big VFD code, RGB-split glitch heading, CRT noise, route error log. */
 .rt-404 { position: relative; isolation: isolate; }
 .rt-404::before {
   content: ""; position: absolute; inset: 0 -100vw; z-index: -1; pointer-events: none;
   background:
-    repeating-linear-gradient(0deg, rgba(183, 255, 174, 0.035) 0 1px, transparent 1px 3px),
-    radial-gradient(ellipse 60% 70% at 30% 45%, rgba(61, 255, 90, 0.07), transparent 70%);
+    repeating-linear-gradient(0deg, rgba(var(--rgb-183-255-174), 0.035) 0 1px, transparent 1px 3px),
+    radial-gradient(ellipse 60% 70% at 30% 45%, rgba(var(--rgb-61-255-90), 0.07), transparent 70%);
 }
 .rt-404num {
   font-size: clamp(72px, 14vw, 160px) !important; line-height: 1; color: var(--rt-green);
-  text-shadow: -3px 0 rgba(255, 42, 26, 0.55), 3px 0 rgba(45, 226, 230, 0.45), 0 0 24px rgba(61, 255, 90, 0.5);
+  text-shadow: -3px 0 rgba(var(--rgb-255-42-26), 0.55), 3px 0 rgba(45, 226, 230, 0.45), 0 0 24px rgba(var(--rgb-61-255-90), 0.5);
 }
 .rt-404num::before { text-shadow: none; }
 .rt-glitch { position: relative; }
 .rt-glitch::before, .rt-glitch::after {
   content: attr(data-text); position: absolute; left: 0; top: 0; pointer-events: none; text-shadow: none;
 }
-.rt-glitch::before { color: #ff2a1a; opacity: 0.7; transform: translateX(-2px); clip-path: inset(0 0 62% 0); animation: rt-glitch 3.2s steps(1) infinite; }
+.rt-glitch::before { color: var(--c-ff2a1a); opacity: 0.7; transform: translateX(-2px); clip-path: inset(0 0 62% 0); animation: rt-glitch 3.2s steps(1) infinite; }
 .rt-glitch::after { color: #2de2e6; opacity: 0.6; transform: translateX(2px); clip-path: inset(58% 0 0 0); animation: rt-glitch 2.7s steps(1) infinite reverse; }
 @keyframes rt-glitch {
   0%, 86%, 100% { transform: translateX(0); opacity: 0; }
@@ -355,16 +355,16 @@
   91% { transform: translateX(3px); opacity: 0.7; clip-path: inset(48% 0 20% 0); }
   94% { transform: translateX(-2px); opacity: 0.6; clip-path: inset(70% 0 5% 0); }
 }
-.rt-errlog { width: min(100%, 560px); font: 500 13px/1.9 'JetBrains Mono', monospace; color: #d9ccad; padding: 14px 18px; border: 1px solid #2f2c27; border-left: 3px solid #ff2a1a; background: var(--rt-panel); }
+.rt-errlog { width: min(100%, 560px); font: 500 13px/1.9 'JetBrains Mono', monospace; color: var(--c-d9ccad); padding: 14px 18px; border: 1px solid var(--c-2f2c27); border-left: 3px solid var(--c-ff2a1a); background: var(--rt-panel); }
 .rt-errlog:empty { display: none; }
 
 /* "Couldn't load data": red hazard edge and a glitching alert glyph. */
-.rt-alert { position: relative; overflow: hidden; padding-left: 40px !important; border-color: rgba(255, 42, 26, 0.45) !important; }
+.rt-alert { position: relative; overflow: hidden; padding-left: 40px !important; border-color: rgba(var(--rgb-255-42-26), 0.45) !important; }
 .rt-alert::before {
   content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 14px;
-  background: repeating-linear-gradient(-45deg, #ff2a1a 0 5px, #0b0c0a 5px 10px); opacity: 0.85;
+  background: repeating-linear-gradient(-45deg, var(--c-ff2a1a) 0 5px, var(--c-0b0c0a) 5px 10px); opacity: 0.85;
 }
-.rt-alert-i { text-shadow: -1px 0 rgba(45, 226, 230, 0.55), 1px 0 rgba(255, 42, 26, 0.7); box-shadow: 0 0 12px rgba(255, 42, 26, 0.35); animation: rt-flicker 4s steps(1) infinite; }
+.rt-alert-i { text-shadow: -1px 0 rgba(45, 226, 230, 0.55), 1px 0 rgba(var(--rgb-255-42-26), 0.7); box-shadow: 0 0 12px rgba(var(--rgb-255-42-26), 0.35); animation: rt-flicker 4s steps(1) infinite; }
 @keyframes rt-flicker { 0%, 92%, 100% { opacity: 1; } 93% { opacity: 0.4; } 95% { opacity: 1; } 96% { opacity: 0.6; } }
 
 @media (prefers-reduced-motion: reduce) {

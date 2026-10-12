@@ -1,0 +1,108 @@
+/* Carry color tokens + light mode.
+   Every color in the bundle is a token named after its original dark-mode hex (--c-b7ffae) or rgb triplet
+   (--rgb-183-255-174), so dark mode renders exactly as before. [data-theme="light"] remaps the same tokens to a
+   paper + LCD palette: warm off-white panels, charcoal type, and pale-green LCD screens with dark-green digits.
+   Toggle + persistence: js/carry-theme.js. */
+
+:root {
+  /* neutrals */
+  --c-0b0c0a: #0b0c0a; --c-131311: #131311; --c-161613: #161613; --c-1a1a16: #1a1a16;
+  --c-22211d: #22211d; --c-2a2822: #2a2822; --c-2f2c27: #2f2c27; --c-3c372f: #3c372f;
+  --c-6f6552: #6f6552; --c-a09173: #a09173; --c-d9ccad: #d9ccad; --c-e6dac0: #e6dac0;
+  /* greens */
+  --c-b7ffae: #b7ffae; --c-0f2a18: #0f2a18; --c-1d5a2a: #1d5a2a; --c-3dff5a: #3dff5a; --c-b6e3a8: #b6e3a8;
+  /* amber + red */
+  --c-ffc21a: #ffc21a; --c-ff2a1a: #ff2a1a; --c-ff6a5c: #ff6a5c;
+  /* rgb triplets for rgba() */
+  --rgb-183-255-174: 183, 255, 174; --rgb-61-255-90: 61, 255, 90; --rgb-0-0-0: 0, 0, 0; --rgb-5-6-5: 5, 6, 5;
+  --rgb-255-255-255: 255, 255, 255; --rgb-255-194-26: 255, 194, 26; --rgb-19-19-17: 19, 19, 17;
+  --rgb-34-33-29: 34, 33, 29; --rgb-217-204-173: 217, 204, 173; --rgb-11-12-10: 11, 12, 10; --rgb-255-42-26: 255, 42, 26;
+  color-scheme: dark;
+}
+
+:root[data-theme="light"] {
+  --c-0b0c0a: #e9e6dd; --c-131311: #f3f1ea; --c-161613: #f9f8f4; --c-1a1a16: #f8f6f0;
+  --c-22211d: #ebe7dd; --c-2a2822: #dcd6c9; --c-2f2c27: #d6d0c2; --c-3c372f: #c3bcab;
+  --c-6f6552: #958c78; --c-a09173: #6e6758; --c-d9ccad: #4b463d; --c-e6dac0: #24221e;
+  --c-b7ffae: #2f6b45; --c-0f2a18: #d6e6c8; --c-1d5a2a: #9cbf9a; --c-3dff5a: #2c8a45; --c-b6e3a8: #46704f;
+  --c-ffc21a: #8f6000; --c-ff2a1a: #c23a32; --c-ff6a5c: #d95a4e;
+  --rgb-183-255-174: 47, 107, 69; --rgb-61-255-90: 90, 85, 70; --rgb-0-0-0: 70, 60, 40; --rgb-5-6-5: 233, 230, 221;
+  --rgb-255-255-255: 255, 255, 255; --rgb-255-194-26: 143, 96, 0; --rgb-19-19-17: 249, 248, 244;
+  --rgb-34-33-29: 235, 231, 221; --rgb-217-204-173: 75, 70, 61; --rgb-11-12-10: 233, 230, 221; --rgb-255-42-26: 194, 58, 50;
+  color-scheme: light;
+}
+
+/* SVG presentation attributes can't take var(); map the literal ones. */
+[stroke="#b7ffae"] { stroke: var(--c-b7ffae); }
+[stroke="#e6dac0"] { stroke: var(--c-e6dac0); }
+[stroke="#a09173"] { stroke: var(--c-a09173); }
+[stroke="#ffc21a"] { stroke: var(--c-ffc21a); }
+[fill="rgba(183,255,174,0.12)"] { fill: rgba(var(--rgb-183-255-174), 0.12); }
+
+/* ---- Light-mode treatments ---------------------------------------------------------------------------- */
+
+/* LCD screens don't glow: drop phosphor text glows (the 404 code and alert glyph keep their RGB split). */
+[data-theme="light"] *:not(.rt-404num):not(.rt-alert-i) { text-shadow: none !important; }
+
+/* Dark-green "screen" panels become backlit LCDs: pale green, scanlines, inset bezel. */
+[data-theme="light"] div[style*="background: var(--c-0f2a18)"]:not(.rt-frame),
+[data-theme="light"] input[style*="background: var(--c-0f2a18)"] {
+  background-image:
+    repeating-linear-gradient(0deg, rgba(47, 107, 69, 0.07) 0 1px, transparent 1px 3px),
+    linear-gradient(180deg, #dceacf, #c8dbb9) !important;
+  border-color: #9db99a !important;
+  box-shadow: inset 0 1px 3px rgba(40, 60, 40, 0.35), inset 0 0 0 1px rgba(255, 255, 255, 0.35) !important;
+}
+[data-theme="light"] .rt-frame {
+  background-image:
+    linear-gradient(var(--t), var(--t)), linear-gradient(var(--t), var(--t)),
+    linear-gradient(var(--t), var(--t)), linear-gradient(var(--t), var(--t)),
+    linear-gradient(var(--t), var(--t)), linear-gradient(var(--t), var(--t)),
+    linear-gradient(var(--t), var(--t)), linear-gradient(var(--t), var(--t)),
+    repeating-linear-gradient(0deg, rgba(47, 107, 69, 0.07) 0 1px, transparent 1px 3px),
+    linear-gradient(180deg, #dceacf, #c8dbb9) !important;
+  background-size: 14px 1px, 1px 14px, 14px 1px, 1px 14px, 14px 1px, 1px 14px, 14px 1px, 1px 14px, auto, auto !important;
+  box-shadow: inset 0 1px 3px rgba(40, 60, 40, 0.35), 0 1px 0 rgba(255, 255, 255, 0.6) !important;
+}
+[data-theme="light"] .rt-frame[style*="background: var(--c-161613)"] { /* paper cards with a frame stay paper */
+  background-image:
+    linear-gradient(var(--t), var(--t)), linear-gradient(var(--t), var(--t)),
+    linear-gradient(var(--t), var(--t)), linear-gradient(var(--t), var(--t)),
+    linear-gradient(var(--t), var(--t)), linear-gradient(var(--t), var(--t)),
+    linear-gradient(var(--t), var(--t)), linear-gradient(var(--t), var(--t)) !important;
+  box-shadow: none !important;
+}
+
+/* Paper panels: a hairline emboss instead of glow. */
+[data-theme="light"] div[style*="background: var(--c-161613)"][style*="border-radius: 10px"] {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 1px 2px rgba(60, 50, 30, 0.08);
+}
+
+/* White logos -> charcoal. */
+[data-theme="light"] .rt-logo { filter: invert(0.88) sepia(0.15) !important; }
+
+/* Testnet banner: soft amber with dark type and stripes. */
+[data-theme="light"] [data-screen-label="Demo banner"] { background: #efd58a !important; color: #3a2c08 !important; }
+[data-theme="light"] [data-screen-label="Demo banner"] a { color: #3a2c08 !important; }
+[data-theme="light"] .rt-hazard::after { background: repeating-linear-gradient(-45deg, #3a2c08 0 6px, transparent 6px 12px); opacity: 0.55; }
+
+/* ---- Theme toggle (desktop icon button + mobile menu row) --------------------------------------------- */
+.rt-theme-btn {
+  width: 40px; height: 40px; flex: none; padding: 0; border-radius: 4px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  border: 1px solid var(--c-3c372f); background: var(--c-161613); color: var(--c-e6dac0);
+  font: 17px/1 'JetBrains Mono', monospace;
+}
+.rt-theme-btn::before { content: "\263C"; }                 /* dark mode: offer light */
+[data-theme="light"] .rt-theme-btn::before { content: "\263E"; }
+.rt-theme-btn:hover { border-color: var(--c-b7ffae); color: var(--c-b7ffae); }
+.rt-theme-btn:focus-visible, .rt-theme-row:focus-visible { outline: 2px solid var(--c-e6dac0); outline-offset: 2px; }
+
+.rt-theme-row {
+  height: 52px; padding: 0; border: 0; background: transparent; cursor: pointer; text-align: left;
+  display: flex; align-items: center; justify-content: space-between;
+  font: 16px 'JetBrains Mono', monospace; color: var(--c-d9ccad);
+}
+.rt-theme-row::before { content: "> Light mode"; }
+.rt-theme-row::after { content: "[ OFF ]"; font-size: 13px; color: var(--c-a09173); }
+[data-theme="light"] .rt-theme-row::after { content: "[ ON ]"; color: var(--c-b7ffae); }
