@@ -66,6 +66,26 @@ library CarryMath {
         return principal * rateWad * elapsed / (WAD * year);
     }
 
+    /// @dev Advance rate index from `index` over `dt` seconds at `rateWad`.
+    function advanceRateIndex(uint256 index, uint256 rateWad, uint256 dt, uint256 year)
+        external
+        pure
+        returns (uint256)
+    {
+        if (dt == 0 || index == 0) return index;
+        return index + index * rateWad * dt / (WAD * year);
+    }
+
+    /// @dev Senior accrual from floating rate index delta (stops via caller capping end time).
+    function accrualFromIndex(uint256 principal, uint256 indexStart, uint256 indexEnd)
+        external
+        pure
+        returns (uint256)
+    {
+        if (principal == 0 || indexEnd <= indexStart) return 0;
+        return principal * (indexEnd - indexStart) / WAD;
+    }
+
     function ceilDiv(uint256 a, uint256 b) public pure returns (uint256) {
         if (a == 0) return 0;
         return (a - 1) / b + 1;

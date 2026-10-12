@@ -1,6 +1,10 @@
 # Settle watch — live matched positions (do not early-exit)
 
-Live 7-day **fully matched / Active** positions on the product vault for end-of-term `settle` testing.
+> **Carry v3 note:** Positions **#5 / #6 / #7** below live on the **superseded v2.5** PROXY `0xc801…72bd`.
+> Under v3 lender-pool they are **stale for the new product CA**. Do not treat them as v3 pool accounting.
+> Keep this page for v2.5 maturity observation only. New v3 positions will be listed separately after deploy.
+
+Live 7-day **fully matched / Active** positions on the **v2.5** vault for end-of-term `settle` testing.
 
 **Do not call `earlyExit` or `settle` until after maturity.** Leave open for the full term.
 

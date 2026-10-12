@@ -3,14 +3,10 @@ pragma solidity ^0.8.24;
 
 import {LeveredLpVault} from "./LeveredLpVault.sol";
 
-/// @notice Upgrade smoke-test implementation. Adds version(); storage layout unchanged.
+/// @notice Deployable implementation alias for Carry v3 lender-pool (inherits version()).
 contract LeveredLpVaultV2 is LeveredLpVault {
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
         _disableInitializers();
-    }
-
-    function version() external pure returns (string memory) {
-        return "v2.5-funder-idle";
     }
 }

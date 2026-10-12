@@ -5,13 +5,14 @@ Deploy steps live in [`CARRY_TESTNET.md`](./CARRY_TESTNET.md).
 Docs index: [`docs/README.md`](./docs/README.md).  
 Maker-locked product rules + research sync: [`docs/MAKER_V1_NOTES.md`](./docs/MAKER_V1_NOTES.md).  
 **Fee waterfall (product source of truth):** [`docs/MAKER_FEE_WATERFALL.md`](./docs/MAKER_FEE_WATERFALL.md) — Morpho-rate senior floor, treasury/seniorPerf/junior split **only** at claimFees / earlyExit / settle.  
-**Accounting (v2.5 source of truth):** [`docs/ACCOUNTING_V25.md`](./docs/ACCOUNTING_V25.md).
+**Accounting (v3 source of truth):** [`docs/ACCOUNTING_V3.md`](./docs/ACCOUNTING_V3.md).  
+v2.5 notes kept in [`docs/ACCOUNTING_V25.md`](./docs/ACCOUNTING_V25.md) (superseded).
 
-**Live product CA (UUPS PROXY):** [`0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd`](https://explorer.testnet.chain.robinhood.com/address/0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd) — `version() = v2.5-funder-idle`.  
-**Implementation:** [`0xe498F43ED10a37E22Fe046A3FDAAFD4E9080d0e8`](https://explorer.testnet.chain.robinhood.com/address/0xe498F43ED10a37E22Fe046A3FDAAFD4E9080d0e8).  
+**Live product CA:** see `public/config.json` → `chain.vault` after DeployCarryV3 (`version() = v3-lender-pool`).  
+**Superseded v2.5 PROXY:** [`0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd`](https://explorer.testnet.chain.robinhood.com/address/0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd) — keep for settle-watch only.  
 **Site:** [usecarry.io](https://usecarry.io).
 
-Live product includes Maker waterfall (base 20% + Boosted STRATEGY **tiers** 15/10/5%), unpaid-accrual carry, rate lock ≤5%, settle/early shortfall cover, early-exit cover revert, gasCredit auto-refund, SellShares AMM stub, auto-compound, **per-lender idle**, **FIFO funders**, yield to **position funders**, $25 min, $25k market totals, **no per-wallet cap**, settle default **IdleCarry**.
+v3 product: Maker waterfall, **lender pool shares**, FIFO withdraw queue, **floating rate index**, uncapped senior pool, junior $25k cap, $25 min, cover orders per Maker v3, gas refund only on match (scaled), auto-compound with under-$25 wallet payout, explicit withdraw unmatched always wallet.
 
 **v1 grant reference (not in use):** `0x72A0…36c8` (immutable; old 4%/5%/fee-in cut story applies only there).
 

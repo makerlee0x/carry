@@ -14,10 +14,13 @@
   const VAULT_ABI = [
     "function depositJunior(uint256 mstrAmount) returns (uint256 positionId)",
     "function depositSenior(uint256 amount)",
-    "function withdrawSenior(uint256 principalAmount)",
+    "function withdrawSenior(uint256 assets)",
+    "function claimWithdraw()",
     "function withdrawUnmatched(uint256 positionId)",
     "function earlyExit(uint256 positionId)",
+    "function earlyExit(uint256,uint8)",
     "function settle(uint256 positionId)",
+    "function settle(uint256,uint8)",
     "function fundGasCredit()",
     "function withdrawGasCredit(uint256 amount)",
     "function gasCreditWei(address) view returns (uint256)",
@@ -27,14 +30,17 @@
     "function mstr() view returns (address)",
     "function usdg() view returns (address)",
     "function freePrincipal(address) view returns (uint256)",
-    "function seniorIdle(address) view returns (uint256)",
+    "function shares(address) view returns (uint256)",
+    "function totalSeniorAssets() view returns (uint256)",
+    "function claimableWithdraw(address) view returns (uint256)",
     "function minDepositUsdg() view returns (uint256)",
     "function setSellSharesEnabled(bool)",
     "function setAutoCompound(bool)",
-    "function seniorEarlyExit(uint256,uint256) returns (uint256,uint256,uint256)",
-    "function settle(uint256,uint8)",
+    "function version() view returns (string)",
     "function seniorPrincipal(address) view returns (uint256)",
-    "function positions(uint256) view returns (address,uint256,uint256,uint256,uint256,uint64,bool)",
+    // v3 Position: owner, mstrAmount, seniorPrincipal, targetSenior, entryPriceWad, feeUsdg,
+    // openedAt, lastFeeSplitAt, settled, boosted, unpaidSeniorAccrual, rateIndexSnapshot, treasuryCutLocked
+    "function positions(uint256) view returns (address,uint256,uint256,uint256,uint256,uint256,uint64,uint64,bool,bool,uint256,uint256,uint256)",
   ];
 
   // JuniorDeposit(positionId indexed, junior indexed, mstrAmount, matched)
@@ -248,12 +254,12 @@
       const words = decodeUintWords(
         await ethCall(eth, vault, encodeFn("positions(uint256)", ["uint256"], [id]))
       );
-      // owner, mstrAmount, seniorPrincipal, entryPriceWad, feeUsdg, openedAt, settled
-      if (!words.length || words[6] !== 0n) continue;
+      // v3: [0]owner [1]mstr [2]senior [3]target [4]entry [5]fee [6]openedAt [7]lastSplit [8]settled ...
+      if (words.length < 9 || words[8] !== 0n) continue;
       const owner = "0x" + words[0].toString(16).padStart(40, "0");
       if (owner.toLowerCase() !== account.toLowerCase()) continue;
       const matched = words[2] > 0n;
-      const openedAt = words[5];
+      const openedAt = words[6];
       live.push({
         id,
         mstr: words[1],
