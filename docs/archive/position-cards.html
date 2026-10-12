@@ -1,0 +1,41 @@
+<!--
+  ARCHIVED: Positions page cards (Oct 2026)
+
+  The standalone Positions tab was folded into the Dashboard. These are the vertical
+  position cards (ticker, $ value, Shares, Fees bottom-left, APY bottom-right, hover
+  "More details" pill) plus the "Open new position" tile, exactly as they were rendered.
+
+  This is a fragment of the TEMPLATE inside public/index.html (__bundler/template), not a
+  standalone page. It is not loaded anywhere.
+
+  To restore:
+    1. Paste the markup below into the template inside a new
+       <sc-if value="{{ isPositions }}" hint-placeholder-val="{{ false }}"> ... </sc-if>
+       section, next to the isDashboard / isVault sections.
+    2. Re-add ['Positions', r === 'positions', go('positions')] to the `tabs` array.
+    3. Remove the 'positions' -> 'dashboard' alias in go() and the hash handlers.
+
+  Still live in the bundle (nothing to rebuild): the `posCards` data (PCARDS2), the
+  position modal that each card opens, and the .hv / .rv hover CSS.
+  The matching fee toggle was already removed; Fees/APY are shown side by side.
+-->
+        <sc-if value="{{ notConnected }}"><div style="background:#161613; border:1px solid #2f2c27; border-radius:10px; padding:24px; display:flex; flex-wrap:wrap; gap:16px; align-items:center; justify-content:space-between;"><span style="font-size:17px;">Connect a wallet to see your positions.</span><button sc-camel-on-click="{{ connect }}" style="height:44px; padding:0 18px; border-radius:4px; border:0; background:#b7ffae; color:#0f2a18; font-size:15px; font-weight:500; cursor:pointer;" style-focus="outline:2px solid #e6dac0; outline-offset:2px;">Connect wallet</button></div></sc-if>
+        <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(min(100%,250px),1fr)); gap:20px;">
+          <sc-for list="{{ posCards }}" as="p" hint-placeholder-count="2">
+            <div class="hv" style="position:relative; display:flex; flex-direction:column; min-height:280px; padding:22px; border-radius:14px; border:1px solid #2a2822; background:linear-gradient(180deg,#1a1a16 0%,#131311 100%); box-shadow:inset 0 1px 0 rgba(255,255,255,0.04), 0 1px 2px rgba(0,0,0,0.4); transition:transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;" style-hover="transform:translateY(-3px); border-color:rgba(183,255,174,0.55); box-shadow:inset 0 1px 0 rgba(255,255,255,0.06), 0 14px 36px rgba(0,0,0,0.45);">
+              <button sc-camel-on-click="{{ p.open }}" aria-label="View {{ p.pair }} position details" style="position:absolute; inset:0; z-index:1; width:100%; height:100%; padding:0; border:0; border-radius:14px; background:transparent; cursor:pointer;" style-focus="outline:2px solid #e6dac0; outline-offset:2px;"></button>
+              <span style="font-family:'JetBrains Mono',monospace; font-size:20px; font-weight:500; letter-spacing:0.01em;">{{ p.pair }}</span>
+              <span style="font-family:'JetBrains Mono',monospace; font-size:30px; line-height:1.1; font-weight:500; margin-top:14px;">{{ p.value }}</span>
+              <span style="font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:0.14em; color:#a09173; margin-top:6px;">POSITION VALUE</span>
+              <div style="flex:1 1 auto; min-height:44px; display:flex; align-items:center;"><button class="rv" sc-camel-on-click="{{ p.open }}" aria-label="More details about {{ p.pair }}" style="position:relative; z-index:2; height:30px; padding:0 12px; border-radius:999px; border:1px solid #3c372f; background:rgba(255,255,255,0.03); color:#e6dac0; font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:0.04em; cursor:pointer;" style-hover="border-color:#b7ffae; color:#b7ffae;" style-focus="outline:2px solid #e6dac0; outline-offset:2px;">More details →</button></div>
+              <div style="display:flex; flex-direction:column; border-top:1px solid #2a2822;">
+                <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; padding:12px 0; border-bottom:1px solid #2a2822;"><span style="font-size:13px; color:#a09173;">Shares</span><span style="font-family:'JetBrains Mono',monospace; font-size:15px;">{{ p.shares }}</span></div>
+                <div style="display:flex; align-items:flex-end; justify-content:space-between; gap:12px; padding-top:12px;">
+                  <span style="display:flex; flex-direction:column; gap:4px;"><span style="font-size:13px; color:#a09173;">Fees</span><span style="font-family:'JetBrains Mono',monospace; font-size:16px; color:#b7ffae;">{{ p.fees }}</span></span>
+                  <span style="display:flex; flex-direction:column; gap:4px; align-items:flex-end;"><span style="font-size:13px; color:#a09173;">APY</span><span style="font-family:'JetBrains Mono',monospace; font-size:16px; color:#b7ffae;">{{ p.apy }}</span></span>
+                </div>
+              </div>
+            </div>
+          </sc-for>
+          <button sc-camel-on-click="{{ goMarkets }}" style="min-height:280px; border-radius:14px; border:1px dashed #3c372f; background:transparent; color:#b7ffae; font-family:'JetBrains Mono',monospace; font-size:15px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; cursor:pointer;" style-hover="border-color:#b7ffae;" style-focus="outline:2px solid #e6dac0; outline-offset:2px;"><span style="font-size:32px;">+</span>Open new position</button>
+        </div>
