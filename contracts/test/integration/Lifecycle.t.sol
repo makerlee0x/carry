@@ -31,7 +31,7 @@ contract LifecycleTest is CarryBase {
 
         _fees(id, 50 ether);
         _warpToMaturity(id);
-        vm.prank(keeper);
+        vm.prank(juniorA);
         vault.settle(id);
         _assertBooks("after settle");
 
@@ -66,7 +66,7 @@ contract LifecycleTest is CarryBase {
         uint256 id = _stake(juniorA, 50 ether);
         _fees(id, 200 ether);
         _warpToMaturity(id);
-        vm.prank(keeper);
+        vm.prank(juniorA);
         vault.settle(id);
 
         _lend(lenderB, 5_000 ether);
@@ -86,14 +86,14 @@ contract LifecycleTest is CarryBase {
 
         _fees(id, 200 ether);
         _warpToMaturity(id);
-        vm.prank(keeper);
+        vm.prank(juniorA);
         vault.settle(id);
         _assertBooks("after settle");
 
         uint256 before = usdg.balanceOf(lenderA);
         vm.prank(lenderA);
         vault.claimWithdraw();
-        assertEq(usdg.balanceOf(lenderA) - before, 2_000 ether);
+        assertGe(usdg.balanceOf(lenderA) - before, 2_000 ether);
         _assertBooks("after claim");
 
         _withdrawAll(lenderA);
@@ -109,7 +109,7 @@ contract LifecycleTest is CarryBase {
         uint256 id = _stake(juniorA, 50 ether);
         _fees(id, 300 ether);
         _warpToMaturity(id);
-        vm.prank(keeper);
+        vm.prank(juniorA);
         vault.settle(id);
         _assertBooks("after rollover");
 
@@ -133,12 +133,12 @@ contract LifecycleTest is CarryBase {
         vault.setSellSharesEnabled(true);
         _warpToMaturity(id);
 
-        vm.prank(keeper);
+        vm.prank(juniorA);
         vault.settle(id, LeveredLpVault.CoverMode.SellShares);
         _assertBooks("after sell-shares settle");
     }
 
-    // ─── known v3 bugs (Oct 2026 review). These FAIL until fixed. ────────────
+    // ─── v3 bugs + Oct 13 2026 product rules. These FAIL until the vault is fixed. ──
 
     /// BUG 1: settle cover paid by the junior's wallet is never credited to the lender pool.
     function test_settle_juniorWalletCover_isCreditedToLenders() public {
@@ -199,34 +199,109 @@ contract LifecycleTest is CarryBase {
         _assertBooks("after pool-last-resort settle");
     }
 
-    /// BUG 3: a junior who never settles a shortfall position locks lender money forever.
-    function test_abandonedPosition_canBeClosedAfterGrace() public {
+    /// Product rule: a queued withdraw pays what the shares are worth when it is paid, not a USDG
+    /// amount fixed at request time. Asking to exit everything must exit everything, yield included.
+    function test_queuedWithdraw_paysValueAtPayout_notRequestTime() public {
         _lend(lenderA, 5_000 ether);
         uint256 id = _stake(juniorA, 50 ether); // all lender money matched
+        uint256 requested = _lenderAssets(lenderA);
         vm.prank(lenderA);
-        vault.withdrawSenior(5_000 ether); // queued
+        vault.withdrawSenior(requested); // full exit, queued
 
-        vm.warp(block.timestamp + TERM + 30 days); // junior walks away
+        _fees(id, 300 ether); // yield lands while queued
+        _warpToMaturity(id);
+        vm.prank(juniorA);
+        vault.settle(id);
 
+        uint256 before = usdg.balanceOf(lenderA);
+        vm.prank(lenderA);
+        vault.claimWithdraw();
+        uint256 paid = usdg.balanceOf(lenderA) - before;
+
+        assertGt(paid, requested, "BUG: queued withdraw paid the request-time amount, not the value at payout");
+        assertEq(vault.shares(lenderA), 0, "BUG: full-exit request left shares behind");
+        _assertBooks("after floating claim");
+    }
+
+    /// Product rule: positions auto-roll at term by default. A healthy position keeps running
+    /// (stays matched, keeps accruing, junior can still claim) with no transaction at term.
+    function test_healthyPosition_autoRollsAtTerm() public {
+        _lend(lenderA, 10_000 ether);
+        uint256 id = _stake(juniorA, 50 ether);
+        _fees(id, 200 ether);
+        vm.warp(block.timestamp + TERM + 3 days);
+
+        vm.prank(juniorA);
+        try vault.claimFees(id) {}
+        catch {
+            fail("BUG: healthy position stopped at term; it should auto-roll");
+        }
+        assertTrue(vault.isFullyMatched(id), "rolled position stays matched");
+        _assertBooks("after roll");
+    }
+
+    /// Product rule: a badly underwater position (price below entry by more than the market range,
+    /// MSTR -32%) stops rolling. Inside the 48h grace only the junior may settle it.
+    function test_underwater_onlyJuniorSettlesDuringGrace() public {
+        uint256 id = _underwaterAtTerm();
+        vm.warp(block.timestamp + GRACE - 1 hours);
+        vm.prank(keeper);
+        vm.expectRevert();
+        vault.settle(id);
+    }
+
+    /// After the 48h grace anyone (junior, senior, Carry) can settle, and queued lenders get paid.
+    function test_underwater_carryCanSettleAfterGrace() public {
+        uint256 id = _underwaterAtTerm();
+        vm.warp(block.timestamp + GRACE + 1);
         vm.prank(keeper);
         try vault.settle(id) {}
         catch {
-            fail("BUG: no one but the junior can settle a matured shortfall position; lender capital is stuck");
+            fail("BUG: underwater position past 48h grace cannot be settled by Carry; lender capital is stuck");
         }
-        assertGt(vault.claimableWithdraw(lenderA), 0, "queued lender should be paid once the position closes");
-        _assertBooks("after keeper settle");
+        assertGt(vault.claimableWithdraw(lenderA), 0, "queued lender is paid once the position closes");
+        _assertBooks("after Carry settle");
     }
 
-    /// S3: testnet sell-shares without a router credits the pool with USDG that does not exist.
-    function test_sellShares_noRouter_doesNotCreateFakeUsdg() public {
+    function test_underwater_lenderCanSettleAfterGrace() public {
+        uint256 id = _underwaterAtTerm();
+        vm.warp(block.timestamp + GRACE + 1);
+        vm.prank(lenderA);
+        try vault.settle(id) {}
+        catch {
+            fail("BUG: underwater position past 48h grace cannot be settled by a lender");
+        }
+        _assertBooks("after lender settle");
+    }
+
+    uint256 internal constant GRACE = 48 hours;
+    uint256 internal constant UNDERWATER_DROP_WAD = 0.32e18; // MSTR range; per-market in the contract
+
+    /// Lender fully matched and queued; no fees; price falls 40% (past -32%); warp to term.
+    function _underwaterAtTerm() internal returns (uint256 id) {
+        _lend(lenderA, 5_000 ether);
+        id = _stake(juniorA, 50 ether);
+        vm.prank(lenderA);
+        vault.withdrawSenior(5_000 ether);
+        (,,,, uint256 entry,,,,,,,,) = vault.positions(id);
+        oracle.setPrice(entry * 60 / 100);
+        assertLt(entry * 60 / 100, entry * (1e18 - UNDERWATER_DROP_WAD) / 1e18);
+        _warpToMaturity(id);
+    }
+
+    /// Product rule: sell-shares needs a real router. Without one it must revert, never credit USDG
+    /// that doesn't exist.
+    function test_sellShares_noRouter_reverts() public {
         _lend(lenderA, 10_000 ether);
         uint256 id = _stake(juniorA, 50 ether);
         vm.prank(juniorA);
         vault.setSellSharesEnabled(true);
         _warpToMaturity(id);
 
-        vm.prank(keeper);
-        vault.settle(id, LeveredLpVault.CoverMode.SellShares);
-        _assertBooks("after stub sell-shares settle");
+        vm.prank(juniorA);
+        try vault.settle(id, LeveredLpVault.CoverMode.SellShares) {
+            fail("BUG: sell-shares without a router settled (credits the pool with USDG that does not exist)");
+        } catch {}
+        _assertBooks("after rejected sell-shares settle");
     }
 }
