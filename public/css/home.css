@@ -1,0 +1,55 @@
+/* Home "Why Carry" feature grid and "For USDG lenders" section. Mini LCD panels reuse the bundle's green-screen look. */
+
+.hs-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 760px) { .hs-grid { grid-template-columns: 1fr; } }
+
+.hs-card {
+  display: flex; flex-direction: column; gap: 12px; padding: 24px;
+  background: var(--c-161613); border: 1px solid var(--c-2f2c27); border-radius: 10px;
+}
+.hs-card h3 { margin: 0; font-family: 'JetBrains Mono', monospace; font-weight: 500; font-size: 20px; line-height: 26px; }
+.hs-card p { margin: 0; font-size: 15px; line-height: 24px; color: var(--c-d9ccad); }
+.hs-tag { font-family: 'JetBrains Mono', monospace; font-size: 12px; letter-spacing: 0.08em; color: var(--c-b7ffae); }
+
+/* LCD panel */
+.hs-lcd {
+  margin-bottom: 8px; padding: 16px; border-radius: 8px; min-height: 118px; box-sizing: border-box;
+  display: flex; flex-direction: column; justify-content: center; gap: 10px;
+  background: var(--c-0f2a18); color: var(--c-b7ffae); font-family: 'JetBrains Mono', monospace;
+  box-shadow: inset 0 2px 8px rgba(var(--rgb-0-0-0), 0.6);
+}
+.hs-row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; font-size: 11px; letter-spacing: 0.08em; color: var(--c-b6e3a8); }
+.hs-big { font-size: clamp(16px, 4.4vw, 22px); white-space: nowrap; letter-spacing: 0; color: var(--c-b7ffae); text-shadow: 0 0 10px rgba(var(--rgb-61-255-90), 0.45); }
+.hs-dim { color: var(--c-b6e3a8); opacity: 0.6; }
+
+/* bars (collateral compare, APY stack) */
+.hs-bar { position: relative; height: 6px; border-radius: 3px; background: var(--c-22211d); overflow: hidden; }
+.hs-bar > i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 3px; background: var(--c-b7ffae); box-shadow: 0 0 8px var(--c-3dff5a); }
+.hs-bar > i.hs-ghost { background: rgba(var(--rgb-183-255-174), 0.3); box-shadow: none; }
+.hs-cmp { display: grid; grid-template-columns: 64px 1fr auto; align-items: center; gap: 10px; font-size: 11px; letter-spacing: 0.06em; color: var(--c-b6e3a8); }
+
+/* range ruler: the band and price marker drift together, the way the hook re-centers */
+.hs-ruler { position: relative; height: 8px; border-radius: 3px; background: var(--c-22211d); }
+.hs-band {
+  position: absolute; left: 22%; width: 56%; top: 0; bottom: 0;
+  background: rgba(var(--rgb-183-255-174), 0.3); border-left: 1px solid var(--c-b7ffae); border-right: 1px solid var(--c-b7ffae);
+  animation: hs-drift 6s ease-in-out infinite;
+}
+.hs-band::after {
+  content: ""; position: absolute; left: 50%; top: -4px; width: 3px; height: 16px; margin-left: -1.5px;
+  background: var(--c-b7ffae); box-shadow: 0 0 8px var(--c-3dff5a);
+}
+@keyframes hs-drift { 0%, 100% { transform: translateX(-18%); } 50% { transform: translateX(18%); } }
+@media (prefers-reduced-motion: reduce) { .hs-band { animation: none; } }
+
+/* lender section */
+.hs-split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: clamp(32px, 6vw, 80px); align-items: center; }
+@media (max-width: 860px) { .hs-split { grid-template-columns: 1fr; } }
+.hs-stack { display: flex; flex-direction: column; gap: 18px; padding: clamp(20px, 3vw, 32px); }
+.hs-line { display: grid; grid-template-columns: 22px 1fr auto; align-items: center; gap: 12px; font-family: 'JetBrains Mono', monospace; }
+.hs-op { color: var(--c-a09173); font-size: 18px; text-align: center; }
+.hs-k { font-size: 15px; color: var(--c-e6dac0); }
+.hs-k small { display: block; font-family: inherit; font-size: 11px; letter-spacing: 0.06em; color: var(--c-a09173); margin-top: 2px; }
+.hs-v { font-size: 20px; color: var(--c-e6dac0); }
+.hs-total { padding-top: 18px; border-top: 1px solid var(--c-2f2c27); }
+.hs-total .hs-v { font-size: clamp(32px, 4vw, 44px); color: var(--c-b7ffae); text-shadow: 0 0 14px rgba(var(--rgb-61-255-90), 0.4); }

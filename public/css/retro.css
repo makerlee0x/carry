@@ -260,36 +260,6 @@
 
 /* ---- Round 4 ------------------------------------------------------------------------------------------- */
 
-/* How it works: flow row as a schematic. Odd children are nodes (pin labels above), even children are traces. */
-.rt-flow {
-  gap: 0 !important; row-gap: 26px !important; padding: 34px 24px 22px !important;
-  background-image: radial-gradient(rgba(var(--rgb-183-255-174), 0.12) 1px, transparent 1.4px) !important;
-  background-size: 16px 16px !important;
-}
-.rt-flow > span:nth-child(odd) {
-  position: relative; border: 1px solid rgba(var(--rgb-183-255-174), 0.45); border-radius: 2px !important;
-  padding: 8px 14px !important; box-shadow: 0 0 10px rgba(var(--rgb-61-255-90), 0.12);
-}
-.rt-flow > span:nth-child(odd)::before {
-  position: absolute; left: -1px; top: -17px; font-size: 9px; letter-spacing: 0.16em; color: var(--c-b6e3a8); opacity: 0.7;
-}
-.rt-flow > span:nth-child(1)::before { content: "IN\00B7 A"; }
-.rt-flow > span:nth-child(3)::before { content: "IN\00B7 B"; }
-.rt-flow > span:nth-child(5)::before { content: "POOL"; }
-.rt-flow > span:nth-child(7)::before { content: "OUT"; }
-.rt-flow > span:nth-child(odd)::after { /* solder pads on the node edges */
-  content: ""; position: absolute; top: 50%; left: -4px; right: -4px; height: 5px; margin-top: -2.5px; pointer-events: none;
-  background: linear-gradient(var(--rt-green), var(--rt-green)) left / 5px 5px no-repeat, linear-gradient(var(--rt-green), var(--rt-green)) right / 5px 5px no-repeat;
-}
-.rt-flow > span:nth-child(1)::after { background-size: 0 0, 5px 5px; }
-.rt-flow > span:last-child::after { background-size: 5px 5px, 0 0; }
-.rt-flow > span:nth-child(even) {
-  flex: 1 1 36px; min-width: 36px; display: flex; align-items: center; gap: 6px; color: var(--rt-green) !important; font-size: 13px;
-}
-.rt-flow > span:nth-child(even)::before, .rt-flow > span:nth-child(even)::after {
-  content: ""; flex: 1; height: 1px; background: rgba(var(--rgb-183-255-174), 0.55); box-shadow: 0 0 4px rgba(var(--rgb-61-255-90), 0.5);
-}
-
 /* Docs step lists as a schematic rail: boxed step nodes on a vertical trace. */
 .rt-steps > div { position: relative; border-top: 0 !important; }
 .rt-steps > div > span:first-child {
