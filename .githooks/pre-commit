@@ -1,0 +1,3 @@
+#!/bin/sh
+# Block commits that touch contracts/ unless the Forge suite passes.
+exec "$(git rev-parse --show-toplevel)/scripts/forge-gate.sh" --if-changed --cached
