@@ -890,11 +890,13 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
     }
 
     /// @dev Collect `shortfall + treasuryOnCover` USDG for the senior pool from the junior, in order:
-    ///      position fees → junior idle (lender shares) → wallet, or fees → sell MSTR (SellShares).
+    ///      position fees → junior idle (lender shares) → wallet → (settle, junior caller) sell MSTR,
+    ///      or fees → sell MSTR (SellShares).
     ///      Collected USDG goes to the pool first, then the treasury cut to backstop, so the treasury
     ///      only takes a cut of cover the junior actually paid.
     ///      Early exit (`atSettle` false) must pay the wallet part in full. At settle the wallet pull is
-    ///      clamped to balance/allowance and any unpaid interest is forgiven (returned as `unpaid`).
+    ///      clamped to balance/allowance; interest still unpaid after the sale (or with no
+    ///      router) is forgiven and returned as `unpaid`.
     function _collectCover(
         Position storage position,
         address junior,
@@ -908,32 +910,37 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         uint256 got = juniorFees < need ? juniorFees : need;
         feesLeft = juniorFees - got;
 
-        if (got < need) {
-            if (mode == CoverMode.SellShares) {
-                uint256 usdgOut;
-                (mstrSold, usdgOut) = _sellPositionMstr(position, need - got);
-                got += usdgOut;
-                if (got > need) {
-                    feesLeft += got - need;
-                    got = need;
+        if (got < need && mode != CoverMode.SellShares) {
+            got += _consumeJuniorIdle(junior, need - got);
+            uint256 rest = need - got;
+            if (rest > 0) {
+                uint256 bal = usdg.balanceOf(junior);
+                uint256 allowed = usdg.allowance(junior, address(this));
+                uint256 pull = bal < allowed ? bal : allowed;
+                if (pull < rest) {
+                    if (!atSettle) revert JuniorCoverRequired();
+                } else {
+                    pull = rest;
                 }
-            } else {
-                got += _consumeJuniorIdle(junior, need - got);
-                uint256 rest = need - got;
-                if (rest > 0) {
-                    uint256 bal = usdg.balanceOf(junior);
-                    uint256 allowed = usdg.allowance(junior, address(this));
-                    uint256 pull = bal < allowed ? bal : allowed;
-                    if (pull < rest) {
-                        if (!atSettle) revert JuniorCoverRequired();
-                    } else {
-                        pull = rest;
-                    }
-                    if (pull > 0) {
-                        _pullExact(usdg, junior, pull);
-                        got += pull;
-                    }
+                if (pull > 0) {
+                    _pullExact(usdg, junior, pull);
+                    got += pull;
                 }
+            }
+        }
+        // SellShares sells for whatever fees left uncovered. At settle, a junior who still owes after
+        // idle + wallet also sells, so revoking the USDG approval cannot dodge interest. Only the junior
+        // (or anyone, if the junior opted into SellShares) reaches this; lenders cannot force a sale.
+        if (
+            got < need
+                && (mode == CoverMode.SellShares || (atSettle && msg.sender == junior && sellSharesRouter != address(0)))
+        ) {
+            uint256 usdgOut;
+            (mstrSold, usdgOut) = _sellPositionMstr(position, need - got);
+            got += usdgOut;
+            if (got > need) {
+                feesLeft += got - need;
+                got = need;
             }
         }
 

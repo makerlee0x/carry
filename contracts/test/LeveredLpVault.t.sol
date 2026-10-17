@@ -397,6 +397,40 @@ contract LeveredLpVaultTest is Test {
         assertTrue(vault.isFullyMatched(b), "expired partial position blocked matching");
     }
 
+    function _routerAndMaturedPosition() internal returns (uint256 id) {
+        MockMstrSellRouter router = new MockMstrSellRouter(address(mstr), address(usdg), PRICE);
+        usdg.mint(address(router), 1_000 ether);
+        vault.setSellSharesRouter(address(router));
+        _depositSenior(senior, 1_000 ether);
+        id = _depositJunior(junior, MSTR_IN); // $1k, fully matched, no fees
+        vm.warp(block.timestamp + 1 hours + 1);
+    }
+
+    /// Junior settles with no USDG (or no approval): MSTR is sold for the interest instead of forgiving it.
+    function test_settle_juniorWithoutUsdg_sellsMstrToCover() public {
+        uint256 id = _routerAndMaturedPosition();
+        uint256 poolBefore = vault.totalSeniorAssets();
+        vm.prank(junior);
+        LeveredLpVault.Settlement memory s = vault.settle(id);
+
+        assertGt(s.coverUsdg, 0);
+        assertGt(s.mstrSold, 0, "MSTR sold to cover");
+        assertEq(s.feeShortfallUsdg, 0, "nothing forgiven");
+        assertEq(vault.totalSeniorAssets(), poolBefore + s.accrual, "lenders get the full interest");
+        assertEq(mstr.balanceOf(junior), MSTR_IN - s.mstrSold);
+    }
+
+    /// A lender cannot settle a position that owes cover, so cannot force the junior's MSTR to be sold.
+    function test_settle_lenderCannotForceSale() public {
+        uint256 id = _routerAndMaturedPosition();
+        vm.startPrank(senior);
+        vm.expectRevert(LeveredLpVault.NotJunior.selector);
+        vault.settle(id);
+        vm.expectRevert(LeveredLpVault.SellSharesDisabled.selector);
+        vault.settle(id, LeveredLpVault.CoverMode.SellShares);
+        vm.stopPrank();
+    }
+
     function test_treasuryCutZero_usesIsSetFlag() public {
         vault.clearTreasuryCuts();
         assertFalse(vault.treasuryCutIsSet());
