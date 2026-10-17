@@ -15,7 +15,7 @@ library CarryMath {
     }
 
     function waterfallFromGross(uint256 gross, uint256 accrual, uint256 cutWad, uint256 seniorPerfCutWad)
-        external
+        internal
         pure
         returns (WaterfallSplit memory s)
     {
@@ -32,7 +32,7 @@ library CarryMath {
     }
 
     function seniorAssets(uint256 mstrAmount, uint256 priceWad, uint8 mstrDecimals, uint8 usdgDecimals)
-        external
+        internal
         pure
         returns (uint256)
     {
@@ -40,7 +40,7 @@ library CarryMath {
     }
 
     function mstrToCover(uint256 usdgShort, uint256 priceWad, uint8 mstrDecimals, uint8 usdgDecimals)
-        external
+        internal
         pure
         returns (uint256)
     {
@@ -51,7 +51,7 @@ library CarryMath {
     }
 
     function usdgValue(uint256 mstrAmount, uint256 priceWad, uint8 mstrDecimals, uint8 usdgDecimals)
-        external
+        internal
         pure
         returns (uint256)
     {
@@ -59,7 +59,7 @@ library CarryMath {
     }
 
     function morphoAccrual(uint256 principal, uint256 rateWad, uint256 elapsed, uint256 year)
-        external
+        internal
         pure
         returns (uint256)
     {
@@ -68,7 +68,7 @@ library CarryMath {
 
     /// @dev Advance rate index from `index` over `dt` seconds at `rateWad`.
     function advanceRateIndex(uint256 index, uint256 rateWad, uint256 dt, uint256 year)
-        external
+        internal
         pure
         returns (uint256)
     {
@@ -78,7 +78,7 @@ library CarryMath {
 
     /// @dev Senior accrual from floating rate index delta (stops via caller capping end time).
     function accrualFromIndex(uint256 principal, uint256 indexStart, uint256 indexEnd)
-        external
+        internal
         pure
         returns (uint256)
     {
@@ -86,12 +86,12 @@ library CarryMath {
         return principal * (indexEnd - indexStart) / WAD;
     }
 
-    function ceilDiv(uint256 a, uint256 b) public pure returns (uint256) {
+    function ceilDiv(uint256 a, uint256 b) internal pure returns (uint256) {
         if (a == 0) return 0;
         return (a - 1) / b + 1;
     }
 
-    function sqrt(uint256 y) external pure returns (uint256 z) {
+    function sqrt(uint256 y) internal pure returns (uint256 z) {
         if (y > 3) {
             z = y;
             uint256 x = y / 2 + 1;

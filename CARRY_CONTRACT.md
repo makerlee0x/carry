@@ -149,7 +149,7 @@ Numbered happy path:
 | --- | --- | --- | --- |
 | `settle(positionId[, mode])` | anyone (if residual cover 0) / junior | Matched, term elapsed, not settled | Maturity waterfall; default IdleCarry; **no MSTR sold** unless SellShares chosen |
 | `previewEarlyExit` / `previewClaimFees` | view | — | Mode-aware accrual + waterfall preview |
-| `previewSeniorAssets` / `previewMstrToCover` | view | — | Quoting helpers |
+| `previewSeniorAssets` | view | — | Quoting helper |
 | `seniorIdle` / `freePrincipal` / `isMatched` / `mark` | view | — | Per-lender idle / capacity / MTM |
 | `dualPoolAdapter()` | view | — | Always `address(0)` |
 | `joinPool(bytes)` | anyone | — | Always reverts `ExternalLpForbidden` |
@@ -171,7 +171,7 @@ accrual = unpaidSeniorAccrual
         + seniorPrincipal * morphoRateLocked * elapsed / (WAD * YEAR)
 ```
 
-Maker waterfall at claim/exit/settle: `seniorFloor → treasury(cut) → seniorPerf → junior`. Early-exit shortfall: junior only (NO backstop). Settle shortfall: backstop first, then junior Wallet / IdleCarry / SellShares. Junior gas credit: see `docs/GAS_CREDIT.md`.
+Maker waterfall at claim/exit/settle: `seniorFloor → treasury(cut) → seniorPerf → junior`. Early-exit shortfall: junior only (NO backstop). Settle shortfall: backstop first, then junior fees → junior idle → wallet (or fees → MSTR sold through the sell router for SellShares; no router reverts). Cover the junior pays is credited to the lender pool; interest the junior cannot pay is forgiven, never taken from lender principal. Accrual stops exactly at maturity, across later rate changes. Junior gas credit: see `docs/GAS_CREDIT.md`.
 
 ### v2.5 idle + funders
 

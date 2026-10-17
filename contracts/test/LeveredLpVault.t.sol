@@ -10,6 +10,7 @@ import {MockERC20} from "../src/mocks/MockERC20.sol";
 import {MockOracle} from "../src/mocks/MockOracle.sol";
 import {MockMstrSellRouter} from "../src/mocks/MockMstrSellRouter.sol";
 import {PushablePriceOracle} from "../src/oracle/PushablePriceOracle.sol";
+import {CarryMath} from "../src/libraries/CarryMath.sol";
 import {CarryPool} from "../src/libraries/CarryPool.sol";
 
 contract LeveredLpVaultTest is Test {
@@ -347,6 +348,55 @@ contract LeveredLpVaultTest is Test {
         assertEq(a.accrual, b.accrual);
     }
 
+    /// Accrual must stop at maturity even when the rate index moves afterwards (another match, a rate change).
+    function test_accrualStopsAtMaturity_afterLaterMatchAndRateChange() public {
+        _depositSenior(senior, 1_000 ether);
+        uint256 id = _depositJunior(junior, MSTR_IN); // $1k, fully matched
+        vm.warp(block.timestamp + 1 hours); // maturity
+        uint256 atMaturity = vault.previewSettle(id).accrual;
+        assertGt(atMaturity, 0);
+
+        vm.warp(block.timestamp + 5 days);
+        _depositSenior(senior2, 100 ether);
+        _depositJunior(donor, 1 ether); // a later match
+        vault.setMorphoRate(0.05e18); // and a later rate change
+        vm.warp(block.timestamp + 5 days);
+
+        assertEq(vault.previewSettle(id).accrual, atMaturity, "interest kept accruing past maturity");
+    }
+
+    /// A rate change mid-term accrues each segment at its own rate, and nothing after maturity.
+    function test_rateChangeMidTerm_accruesPiecewise() public {
+        _depositSenior(senior, 1_000 ether);
+        uint256 id = _depositJunior(junior, MSTR_IN);
+        vm.warp(block.timestamp + 30 minutes);
+        vault.setMorphoRate(0.05e18);
+        vm.warp(block.timestamp + 2 hours);
+        vault.setMorphoRate(0.01e18);
+
+        uint256 idx1 = 1e18 + 1e18 * MORPHO * 30 minutes / (1e18 * 365 days);
+        uint256 idx2 = idx1 + idx1 * 0.05e18 * 30 minutes / (1e18 * 365 days);
+        uint256 expected = 1_000 ether * (idx2 - 1e18) / 1e18;
+        assertEq(vault.previewSettle(id).accrual, expected);
+    }
+
+    /// A partially matched position past its term can never match again; it must leave the open queue
+    /// instead of using up match iterations ahead of live positions.
+    function test_expiredPartialMatch_leavesOpenQueue() public {
+        vault.setMatchCap(1);
+        _depositSenior(senior, 25 ether); // only $25 idle
+        uint256 a = _depositJunior(junior, MSTR_IN); // $1k target, partially matched
+        assertTrue(vault.isMatched(a));
+        assertFalse(vault.isFullyMatched(a));
+        vm.warp(block.timestamp + 1 hours + 1); // a is past term, still partial
+
+        uint256 b = _depositJunior(donor, 1 ether); // $100, waits behind a
+        assertFalse(vault.isMatched(b));
+        _depositSenior(senior2, 100 ether); // drops expired a from the queue
+        _depositSenior(senior2, 100 ether);
+        assertTrue(vault.isFullyMatched(b), "expired partial position blocked matching");
+    }
+
     function test_treasuryCutZero_usesIsSetFlag() public {
         vault.clearTreasuryCuts();
         assertFalse(vault.treasuryCutIsSet());
@@ -412,7 +462,8 @@ contract LeveredLpVaultTest is Test {
     }
 
     function test_makerWaterfall_stillApplies() public {
-        LeveredLpVault.WaterfallSplit memory s = vault.previewWaterfall(10_000 ether, 100_000 ether, 365 days, false);
+        uint256 accrual = CarryMath.morphoAccrual(100_000 ether, vault.morphoRateWad(), 365 days, 365 days);
+        CarryMath.WaterfallSplit memory s = CarryMath.waterfallFromGross(10_000 ether, accrual, 0.2e18, 0.2e18);
         // morphoRateWad 3.9% → floor 3900 on 100k / year
         assertEq(s.seniorFloor, 3900 ether);
     }
@@ -423,9 +474,8 @@ contract LeveredLpVaultTest is Test {
         assembly {
             size := extcodesize(impl)
         }
-        // Evidence-only: currently OVER EIP-170; tracked as NOT DONE for mainnet path.
-        // Fail loudly if size regresses above the measured v3 baseline.
-        assertLe(size, 32000, "v3 impl size regression");
+        // Mainnet gate: implementation must fit EIP-170.
+        assertLe(size, 24576, "v3 impl exceeds EIP-170");
         emit log_named_uint("v3_runtime_bytes", size);
         emit log_named_uint("eip170_limit", 24576);
     }
