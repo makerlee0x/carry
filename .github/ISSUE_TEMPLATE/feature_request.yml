@@ -1,0 +1,30 @@
+name: Feature request
+description: Something Carry should do that it doesn't yet.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve
+      description: Who needs it and why.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you'd like to see
+    validations:
+      required: true
+  - type: dropdown
+    id: milestone
+    attributes:
+      label: Needed for
+      options:
+        - Mainnet v1
+        - After v1
+        - Not sure
+  - type: input
+    id: source
+    attributes:
+      label: Requested by
+      description: If this came in from someone else (Twitter DM, Discord), note who and where.
