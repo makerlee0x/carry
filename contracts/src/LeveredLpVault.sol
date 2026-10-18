@@ -10,6 +10,7 @@ import {ReentrancyGuardUpgradeable} from
 import {IERC20Minimal} from "./interfaces/IERC20Minimal.sol";
 import {IMstrSellRouter} from "./interfaces/IMstrSellRouter.sol";
 import {IPriceOracle} from "./interfaces/IPriceOracle.sol";
+import {IStrategyStaking} from "./interfaces/IStrategyStaking.sol";
 import {IPushablePriceOracle} from "./interfaces/IPushablePriceOracle.sol";
 import {CarryMath} from "./libraries/CarryMath.sol";
 import {CarryPool} from "./libraries/CarryPool.sol";
@@ -36,7 +37,7 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
     uint256 internal constant DEFAULT_MATCH_CAP = 25;
     uint256 internal constant DEFAULT_GAS_REFUND_WEI = 0.0001 ether;
     uint256 internal constant DEFAULT_MIN_DEPOSIT_USDG = 25 ether;
-    uint256 internal constant MAX_BOOST_TIERS = 4;
+    uint256 internal constant MAX_BOOST_TIERS = 5;
     uint64 internal constant MAX_TERM = 7 days;
     uint256 internal constant DEFAULT_MAX_PRICE_STALE = 1 hours;
 
@@ -174,8 +175,8 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
     mapping(address => uint256) public pendingEthCredit;
     uint256 public minDepositUsdg;
     uint256 public boostTierCount;
-    uint256[4] public boostTierMinStake;
-    uint256[4] public boostTierCutWad;
+    uint256[5] public boostTierMinStake;
+    uint256[5] public boostTierCutWad;
     mapping(address => uint256) public boostStakeAmount;
     mapping(address => bool) public sellSharesEnabled;
 
@@ -198,7 +199,10 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
     /// @notice Closed rate segments (one per `setMorphoRate`), so accrual can stop exactly at maturity.
     RateSegment[] internal rateHistory;
 
-    uint256[39] private __gap;
+    /// @notice STRATEGY staking read at match; zero falls back to owner-set `boostStakeAmount` (testnet).
+    IStrategyStaking public strategyStaking;
+
+    uint256[36] private __gap;
 
     error Paused();
     error ZeroAmount();
@@ -303,6 +307,7 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
     event SellSharesEnabledUpdated(address indexed user, bool enabled);
     event PendingEthCredited(address indexed to, uint256 amount, uint256 balance);
     event PendingEthWithdrawn(address indexed to, uint256 amount);
+    event StrategyStakingUpdated(address indexed staking);
     event MaxPriceStaleUpdated(uint256 maxPriceStale);
     event RateIndexUpdated(uint256 rateIndex, uint64 updatedAt);
 
@@ -342,13 +347,18 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         maxPriceStale = DEFAULT_MAX_PRICE_STALE;
         // Senior uncapped by default (0). Junior market cap set by owner after deploy.
         maxTotalSeniorUsdg = 0;
-        boostTierCount = 3;
-        boostTierMinStake[0] = 100 ether;
-        boostTierCutWad[0] = 0.15e18;
-        boostTierMinStake[1] = 1_000 ether;
-        boostTierCutWad[1] = 0.1e18;
-        boostTierMinStake[2] = 10_000 ether;
-        boostTierCutWad[2] = 0.05e18;
+        // Site Level I-V. Cuts scale with weight (1 / 1.5 / 2.5 / 4 / 6x at 2.5% per 1x off the 20% base).
+        boostTierCount = 5;
+        boostTierMinStake[0] = 25_000 ether;
+        boostTierCutWad[0] = 0.175e18;
+        boostTierMinStake[1] = 100_000 ether;
+        boostTierCutWad[1] = 0.1625e18;
+        boostTierMinStake[2] = 500_000 ether;
+        boostTierCutWad[2] = 0.1375e18;
+        boostTierMinStake[3] = 2_000_000 ether;
+        boostTierCutWad[3] = 0.1e18;
+        boostTierMinStake[4] = 10_000_000 ether;
+        boostTierCutWad[4] = 0.05e18;
         mstrDecimals = mstr.decimals();
         usdgDecimals = usdg.decimals();
         nextPositionId = 1;
@@ -445,10 +455,9 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         emit GasCreditWithdrawn(msg.sender, amount, gasCreditWei[msg.sender]);
     }
 
-    function setBoostStaked(address user, bool staked) external onlyOwner {
-        if (user == address(0)) revert ZeroAddress();
-        boostStaked[user] = staked;
-        emit BoostStakeUpdated(user, staked);
+    function setStrategyStaking(IStrategyStaking staking) external onlyOwner {
+        strategyStaking = staking;
+        emit StrategyStakingUpdated(address(staking));
     }
 
     function rescueToken(address token, address to, uint256 amount) external onlyOwner nonReentrant {
@@ -1287,8 +1296,7 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
 
     function _tierCutForUser(address user) internal view returns (uint256) {
         if (!treasuryCutIsSet) return 0;
-        uint256 stake = boostStakeAmount[user];
-        if (stake == 0 && boostStaked[user]) return boostedTreasuryCutWad;
+        uint256 stake = _stakeOf(user);
         uint256 cut = treasuryCutWad;
         uint256 n = boostTierCount;
         for (uint256 i; i < n; ++i) {
@@ -1298,7 +1306,12 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
     }
 
     function _isBoostEligible(address user) internal view returns (bool) {
-        return boostStaked[user] || boostStakeAmount[user] > 0;
+        return _stakeOf(user) > 0;
+    }
+
+    function _stakeOf(address user) internal view returns (uint256) {
+        IStrategyStaking staking = strategyStaking;
+        return address(staking) == address(0) ? boostStakeAmount[user] : staking.stakedOf(user);
     }
 
     function _minDeposit() internal view returns (uint256) {
