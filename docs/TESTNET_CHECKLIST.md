@@ -61,6 +61,16 @@ Positions #5, #6 and #7 live on the old PROXY `0xc801…72bd`. See [`SETTLE_WATC
 
 | Position | Settle after (UTC) | Status | Notes |
 | --- | --- | --- | --- |
-| #5 | 2026-10-17 03:37:51 | ⬜ | Matured; ready to settle |
-| #6 | 2026-10-18 02:07:41 | ⬜ | Multi-lender case |
-| #7 | 2026-10-18 02:40:38 | ⬜ | |
+| #5 | 2026-10-17 03:37:51 | ✅ | Settled 2026-10-17 — [`0x8d8740…d41f`](https://explorer.testnet.chain.robinhood.com/tx/0x8d87401634c0b9315a946c1d8f1c89afd3befeb51b0a1cb759f63e0182f8d41f) |
+| #6 | 2026-10-18 02:07:41 | ✅ | Settled 2026-10-17 — [`0x5662ba…2322`](https://explorer.testnet.chain.robinhood.com/tx/0x5662ba2923c761fab819ba4eb6434d4fe941fc9f88b2bb02359865eeb22c2322) (backstop covered residual) |
+| #7 | 2026-10-18 02:40:38 | ✅ | Settled 2026-10-17 — [`0x380121…65f9`](https://explorer.testnet.chain.robinhood.com/tx/0x3801215495116f3dafa0fc6482b1708b7ab2a19ad2260f2c23fae1caa74365f9) |
+
+## 5. v3 maturity watch (live PROXY)
+
+Positions **#1 / #3 / #5** on `0x24B7…3e35`. Full commands: [`V3_MATURITY_SETTLE.md`](./V3_MATURITY_SETTLE.md).
+
+| Position | Mature (CDT) | Status | Notes |
+| --- | --- | --- | --- |
+| #1 | 2026-10-18 **9:35:14 PM CDT** | ⬜ | Do not settle before; `previewSettle` → `TermNotElapsed` until then |
+| #3 | 2026-10-18 **9:37:32 PM CDT** | ⬜ | |
+| #5 | 2026-10-18 **9:38:58 PM CDT** | ⬜ | Partial match (56.32 mUSDG senior) |
