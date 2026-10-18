@@ -10,6 +10,7 @@ import {ReentrancyGuardUpgradeable} from
 import {IERC20Minimal} from "./interfaces/IERC20Minimal.sol";
 import {IMstrSellRouter} from "./interfaces/IMstrSellRouter.sol";
 import {IBoostHook} from "./interfaces/IBoostHook.sol";
+import {ICarryStrategy} from "./interfaces/ICarryStrategy.sol";
 import {IPriceOracle} from "./interfaces/IPriceOracle.sol";
 import {IPushablePriceOracle} from "./interfaces/IPushablePriceOracle.sol";
 import {CarryMath} from "./libraries/CarryMath.sol";
@@ -195,7 +196,12 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
     /// @notice Separate boost contract read at match; zero means no boost.
     IBoostHook public boostHook;
 
-    uint256[39] private __gap;
+    /// @notice CarryStrategy holding unmatched USDG in Morpho (0 = none; USDG stays in the vault).
+    ICarryStrategy public strategy;
+    /// @notice USDG principal plus booked yield currently held by `strategy`.
+    uint256 public strategyDeployed;
+
+    uint256[37] private __gap;
 
     error Paused();
     error ZeroAmount();
@@ -402,6 +408,27 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         emit TreasuryCutUpdated(0, 0, false);
     }
 
+    /// @notice Point the vault at a strategy. The old one must be empty (recall first).
+    function setStrategy(ICarryStrategy strategy_) external onlyOwner {
+        if (strategyDeployed != 0) revert InsufficientFree();
+        strategy = strategy_;
+        if (address(strategy_) != address(0)) usdg.approve(address(strategy_), type(uint256).max);
+    }
+
+    /// @notice Move up to the pool's unmatched, unclaimed USDG into the strategy to earn.
+    function deployIdle(uint256 amount) external onlyOwner nonReentrant {
+        _harvest();
+        if (amount == 0) revert ZeroAmount();
+        if (strategyDeployed + amount > _idleUsdg()) revert InsufficientFree();
+        strategyDeployed += amount;
+        strategy.deposit(amount);
+    }
+
+    /// @notice Book the strategy's yield into the senior pool share price. Anyone may call.
+    function harvest() external nonReentrant {
+        _harvest();
+    }
+
     function setSellSharesRouter(address router) external onlyOwner {
         sellSharesRouter = router;
         emit SellSharesRouterUpdated(router);
@@ -485,6 +512,7 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         if (amount == 0) revert ZeroAmount();
         if (amount < _minDeposit()) revert BelowMinDeposit();
         _enforceSeniorCap(msg.sender, amount);
+        _harvest();
 
         // Capture sponsor before match — full match dequeues the junior.
         address gasSponsor = _gasSponsor();
@@ -500,6 +528,7 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
     /// @notice Withdraw `assets` USDG from free (non-queued) share value. Always pays wallet (no auto-compound reopen).
     function withdrawSenior(uint256 assets) external nonReentrant {
         if (assets == 0) revert ZeroAmount();
+        _harvest();
         uint256 freeShares = _freeShares(msg.sender);
         uint256 freeAssets = CarryPool.convertToAssets(freeShares, totalShares, totalSeniorAssets);
         if (assets > freeAssets) revert InsufficientFree();
@@ -1439,6 +1468,23 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
     }
 
     function _push(IERC20Minimal token, address to, uint256 amount) internal {
+        if (token == usdg && strategyDeployed != 0) {
+            uint256 bal = token.balanceOf(address(this));
+            if (bal < amount) {
+                uint256 need = amount - bal;
+                strategyDeployed = need > strategyDeployed ? 0 : strategyDeployed - need;
+                strategy.withdraw(need, address(this));
+            }
+        }
         if (!token.transfer(to, amount)) revert TransferFailed();
+    }
+
+    function _harvest() internal {
+        if (strategyDeployed == 0) return;
+        uint256 value = strategy.idleAssets();
+        if (value > strategyDeployed) {
+            totalSeniorAssets += value - strategyDeployed;
+            strategyDeployed = value;
+        }
     }
 }
