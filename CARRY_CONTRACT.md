@@ -65,7 +65,7 @@ Inventory stays in the vault until a reviewed DualPool adapter exists. Mark-to-m
 | **Mock pool / fee donor** | Simulates LP fees | `accrueLpFee` / `MockFeePool.payFee` pushes USDG in |
 | **Anyone** | Keepers, lenders, Carry | `settle` a position that has stopped rolling: past term, priced more than 32% below entry, and 48h past the last term boundary (proceeds still go to junior + seniors, not caller) |
 
-**NOT IMPLEMENTED as separate actors:** Morpho idle allocator, live STRATEGY token (stake amount is owner-settable stub), geoblock, DualPool hook, Yieldz.
+**NOT IMPLEMENTED as separate actors:** Morpho idle allocator, live STRATEGY token (boost reads a separate `boostHook`; none set on testnet yet), geoblock, DualPool hook, Yieldz.
 
 ---
 
@@ -115,7 +115,7 @@ Numbered happy path:
 | `unpause()` | owner | — | `paused = false` |
 | `rescueToken(token,to,amount)` | owner | `token ∉ {mstr,usdg}` | Transfers non-principal token |
 | `upgradeToAndCall` | owner (UUPS) | — | Swaps implementation behind same PROXY |
-| Caps / tiers / rate / gas | owner | — | `setDepositCaps`, `setMinDepositUsdg`, `setBoostTiers`, `setMorphoRate`, `setGasRefundWei`, … |
+| Caps / tiers / rate / gas | owner | — | `setDepositCaps`, `setMinDepositUsdg`, `setBoostHook`, `setMorphoRate`, `setGasRefundWei`, … |
 
 ### Junior
 
@@ -220,7 +220,7 @@ On settle/early exit/claimFees, USDG paid toward seniorFloor + seniorPerf credit
 | DualPool / Uni v4 hook | **NOT IMPLEMENTED** |
 | Real swap fee routing | **NOT IMPLEMENTED** (mock `accrueLpFee`) |
 | Morpho idle sleeve | **NOT IMPLEMENTED** (rate stub only) |
-| Live STRATEGY token | Stake amount / tiers are owner-settable stubs; no STRATEGY yield minted |
+| Live STRATEGY token | Boost tiers live in a separate `StrategyBoostHook` that reads `StrategyStaking`; no STRATEGY yield minted |
 | Partial exits of a single position | Full close on earlyExit / settle |
 | SellShares AMM | Interface live; testnet `sellSharesRouter=0` (MSTR→seniors accounting) |
 | Impl size vs EIP-170 | v2.5 ~32KB; OK on RH testnet; **must shrink for mainnet** |
@@ -270,7 +270,7 @@ Live site: [usecarry.io](https://usecarry.io). Config: `public/config.json` → 
 | Gas credit | `fundGasCredit` / `withdrawGasCredit` | Junior open-queue ETH escrow |
 | Fee / rewards display | Driven by `accrueLpFee` (mock) | Real DualPool **NOT WIRED** |
 | Morpho idle rate sleeve | — | Config stub only on testnet |
-| STRATEGY boost | Owner stake amount + tiers | Stub; treasury cut of **fees** only |
+| STRATEGY boost | `boostHook.treasuryCutOf(junior, base)` at match, capped at base | Treasury cut of **fees** only |
 | Geoblock | Frontend/`config.json` only | **NOT on-chain** |
 
 ---

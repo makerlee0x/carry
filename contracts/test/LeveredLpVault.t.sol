@@ -12,6 +12,35 @@ import {MockMstrSellRouter} from "../src/mocks/MockMstrSellRouter.sol";
 import {PushablePriceOracle} from "../src/oracle/PushablePriceOracle.sol";
 import {CarryMath} from "../src/libraries/CarryMath.sol";
 import {CarryPool} from "../src/libraries/CarryPool.sol";
+import {IBoostHook} from "../src/interfaces/IBoostHook.sol";
+import {IStrategyStaking} from "../src/interfaces/IStrategyStaking.sol";
+import {StrategyBoostHook} from "../src/StrategyBoostHook.sol";
+
+contract MockStaking is IStrategyStaking {
+    mapping(address => uint256) public stakedOf;
+
+    function set(address wallet, uint256 amount) external {
+        stakedOf[wallet] = amount;
+    }
+}
+
+contract FixedCutHook is IBoostHook {
+    uint256 public cut;
+
+    constructor(uint256 cut_) {
+        cut = cut_;
+    }
+
+    function treasuryCutOf(address, uint256) external view returns (uint256) {
+        return cut;
+    }
+}
+
+contract RevertingHook is IBoostHook {
+    function treasuryCutOf(address, uint256) external pure returns (uint256) {
+        revert("hook down");
+    }
+}
 
 contract LeveredLpVaultTest is Test {
     uint256 internal constant PRICE = 100 ether;
@@ -446,6 +475,113 @@ contract LeveredLpVaultTest is Test {
         vm.prank(junior);
         LeveredLpVault.ClaimFeesResult memory r = vault.claimFees(id);
         assertEq(r.treasury, 0);
+    }
+
+    // ─── STRATEGY boost hook ─────────────────────────────────────────────────
+
+    /// @dev Opens a matched position, pushes 1 USDG of fees and claims them; returns the treasury share.
+    function _treasuryOnFreshPosition() internal returns (uint256 id, uint256 treasury) {
+        _depositSenior(senior, 100 ether);
+        id = _depositJunior(junior, 1 ether);
+        assertTrue(vault.isMatched(id));
+        usdg.mint(donor, 1 ether);
+        vm.startPrank(donor);
+        usdg.approve(address(vault), 1 ether);
+        vault.accrueLpFee(id, 1 ether);
+        vm.stopPrank();
+        vm.prank(junior);
+        treasury = vault.claimFees(id).treasury;
+    }
+
+    function test_boostHook_noneSet_usesBaseCut() public {
+        (uint256 id, uint256 treasury) = _treasuryOnFreshPosition();
+        assertGt(treasury, 0);
+        assertTrue(vault.positionState(id) != LeveredLpVault.PositionState.Boosted);
+    }
+
+    function test_boostHook_lowersCutForStakedJunior() public {
+        uint256 snap = vm.snapshotState();
+        (, uint256 base) = _treasuryOnFreshPosition();
+        vm.revertToState(snap);
+
+        MockStaking staking = new MockStaking();
+        staking.set(junior, 100_000 ether); // Level II: 16.25% vs 20% base
+        vault.setBoostHook(new StrategyBoostHook(staking));
+        (uint256 id, uint256 boosted) = _treasuryOnFreshPosition();
+        assertEq(vault.positionState(id) == LeveredLpVault.PositionState.Boosted, true);
+        assertApproxEqAbs(boosted, base * 1625 / 2000, 1);
+    }
+
+    function test_boostHook_cannotRaiseCutAboveBase() public {
+        uint256 snap = vm.snapshotState();
+        (, uint256 base) = _treasuryOnFreshPosition();
+        vm.revertToState(snap);
+
+        vault.setBoostHook(new FixedCutHook(0.5e18));
+        (uint256 id, uint256 treasury) = _treasuryOnFreshPosition();
+        assertEq(treasury, base);
+        assertTrue(vault.positionState(id) != LeveredLpVault.PositionState.Boosted);
+    }
+
+    function test_boostHook_cutLockedAtMatch() public {
+        uint256 snap = vm.snapshotState();
+        (, uint256 base) = _treasuryOnFreshPosition();
+        vm.revertToState(snap);
+
+        MockStaking staking = new MockStaking();
+        staking.set(junior, 10_000_000 ether); // Level V: 5%
+        vault.setBoostHook(new StrategyBoostHook(staking));
+        _depositSenior(senior, 100 ether);
+        uint256 id = _depositJunior(junior, 1 ether);
+
+        // Unstaking and unsetting the hook after match leave the locked cut in place.
+        staking.set(junior, 0);
+        vault.setBoostHook(IBoostHook(address(0)));
+        usdg.mint(donor, 1 ether);
+        vm.startPrank(donor);
+        usdg.approve(address(vault), 1 ether);
+        vault.accrueLpFee(id, 1 ether);
+        vm.stopPrank();
+        vm.prank(junior);
+        assertApproxEqAbs(vault.claimFees(id).treasury, base * 5 / 20, 1);
+        assertEq(vault.positionState(id) == LeveredLpVault.PositionState.Boosted, true);
+    }
+
+    function test_boostHook_revertingHookBlocksMatchUntilUnset() public {
+        vault.setBoostHook(new RevertingHook());
+        _depositSenior(senior, 100 ether);
+        mstr.mint(junior, 1 ether);
+        vm.startPrank(junior);
+        mstr.approve(address(vault), 1 ether);
+        vm.expectRevert(bytes("hook down"));
+        vault.depositJunior(1 ether);
+        vm.stopPrank();
+
+        vault.setBoostHook(IBoostHook(address(0)));
+        assertTrue(vault.isMatched(_depositJunior(junior, 1 ether)));
+    }
+
+    function test_boostHook_onlyOwnerSets() public {
+        vm.prank(junior);
+        vm.expectRevert();
+        vault.setBoostHook(IBoostHook(address(0xB00)));
+    }
+
+    function test_strategyBoostHook_tiers() public {
+        MockStaking staking = new MockStaking();
+        StrategyBoostHook hook = new StrategyBoostHook(staking);
+        address w = makeAddr("w");
+        assertEq(hook.treasuryCutOf(w, 0.2e18), 0.2e18);
+        staking.set(w, 24_999 ether);
+        assertEq(hook.treasuryCutOf(w, 0.2e18), 0.2e18);
+        staking.set(w, 25_000 ether);
+        assertEq(hook.treasuryCutOf(w, 0.2e18), 0.175e18);
+        staking.set(w, 500_000 ether);
+        assertEq(hook.treasuryCutOf(w, 0.2e18), 0.1375e18);
+        staking.set(w, 2_000_000 ether);
+        assertEq(hook.treasuryCutOf(w, 0.2e18), 0.1e18);
+        staking.set(w, 50_000_000 ether);
+        assertEq(hook.treasuryCutOf(w, 0.2e18), 0.05e18);
     }
 
     function test_stalePrice_revertsOnPushableOracle() public {
