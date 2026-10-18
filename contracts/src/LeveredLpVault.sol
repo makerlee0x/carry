@@ -20,7 +20,7 @@ import {CarryPool} from "./libraries/CarryPool.sol";
 /// v3 lender model:
 /// 1. One USDG senior pool; non-transferable internal shares; round in pool favor; virtual offset.
 /// 2. Instant withdraw if idle covers and withdraw queue empty; else FIFO cumulative queue + lazy claim.
-/// 3. Floating Morpho rate via global rate index (not locked per position). Interest stops at maturity.
+/// 3. Floating Morpho rate via global rate index (not locked per position). Positions roll at term and accrue until closed.
 /// 4. Senior yield compounds into the pool. Lenders paid only USDG (stock fees swapped before payout).
 /// 5. Withdrawal queue paid before new matching. Lender withdraw never closes a junior position.
 ///
@@ -38,6 +38,10 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
     uint256 internal constant DEFAULT_MIN_DEPOSIT_USDG = 25 ether;
     uint256 internal constant MAX_BOOST_TIERS = 4;
     uint64 internal constant MAX_TERM = 7 days;
+    /// @dev Positions roll at term. One priced this far below entry (the MSTR range) stops rolling, and
+    ///      after this grace from the last term boundary anyone may settle it.
+    uint256 internal constant UNDERWATER_DROP_WAD = 0.32e18;
+    uint256 internal constant UNDERWATER_GRACE = 48 hours;
     uint256 internal constant DEFAULT_MAX_PRICE_STALE = 1 hours;
 
     enum CoverMode {
@@ -68,13 +72,6 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         /// @notice Rate index snapshot at last fee split / match checkpoint (floating rate).
         uint256 rateIndexSnapshot;
         uint256 treasuryCutLocked;
-    }
-
-    /// @dev A past Morpho-rate segment: index at `start`, growing linearly at `rateWad` until the next one.
-    struct RateSegment {
-        uint64 start;
-        uint64 rateWad;
-        uint256 index;
     }
 
     struct WaterfallSplit {
@@ -195,10 +192,7 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
     bool public treasuryCutIsSet;
     uint256 public maxPriceStale;
 
-    /// @notice Closed rate segments (one per `setMorphoRate`), so accrual can stop exactly at maturity.
-    RateSegment[] internal rateHistory;
-
-    uint256[39] private __gap;
+    uint256[40] private __gap;
 
     error Paused();
     error ZeroAmount();
@@ -388,9 +382,6 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
 
     function setMorphoRate(uint256 morphoRateWad_) external onlyOwner {
         if (morphoRateWad_ == 0 || morphoRateWad_ > MAX_MORPHO_RATE_WAD) revert BadApr();
-        // morphoRateWad <= MAX_MORPHO_RATE_WAD (5e16), so the uint64 cast is lossless.
-        // forge-lint: disable-next-line(unsafe-typecast)
-        rateHistory.push(RateSegment({start: rateUpdatedAt, rateWad: uint64(morphoRateWad), index: rateIndex}));
         _syncRateIndex();
         morphoRateWad = morphoRateWad_;
         emit MorphoRateUpdated(morphoRateWad_);
@@ -577,15 +568,27 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
             wqRequested[msg.sender], wqClaimed[msg.sender], wqCursor[msg.sender], wqCumulativeFulfilled
         );
         if (paid == 0) revert NothingToClaim();
-
-        uint256 burn = CarryPool.previewWithdrawShares(paid, totalShares, totalSeniorAssets);
-        uint256 locked = wqSharesLocked[msg.sender];
-        if (burn > locked) burn = locked;
-
-        wqClaimed[msg.sender] += paid;
-        wqSharesLocked[msg.sender] = locked - burn;
         if (queueClaimable < paid) revert InsufficientFree();
+
+        uint256 locked = wqSharesLocked[msg.sender];
+        uint256 idle = _idleUsdg();
+        wqClaimed[msg.sender] += paid;
         queueClaimable -= paid;
+        uint256 burn = CarryPool.previewWithdrawShares(paid, totalShares, totalSeniorAssets);
+        if (wqClaimed[msg.sender] >= wqRequested[msg.sender]) {
+            // Request filled: pay what the locked shares are worth now, so yield earned while queued
+            // is paid too (from idle; any part idle can't cover stays as free shares).
+            uint256 value = CarryPool.convertToAssets(locked, totalShares, totalSeniorAssets);
+            if (value <= paid + idle) {
+                if (value > paid) paid = value;
+                burn = locked;
+            } else {
+                paid += idle;
+                burn = CarryPool.previewWithdrawShares(paid, totalShares, totalSeniorAssets);
+            }
+        }
+        if (burn > locked) burn = locked;
+        wqSharesLocked[msg.sender] = locked - burn;
 
         _redeem(msg.sender, burn, paid);
 
@@ -647,25 +650,18 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
     }
 
     function claimFees(uint256 positionId) external nonReentrant returns (ClaimFeesResult memory result) {
-        Position storage position = _livePosition(positionId);
+        Position storage position = positions[positionId];
         if (position.owner != msg.sender) revert NotJunior();
-        if (position.feeUsdg == 0) revert ZeroGross();
-
-        result.elapsed = _elapsedSinceSplit(position);
-        result.gross = position.feeUsdg;
-        WaterfallSplit memory split = _splitAndClearFees(positionId);
+        // Same block, same state: the preview is exactly what the split below pays.
+        result = previewClaimFees(positionId);
+        _splitAndClearFees(positionId);
         position.lastFeeSplitAt = uint64(block.timestamp);
-        position.rateIndexSnapshot = _indexAt(_feeEndTime(position));
-        result.accrual = split.accrual;
-        result.seniorFloor = split.seniorFloor;
-        result.treasury = split.treasury;
-        result.seniorPerf = split.seniorPerf;
-        result.toJunior = split.junior;
+        position.rateIndexSnapshot = currentRateIndex();
 
         emit FeesClaimed(
-            positionId, msg.sender, result.gross, split.seniorFloor, split.treasury, split.seniorPerf, split.junior
+            positionId, msg.sender, result.gross, result.seniorFloor, result.treasury, result.seniorPerf, result.toJunior
         );
-        _deliverJuniorUsdg(msg.sender, split.junior);
+        _deliverJuniorUsdg(msg.sender, result.toJunior);
     }
 
     function previewClaimFees(uint256 positionId) public view returns (ClaimFeesResult memory result) {
@@ -721,7 +717,7 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         view
         returns (EarlyExitResult memory result)
     {
-        Position storage position = _livePosition(positionId);
+        Position storage position = _inTermPosition(positionId);
         WaterfallSplit memory split = _positionSplit(position);
         _fillEarlyExitQuote(result, position, split, mode);
         if (mode == CoverMode.SellShares) {
@@ -773,8 +769,9 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         return CarryPool.claimableQueued(wqRequested[user], wqClaimed[user], wqCursor[user], wqCumulativeFulfilled);
     }
 
+    /// @notice Positions roll at term, so accrual always runs to now: only the current index is needed.
     function currentRateIndex() public view returns (uint256) {
-        return _indexAt(block.timestamp);
+        return CarryMath.advanceRateIndex(rateIndex, morphoRateWad, block.timestamp - rateUpdatedAt, YEAR);
     }
 
     function previewSeniorAssets(uint256 mstrAmount) public view returns (uint256) {
@@ -805,10 +802,10 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         uint256 splitJunior = result.juniorYield;
         uint256 coverTotal = result.coverUsdg;
 
-        if (mode == CoverMode.SellShares) {
-            if (msg.sender != junior && !sellSharesEnabled[junior]) revert SellSharesDisabled();
-        } else if (coverTotal > 0 && msg.sender != junior) {
-            revert NotJunior();
+        if (msg.sender != junior) {
+            if (mode == CoverMode.SellShares && !sellSharesEnabled[junior]) revert SellSharesDisabled();
+            // Healthy positions roll at term; only the junior closes them.
+            if (!_stoppedPastGrace(position)) revert NotJunior();
         }
 
         if (coverTotal > 0) {
@@ -846,7 +843,7 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
     }
 
     function _earlyExit(uint256 positionId, CoverMode mode) internal returns (EarlyExitResult memory result) {
-        Position storage position = _livePosition(positionId);
+        Position storage position = _inTermPosition(positionId);
         if (position.owner != msg.sender) revert NotJunior();
 
         uint256 matchedPrincipal = position.seniorPrincipal;
@@ -913,7 +910,8 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         if (got < need && mode != CoverMode.SellShares) {
             got += _consumeJuniorIdle(junior, need - got);
             uint256 rest = need - got;
-            if (rest > 0) {
+            // Someone else settling a stopped position never pulls from the junior's wallet.
+            if (rest > 0 && msg.sender == junior) {
                 uint256 bal = usdg.balanceOf(junior);
                 uint256 allowed = usdg.allowance(junior, address(this));
                 uint256 pull = bal < allowed ? bal : allowed;
@@ -1025,12 +1023,28 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         r.coverUsdg = shortfall + r.treasuryOnCover;
     }
 
-    /// @dev Open, matched, still inside its term.
+    /// @dev Open and matched. Positions roll at term, so this holds past the term too.
     function _livePosition(uint256 positionId) internal view returns (Position storage position) {
         position = positions[positionId];
         if (position.owner == address(0) || position.settled) revert BadPosition();
         if (position.seniorPrincipal == 0) revert NotMatched();
+    }
+
+    /// @dev Open, matched, still inside its first term (early exit).
+    function _inTermPosition(uint256 positionId) internal view returns (Position storage position) {
+        position = _livePosition(positionId);
         if (block.timestamp >= uint256(position.openedAt) + term) revert TermElapsed();
+    }
+
+    /// @dev Past term, priced more than the market range below entry, and the 48h grace since the
+    ///      last term boundary is over: the position has stopped rolling and anyone may settle it.
+    function _stoppedPastGrace(Position storage position) internal view returns (bool) {
+        uint256 start = position.openedAt;
+        uint256 t = term;
+        if (block.timestamp < start + t) return false;
+        uint256 boundary = start + (block.timestamp - start) / t * t;
+        if (block.timestamp < boundary + UNDERWATER_GRACE) return false;
+        return _price() < position.entryPriceWad * (WAD - UNDERWATER_DROP_WAD) / WAD;
     }
 
     /// @dev Open, matched, term elapsed.
@@ -1087,29 +1101,18 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
 
     function _accrualFor(Position storage position) internal view returns (uint256) {
         if (position.seniorPrincipal == 0) return position.unpaidSeniorAccrual;
-        uint256 end = _feeEndTime(position);
-        uint256 idxEnd = _indexAt(end);
+        uint256 idxEnd = currentRateIndex();
         uint256 idxStart = position.rateIndexSnapshot;
         return position.unpaidSeniorAccrual + CarryMath.accrualFromIndex(position.seniorPrincipal, idxStart, idxEnd);
     }
 
-    function _feeEndTime(Position storage position) internal view returns (uint256) {
-        uint256 end = block.timestamp;
-        if (position.openedAt != 0) {
-            uint256 mat = uint256(position.openedAt) + term;
-            if (end > mat) end = mat;
-        }
-        return end;
-    }
-
     function _checkpointMatchAccrual(Position storage position) internal {
-        uint256 end = _feeEndTime(position);
         if (position.seniorPrincipal == 0) {
-            position.rateIndexSnapshot = _indexAt(end);
+            position.rateIndexSnapshot = currentRateIndex();
             position.lastFeeSplitAt = uint64(block.timestamp);
             return;
         }
-        uint256 idxEnd = _indexAt(end);
+        uint256 idxEnd = currentRateIndex();
         position.unpaidSeniorAccrual +=
             CarryMath.accrualFromIndex(position.seniorPrincipal, position.rateIndexSnapshot, idxEnd);
         position.rateIndexSnapshot = idxEnd;
@@ -1175,7 +1178,7 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
             position.entryPriceWad = _price();
             position.openedAt = uint64(block.timestamp);
             position.lastFeeSplitAt = uint64(block.timestamp);
-            position.rateIndexSnapshot = _indexAt(block.timestamp);
+            position.rateIndexSnapshot = currentRateIndex();
             position.treasuryCutLocked = _tierCutForUser(position.owner);
             position.boosted = treasuryCutIsSet && position.treasuryCutLocked < treasuryCutWad;
         } else {
@@ -1274,9 +1277,7 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
 
     function _elapsedSinceSplit(Position storage position) internal view returns (uint256) {
         uint256 start = position.lastFeeSplitAt != 0 ? uint256(position.lastFeeSplitAt) : uint256(position.openedAt);
-        uint256 end = _feeEndTime(position);
-        if (end <= start) return 0;
-        return end - start;
+        return block.timestamp > start ? block.timestamp - start : 0;
     }
 
     function _cutWadForPosition(Position storage position) internal view returns (uint256) {
@@ -1425,22 +1426,6 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         rateIndex = CarryMath.advanceRateIndex(rateIndex, morphoRateWad, t - rateUpdatedAt, YEAR);
         rateUpdatedAt = uint64(t);
         emit RateIndexUpdated(rateIndex, rateUpdatedAt);
-    }
-
-    /// @dev Rate index at `timestamp`, including past timestamps (e.g. a maturity before the last rate change).
-    function _indexAt(uint256 timestamp) internal view returns (uint256) {
-        if (timestamp >= rateUpdatedAt) {
-            return CarryMath.advanceRateIndex(rateIndex, morphoRateWad, timestamp - rateUpdatedAt, YEAR);
-        }
-        uint256 i = rateHistory.length;
-        while (i != 0) {
-            RateSegment storage seg = rateHistory[--i];
-            if (timestamp >= seg.start) {
-                return CarryMath.advanceRateIndex(seg.index, seg.rateWad, timestamp - seg.start, YEAR);
-            }
-        }
-        // Before any recorded segment (proxies upgraded from older versions): earliest known index.
-        return rateHistory.length == 0 ? rateIndex : rateHistory[0].index;
     }
 
     function _price() internal view returns (uint256 price) {

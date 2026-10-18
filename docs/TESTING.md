@@ -35,22 +35,22 @@ cd contracts && FOUNDRY_PROFILE=ci forge test       # deeper fuzz, same as GitHu
 - Hooks are active once `npm install` runs (sets `core.hooksPath=.githooks`), or run `git config core.hooksPath .githooks`.
 - `.github/workflows/contracts.yml`: runs on every push to `main` and every PR. Hooks can be skipped with `--no-verify`; CI can't. Make it a required check under branch protection.
 
-## Known failing tests (v3 review + Maker decisions, Oct 13 2026)
+## Bug and product-rule tests
 
-These fail on `v3-lender-pool` until the vault is fixed. Each one pins a bug or a product rule:
+These pinned bugs from the v3 review and Maker's Oct 13 decisions. All pass since #3 (settle cover, pool last resort, sell-shares router, EIP-170) and the rules PR (auto-roll, underwater grace, queued withdraw value):
 
 | Test | Rule it enforces |
 | --- | --- |
-| `test_settle_juniorWalletCover_isCreditedToLenders` | Cover the junior pays at settle goes to the lender pool, never stranded (`_applySettleCover` drops it today) |
-| `test_settle_juniorIdleCover_isCreditedToLenders` | Same, junior-idle path |
+| `test_settle_juniorWalletCover_isCreditedToLenders`, `test_settle_juniorIdleCover_isCreditedToLenders` | Cover the junior pays at settle goes to the lender pool, never stranded |
 | `test_settle_poolLastResort_doesNotCostLenderPrincipal` | An uncoverable interest shortfall is **forgiven**; lender principal never pays it |
-| `test_healthyPosition_autoRollsAtTerm` | Positions **auto-roll at term** by default: no hard maturity, stays matched, junior can keep claiming |
-| `test_underwater_carryCanSettleAfterGrace`, `test_underwater_lenderCanSettleAfterGrace` | A position below entry by more than the market range (MSTR −32%) stops rolling; after a **48h grace** anyone (junior, senior, Carry) can settle |
-| `test_underwater_onlyJuniorSettlesDuringGrace` | (passes) Inside the grace only the junior can settle |
+| `test_healthyPosition_autoRollsAtTerm` | Positions **auto-roll at term**: no hard maturity, stays matched, junior can keep claiming |
+| `test_healthyRolledPosition_othersCannotSettle` | Only the junior closes a healthy rolled position |
+| `test_underwater_onlyJuniorSettlesDuringGrace` | Below entry by more than the market range (MSTR −32%), the position stops rolling; inside the **48h grace** only the junior can settle |
+| `test_underwater_carryCanSettleAfterGrace`, `test_underwater_lenderCanSettleAfterGrace` | After the grace anyone (junior, senior, Carry) can settle |
 | `test_queuedWithdraw_paysValueAtPayout_notRequestTime` | A queued withdraw pays what the shares are worth **when paid**, not a USDG amount fixed at request time |
 | `test_sellShares_noRouter_reverts` | Sell-shares with no router reverts instead of crediting USDG that doesn't exist |
-| `invariant_books`, `invariant_lenderPrincipalNeverLost` | Fuzzer finds the settle-cover and pool-last-resort bugs independently |
-| `Eip170.t.sol: test_implFitsEip170` | Impl runtime ≤ 24,576 bytes (EIP-170). ~29.6k today; mainnet blocker |
+| `invariant_books`, `invariant_lenderPrincipalNeverLost` | The fuzzer checks the books and lender principal across random sequences |
+| `Eip170.t.sol: test_implFitsEip170` | Impl runtime ≤ 24,576 bytes (EIP-170) |
 
 The tests use the current ABI. If the fix changes an entry point (for example a share-based `redeem` for the queue, or a per-market underwater threshold), update the test in the same PR and keep the rule it checks.
 

@@ -327,7 +327,8 @@ contract LeveredLpVaultTest is Test {
         assertGt(accrual, 0);
     }
 
-    function test_interestStopsAtMaturity() public {
+    /// Positions roll at term: a matched position keeps accruing interest past it until it closes.
+    function test_rolledPosition_keepsAccruingPastTerm() public {
         LeveredLpVault v = _deployVault(1 days, MORPHO, address(this));
         v.unpause();
         usdg.mint(senior, 100 ether);
@@ -345,27 +346,28 @@ contract LeveredLpVaultTest is Test {
         LeveredLpVault.Settlement memory a = v.previewSettle(id);
         vm.warp(block.timestamp + 10 days);
         LeveredLpVault.Settlement memory b = v.previewSettle(id);
-        assertEq(a.accrual, b.accrual);
+        assertGt(a.accrual, 0);
+        assertApproxEqAbs(b.accrual, a.accrual * 11, 1e6, "accrual grows linearly past the term");
     }
 
-    /// Accrual must stop at maturity even when the rate index moves afterwards (another match, a rate change).
-    function test_accrualStopsAtMaturity_afterLaterMatchAndRateChange() public {
+    /// A later match must not change a rolled position's interest; a rate change applies from when it is set.
+    function test_accrual_exactAcrossLaterMatchAndRateChange() public {
         _depositSenior(senior, 1_000 ether);
         uint256 id = _depositJunior(junior, MSTR_IN); // $1k, fully matched
-        vm.warp(block.timestamp + 1 hours); // maturity
-        uint256 atMaturity = vault.previewSettle(id).accrual;
-        assertGt(atMaturity, 0);
+        (,,,,,,,,,,, uint256 idx0,) = vault.positions(id);
 
-        vm.warp(block.timestamp + 5 days);
+        vm.warp(block.timestamp + 1 hours + 5 days); // rolled past the term
         _depositSenior(senior2, 100 ether);
         _depositJunior(donor, 1 ether); // a later match
+        uint256 idxAtChange = vault.currentRateIndex();
         vault.setMorphoRate(0.05e18); // and a later rate change
         vm.warp(block.timestamp + 5 days);
 
-        assertEq(vault.previewSettle(id).accrual, atMaturity, "interest kept accruing past maturity");
+        uint256 idxEnd = idxAtChange + idxAtChange * 0.05e18 * 5 days / (1e18 * 365 days);
+        assertEq(vault.previewSettle(id).accrual, 1_000 ether * (idxEnd - idx0) / 1e18, "interest off the rate index");
     }
 
-    /// A rate change mid-term accrues each segment at its own rate, and nothing after maturity.
+    /// A rate change accrues each segment at its own rate.
     function test_rateChangeMidTerm_accruesPiecewise() public {
         _depositSenior(senior, 1_000 ether);
         uint256 id = _depositJunior(junior, MSTR_IN);
@@ -375,7 +377,7 @@ contract LeveredLpVaultTest is Test {
         vault.setMorphoRate(0.01e18);
 
         uint256 idx1 = 1e18 + 1e18 * MORPHO * 30 minutes / (1e18 * 365 days);
-        uint256 idx2 = idx1 + idx1 * 0.05e18 * 30 minutes / (1e18 * 365 days);
+        uint256 idx2 = idx1 + idx1 * 0.05e18 * 2 hours / (1e18 * 365 days);
         uint256 expected = 1_000 ether * (idx2 - 1e18) / 1e18;
         assertEq(vault.previewSettle(id).accrual, expected);
     }

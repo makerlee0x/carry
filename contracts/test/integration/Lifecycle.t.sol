@@ -274,6 +274,19 @@ contract LifecycleTest is CarryBase {
         _assertBooks("after lender settle");
     }
 
+    /// A healthy rolled position can't be closed by anyone but the junior, however long it runs.
+    function test_healthyRolledPosition_othersCannotSettle() public {
+        _lend(lenderA, 10_000 ether);
+        uint256 id = _stake(juniorA, 50 ether);
+        vm.warp(block.timestamp + TERM + GRACE + 1);
+        vm.prank(keeper);
+        vm.expectRevert(LeveredLpVault.NotJunior.selector);
+        vault.settle(id);
+        vm.prank(lenderA);
+        vm.expectRevert(LeveredLpVault.NotJunior.selector);
+        vault.settle(id);
+    }
+
     uint256 internal constant GRACE = 48 hours;
     uint256 internal constant UNDERWATER_DROP_WAD = 0.32e18; // MSTR range; per-market in the contract
 
