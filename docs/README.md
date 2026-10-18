@@ -22,6 +22,7 @@ Canonical pointers for what is **live** on Robinhood Chain Testnet **46630**.
 | [`MAKER_REPLY_DYLAN.txt`](./MAKER_REPLY_DYLAN.txt) | Plain-text Maker update (evidence-based) |
 | [`MAKER_FEE_WATERFALL.md`](./MAKER_FEE_WATERFALL.md) | Fee split at claim / earlyExit / settle |
 | [`SETTLE_WATCH.md`](./SETTLE_WATCH.md) | v2.5 #5/#6/#7 on superseded PROXY (stale for v3 CA) |
+| [`TESTNET_CHECKLIST.md`](./TESTNET_CHECKLIST.md) | What must pass on testnet before the security pass and mainnet |
 | [`GAS_CREDIT.md`](./GAS_CREDIT.md) | Gas credit (v3: refund only on match, scaled) |
 | [`V1_PARAMETERS.md`](./V1_PARAMETERS.md) | Parameter table (ui-display / on-chain / research) |
 | [`WORKSPACE.md`](./WORKSPACE.md) | Local workspace path for this Cursor session |
