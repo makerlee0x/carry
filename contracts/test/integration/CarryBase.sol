@@ -101,7 +101,7 @@ abstract contract CarryBase is Test {
     }
 
     function _warpToMaturity(uint256 id) internal {
-        (,,,,,, uint64 openedAt,,,,,,) = vault.positions(id);
+        (,,,,,, uint64 openedAt,,,,,,,) = vault.positions(id);
         vm.warp(uint256(openedAt) + TERM + 1);
     }
 
@@ -135,7 +135,7 @@ abstract contract CarryBase is Test {
         uint256 sum;
         uint256 n = vault.nextPositionId();
         for (uint256 id = 1; id < n; ++id) {
-            (, uint256 amt,,,,,,, bool settled,,,,) = vault.positions(id);
+            (, uint256 amt,,,,,,, bool settled,,,,,) = vault.positions(id);
             if (!settled) sum += amt;
         }
         assertEq(mstr.balanceOf(address(vault)), sum, string.concat("MSTR books [", ctx, "]: balance != open positions"));
@@ -145,7 +145,7 @@ abstract contract CarryBase is Test {
         uint256 sum;
         uint256 n = vault.nextPositionId();
         for (uint256 id = 1; id < n; ++id) {
-            (,, uint256 principal,,,,,, bool settled,,,,) = vault.positions(id);
+            (,, uint256 principal,,,,,, bool settled,,,,,) = vault.positions(id);
             if (!settled) sum += principal;
         }
         assertEq(vault.reservedSenior(), sum, string.concat("reservedSenior [", ctx, "] != sum open seniorPrincipal"));
