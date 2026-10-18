@@ -164,15 +164,18 @@
     const rateP = rd('morphoRateWad').catch(() => rd('borrowAprWad'));
     // v3: totalSeniorAssets. v2.5 totalSeniorPrincipal is absent on live ABI — fall back so refresh does not throw.
     const seniorP = rd('totalSeniorAssets').catch(() => rd('totalSeniorPrincipal'));
-    const [paused, term, apr, price, next, senior, reserved, free, backstop] = await Promise.all([
+    const [paused, term, apr, price, next, senior, reserved, free, backstop, sharePx, wqReq, wqFul] = await Promise.all([
       rd('paused'), rd('term'), rateP,
       pub.readContract({ address: cfg.oracle, abi: viem.parseAbi(['function mstrPriceWad() view returns (uint256)']), functionName: 'mstrPriceWad' }),
       rd('nextPositionId'), seniorP, rd('reservedSenior'), rd('freeSenior'), rd('backstop'),
+      // v3 lender pool: 1 USDG mints 1e6 shares at launch, so convertToAssets(1e24) is USDG per launch dollar.
+      rd('convertToAssets', [10n ** 24n]).catch(() => null), rd('wqCumulativeRequested').catch(() => 0n), rd('wqCumulativeFulfilled').catch(() => 0n),
     ]);
     const tvl = num(senior), res = num(reserved);
     S.vault = {
       paused, termSec: Number(term), aprPct: num(apr) * 100, price: num(price),
       tvl, matched: res, idle: num(free), backstop: num(backstop),
+      sharePrice: sharePx == null ? null : num(sharePx), queuePending: Math.max(num(wqReq) - num(wqFul), 0),
       util: tvl > 0 ? round((res / tvl) * 100, 1) : 0,
       positions: Number(next) - 1,
     };
@@ -184,7 +187,7 @@
     const a = S.account;
     const erc = viem.parseAbi(['function balanceOf(address) view returns (uint256)']);
     const rd = (functionName, args) => pub.readContract({ address: cfg.vault, abi: vaultAbi, functionName, args });
-    const [eth, mstr, usdg, senior, free, yld, mstrClaim, autoCmp, gasCredit, logs] = await Promise.all([
+    const [eth, mstr, usdg, senior, free, yld, mstrClaim, autoCmp, gasCredit, logs, wqClaimable, lendLogs] = await Promise.all([
       pub.getBalance({ address: a }),
       pub.readContract({ address: cfg.mstr, abi: erc, functionName: 'balanceOf', args: [a] }),
       pub.readContract({ address: cfg.usdg, abi: erc, functionName: 'balanceOf', args: [a] }),
@@ -194,6 +197,9 @@
       rd('autoCompound', [a]).catch(() => false),
       rd('gasCreditWei', [a]).catch(() => 0n),
       vaultEvents({ eventName: 'JuniorDeposit', args: { junior: a } }),
+      rd('claimableWithdraw', [a]).catch(() => 0n),
+      // USDG in and out, for the lender's earnings so far. Older vaults lack these events; fall back to none.
+      Promise.all(['SeniorDeposit', 'SeniorWithdraw', 'SeniorWithdrawClaimed'].map((eventName) => vaultEvents({ eventName, args: { senior: a } }).catch(() => []))),
     ]);
     const autoCompoundOn = !!autoCmp;
 
@@ -304,19 +310,24 @@
         gasCreditEth: round(num(gasCredit), 6) });
     }
 
-    const seniorN = num(senior);
-    if (seniorN > 0) {
-      const freeN = num(free), matchedN = Math.max(seniorN - freeN, 0);
+    const seniorN = num(senior), claimN = num(wqClaimable);
+    if (seniorN > 0 || claimN > 0) {
+      // v3: the lender holds pool shares. freePrincipal is the part not already queued for withdrawal, not "unmatched".
+      // A withdrawal is instant while idle pool USDG covers it and nobody is queued; otherwise it joins the queue
+      // and keeps earning until idle USDG frees up and it can be claimed.
+      const V = S.vault, freeN = num(free), queuedN = Math.max(seniorN - freeN, 0);
+      const instantN = V.queuePending > 1e-9 ? 0 : Math.min(freeN, V.idle);
+      const [dep, wd, cl] = lendLogs, sumA = (l) => l.reduce((x, e) => x + num(e.args.assets), 0);
+      const netIn = sumA(dep) - sumA(wd) - sumA(cl);
+      const coupon = V.matched * (V.aprPct / 100) * (V.termSec / (365 * 86400));   // one full term of lender coupon on matched USDG
       positions.push({
-        sym: 'USDG', shares: round(seniorN, 4), matched: round(matchedN, 4),
-        fees: round(num(yld) + num(mstrClaim) * price, 4), days: 0, earned: 0, auto: autoCompoundOn, real: true,
-        statusTxt: matchedN > 0 ? 'Active' : 'Idle',
-        leftTxt: matchedN > 0
-          ? 'Unlocks on close'
-          : ((productCfg && productCfg.idleSleeveLive)
-            ? 'Earning on Morpho · withdrawable'
-            : 'Idle in lender pool · withdrawable'),
-        free: matchedN === 0, count: 1,
+        sym: 'USDG', shares: round(seniorN, 4), matched: round(V.tvl > 0 ? seniorN * V.matched / V.tvl : 0, 4),
+        fees: round(Math.max(seniorN - netIn, 0) + num(yld) + num(mstrClaim) * price, 4), days: 0, earned: 0, auto: false, real: true,
+        statusTxt: queuedN > 0.005 ? 'Queued' : 'Active',
+        leftTxt: claimN > 0.005 ? round(claimN, 4) + ' USDG ready to claim' : queuedN > 0.005 ? 'Withdrawal queued · still earning' : instantN >= freeN - 0.005 ? 'Withdraw any time' : 'Withdrawals queue right now',
+        free: freeN, freeV: round(freeN, 4), queued: round(queuedN, 4), claimable: round(claimN, 4), instant: round(instantN, 4),
+        netIn: round(netIn, 4), sharePrice: V.sharePrice, poolIdle: round(V.idle, 4), queuePending: round(V.queuePending, 4),
+        poolUtil: V.util, backstop: round(V.backstop, 4), termCoupon: round(coupon, 4), ratePct: round(V.aprPct, 4), count: 1,
       });
     }
 
@@ -612,10 +623,20 @@
         let wei = toWei(amount);
         const free = await pub.readContract({ address: cfg.vault, abi: vaultAbi, functionName: 'freePrincipal', args: [S.account] });
         if (wei > free && wei - free < 10n ** 15n) wei = free;   // display rounding
-        if (wei > free) throw user(`Only ${num(free).toLocaleString('en-US', { maximumFractionDigits: 4 })} USDG is idle and withdrawable. The rest is matched with stock deposits until those positions close.`);
-        const hash = await send({ address: cfg.vault, abi: vaultAbi, functionName: 'withdrawSenior', args: [wei] }, onStep, 'Confirm the withdrawal in MetaMask…');
+        if (wei > free) throw user(`You can withdraw up to ${num(free).toLocaleString('en-US', { maximumFractionDigits: 4 })} USDG. The rest is already queued for withdrawal.`);
+        // Same rule as withdrawSenior: instant only if idle pool USDG covers it and the queue is empty.
+        const [idle, req, ful] = await Promise.all(['freeSenior', 'wqCumulativeRequested', 'wqCumulativeFulfilled'].map((f) => pub.readContract({ address: cfg.vault, abi: vaultAbi, functionName: f })));
+        const instant = idle >= wei && req === ful;
+        if (!instant) {
+          const [reqd, claimable] = await Promise.all([
+            pub.readContract({ address: cfg.vault, abi: vaultAbi, functionName: 'wqRequested', args: [S.account] }),
+            pub.readContract({ address: cfg.vault, abi: vaultAbi, functionName: 'claimableWithdraw', args: [S.account] }),
+          ]);
+          if (reqd > 0n) throw user(claimable > 0n ? 'Claim your queued withdrawal first, then you can queue another.' : 'You already have a withdrawal in the queue. It pays out as USDG frees up; you can queue another once it is claimed.');
+        }
+        const hash = await send({ address: cfg.vault, abi: vaultAbi, functionName: 'withdrawSenior', args: [wei] }, onStep, instant ? 'Confirm the withdrawal in MetaMask…' : 'Confirm the queued withdrawal in MetaMask…');
         await settleAfterTx(before);
-        return { ok: true, hash, msg: 'USDG withdrawn, plus any claimable yield.' };
+        return { ok: true, hash, msg: instant ? 'USDG withdrawn to your wallet.' : 'Withdrawal queued. It keeps earning until USDG frees up, then you claim it from your USDG card.' };
       }
       // Deposits show as one combined position, but the vault closes each deposit whole. Open and
       // matured deposits leave with no fee; deposits still inside their 7-day term pay the early-exit fee.
@@ -779,9 +800,23 @@
 
   /// Fee claim against config chain.vault (UUPS PROXY). When product.onChain.claimFees is false,
   /// show Maker waterfall preview only and do not send a tx.
+  // Pays out the part of a queued lender withdrawal that idle USDG has already covered.
+  async function claimWithdraw({ onStep }) {
+    try {
+      guard();
+      const owed = await pub.readContract({ address: cfg.vault, abi: vaultAbi, functionName: 'claimableWithdraw', args: [S.account] });
+      if (owed === 0n) throw user('Nothing is ready to claim yet. Your queued withdrawal pays out as USDG frees up.');
+      const before = sig();
+      const hash = await send({ address: cfg.vault, abi: vaultAbi, functionName: 'claimWithdraw', args: [] }, onStep, 'Confirm the claim in MetaMask…');
+      await settleAfterTx(before);
+      return { ok: true, hash, msg: 'Queued withdrawal claimed to your wallet.' };
+    } catch (e) { return fail(e); }
+  }
+
   async function claimFees({ sym, onStep, confirm }) {
     try {
       guard();
+      if (sym === 'USDG') return await claimWithdraw({ onStep });
       if (sym && sym !== 'MSTR') throw user(sym + ' fee claim is display-only on this testnet.');
       await refresh(true);
       const now = Math.floor(Date.now() / 1000), term = S.vault.termSec;
@@ -986,7 +1021,7 @@
     return { ok: false, error: 'No answer from MetaMask. Open the MetaMask app, approve the network request, and come back (or switch to Robinhood Chain Testnet there yourself).' };
   }
 
-  window.CarryChain = { last: snapshot(), connect, switchNetwork, disconnect, refresh, afterTx, leftText, deposit, withdraw, mint, claimFees, setAutoCompound, fundGasCredit, features, needsApp: () => isMobile() && !findMetaMask(), appLink };
+  window.CarryChain = { last: snapshot(), connect, switchNetwork, disconnect, refresh, afterTx, leftText, deposit, withdraw, mint, claimFees, claimWithdraw, setAutoCompound, fundGasCredit, features, needsApp: () => isMobile() && !findMetaMask(), appLink };
   const initP = init();
   initP.catch((e) => { S.error = (e && e.message) || String(e); console.warn('[CarryChain]', (e && (e.shortMessage || e.message)) || e); readyResolve(); emit(); });
 })();
