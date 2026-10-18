@@ -1,36 +1,43 @@
 /* Carry color tokens + light mode.
-   Every color in the bundle is a token named after its original dark-mode hex (--c-b7ffae) or rgb triplet
-   (--rgb-183-255-174), so dark mode renders exactly as before. [data-theme="light"] remaps the same tokens to a
-   paper + LCD palette: warm off-white panels, charcoal type, and pale-green LCD screens with dark-green digits.
-   Toggle + persistence: js/carry-theme.js. */
+   Every color in the bundle is a token named after its original hex (--c-b7ffae) or rgb triplet (--rgb-183-255-174).
+   The names are historical; the values follow the Carry design system: ground #050607, surface #0d1113, line #1f2a2e,
+   ink #f2f7f8, muted #8a9ba1, amber #ff9e2c (holders), cyan #6fe3ff (lenders), up #3dff8a, down #ff4d3d.
+   --c-b7ffae is "the accent": amber by default, cyan inside [data-reg="lend"].
+   [data-theme="light"] remaps the same tokens to paper. Toggle + persistence: js/carry-theme.js. */
 
 :root {
-  /* neutrals */
-  --c-0b0c0a: #0b0c0a; --c-131311: #131311; --c-161613: #161613; --c-1a1a16: #1a1a16;
-  --c-22211d: #22211d; --c-2a2822: #2a2822; --c-2f2c27: #2f2c27; --c-3c372f: #3c372f;
-  --c-6f6552: #6f6552; --c-a09173: #a09173; --c-d9ccad: #d9ccad; --c-e6dac0: #e6dac0;
-  /* greens */
-  --c-b7ffae: #b7ffae; --c-0f2a18: #0f2a18; --c-1d5a2a: #1d5a2a; --c-3dff5a: #3dff5a; --c-b6e3a8: #b6e3a8;
-  /* amber + red */
-  --c-ffc21a: #ffc21a; --c-ff2a1a: #ff2a1a; --c-ff6a5c: #ff6a5c;
-  /* rgb triplets for rgba() */
-  --rgb-183-255-174: 183, 255, 174; --rgb-61-255-90: 61, 255, 90; --rgb-0-0-0: 0, 0, 0; --rgb-5-6-5: 5, 6, 5;
-  --rgb-255-255-255: 255, 255, 255; --rgb-255-194-26: 255, 194, 26; --rgb-19-19-17: 19, 19, 17;
-  --rgb-34-33-29: 34, 33, 29; --rgb-217-204-173: 217, 204, 173; --rgb-11-12-10: 11, 12, 10; --rgb-255-42-26: 255, 42, 26;
+  /* neutrals: ground, surfaces, lines, text */
+  --c-0b0c0a: #050607; --c-131311: #090c0d; --c-161613: #0d1113; --c-1a1a16: #0f1416;
+  --c-22211d: #131a1c; --c-2a2822: #182124; --c-2f2c27: #1f2a2e; --c-3c372f: #2b3a40;
+  --c-6f6552: #5d6d73; --c-a09173: #8a9ba1; --c-d9ccad: #c9d4d7; --c-e6dac0: #f2f7f8;
+  /* accent, terminal panels, on-accent, gains */
+  --c-b7ffae: #ff9e2c; --c-0f2a18: #0b0f11; --c-1d5a2a: #2b3a40; --c-3dff5a: #3dff8a; --c-b6e3a8: #ffc27a;
+  /* caution shares the one amber; losses */
+  --c-ffc21a: #ff9e2c; --c-ff2a1a: #ff4d3d; --c-ff6a5c: #ff7a6b;
+  /* rgb triplets for rgba(). --rgb-61-255-90 was the outer glow; it is ground now, so glows vanish (the system is flat). */
+  --rgb-183-255-174: 255, 158, 44; --rgb-61-255-90: 5, 6, 7; --rgb-0-0-0: 0, 0, 0; --rgb-5-6-5: 5, 6, 7;
+  --rgb-255-255-255: 255, 255, 255; --rgb-255-194-26: 255, 158, 44; --rgb-19-19-17: 13, 17, 19;
+  --rgb-34-33-29: 19, 26, 28; --rgb-217-204-173: 201, 212, 215; --rgb-11-12-10: 5, 6, 7; --rgb-255-42-26: 255, 77, 61;
+  --term-rgb: 255, 158, 44;
   color-scheme: dark;
 }
 
+/* Lender register: the accent is cyan. */
+[data-reg="lend"] { --c-b7ffae: #6fe3ff; --c-b6e3a8: #a8eeff; --rgb-183-255-174: 111, 227, 255; }
+
 :root[data-theme="light"] {
-  --c-0b0c0a: #e9e6dd; --c-131311: #f3f1ea; --c-161613: #f9f8f4; --c-1a1a16: #f8f6f0;
-  --c-22211d: #ebe7dd; --c-2a2822: #dcd6c9; --c-2f2c27: #d6d0c2; --c-3c372f: #c3bcab;
-  --c-6f6552: #958c78; --c-a09173: #6e6758; --c-d9ccad: #4b463d; --c-e6dac0: #24221e;
-  --c-b7ffae: #2f6b45; --c-0f2a18: #d6e6c8; --c-1d5a2a: #9cbf9a; --c-3dff5a: #2c8a45; --c-b6e3a8: #46704f;
-  --c-ffc21a: #8f6000; --c-ff2a1a: #c23a32; --c-ff6a5c: #d95a4e;
-  --rgb-183-255-174: 47, 107, 69; --rgb-61-255-90: 90, 85, 70; --rgb-0-0-0: 70, 60, 40; --rgb-5-6-5: 233, 230, 221;
-  --rgb-255-255-255: 255, 255, 255; --rgb-255-194-26: 143, 96, 0; --rgb-19-19-17: 249, 248, 244;
-  --rgb-34-33-29: 235, 231, 221; --rgb-217-204-173: 75, 70, 61; --rgb-11-12-10: 233, 230, 221; --rgb-255-42-26: 194, 58, 50;
+  --c-0b0c0a: #eef1f2; --c-131311: #f4f6f7; --c-161613: #fafbfb; --c-1a1a16: #f7f9f9;
+  --c-22211d: #e9edee; --c-2a2822: #dde3e5; --c-2f2c27: #d3dcdf; --c-3c372f: #b9c5c9;
+  --c-6f6552: #7d8c92; --c-a09173: #4f5f65; --c-d9ccad: #26313a; --c-e6dac0: #0d1113;
+  --c-b7ffae: #a85a00; --c-0f2a18: #fbf6ef; --c-1d5a2a: #b9c5c9; --c-3dff5a: #0f8a43; --c-b6e3a8: #8a4a00;
+  --c-ffc21a: #a85a00; --c-ff2a1a: #c2332a; --c-ff6a5c: #d95a4e;
+  --rgb-183-255-174: 168, 90, 0; --rgb-61-255-90: 238, 241, 242; --rgb-0-0-0: 30, 40, 45; --rgb-5-6-5: 238, 241, 242;
+  --rgb-255-255-255: 255, 255, 255; --rgb-255-194-26: 168, 90, 0; --rgb-19-19-17: 250, 251, 251;
+  --rgb-34-33-29: 233, 237, 238; --rgb-217-204-173: 38, 49, 58; --rgb-11-12-10: 238, 241, 242; --rgb-255-42-26: 194, 51, 42;
+  --term-rgb: 168, 90, 0;
   color-scheme: light;
 }
+:root[data-theme="light"] [data-reg="lend"] { --c-b7ffae: #00708a; --c-b6e3a8: #005a70; --rgb-183-255-174: 0, 112, 138; }
 
 /* SVG presentation attributes can't take var(); map the literal ones. */
 [stroke="#b7ffae"] { stroke: var(--c-b7ffae); }
@@ -48,10 +55,10 @@
 [data-theme="light"] div[style*="background: var(--c-0f2a18)"]:not(.rt-frame),
 [data-theme="light"] input[style*="background: var(--c-0f2a18)"] {
   background-image:
-    repeating-linear-gradient(0deg, rgba(47, 107, 69, 0.07) 0 1px, transparent 1px 3px),
-    linear-gradient(180deg, #dceacf, #c8dbb9) !important;
-  border-color: #9db99a !important;
-  box-shadow: inset 0 1px 3px rgba(40, 60, 40, 0.35), inset 0 0 0 1px rgba(255, 255, 255, 0.35) !important;
+    repeating-linear-gradient(0deg, rgba(168, 90, 0, 0.06) 0 1px, transparent 1px 3px),
+    linear-gradient(180deg, #fbf6ef, #f5ede1) !important;
+  border-color: #d3dcdf !important;
+  box-shadow: inset 0 1px 3px rgba(30, 40, 45, 0.12), inset 0 0 0 1px rgba(255, 255, 255, 0.35) !important;
 }
 [data-theme="light"] .rt-frame {
   background-image:
@@ -59,10 +66,10 @@
     linear-gradient(var(--t), var(--t)), linear-gradient(var(--t), var(--t)),
     linear-gradient(var(--t), var(--t)), linear-gradient(var(--t), var(--t)),
     linear-gradient(var(--t), var(--t)), linear-gradient(var(--t), var(--t)),
-    repeating-linear-gradient(0deg, rgba(47, 107, 69, 0.07) 0 1px, transparent 1px 3px),
-    linear-gradient(180deg, #dceacf, #c8dbb9) !important;
+    repeating-linear-gradient(0deg, rgba(168, 90, 0, 0.06) 0 1px, transparent 1px 3px),
+    linear-gradient(180deg, #fbf6ef, #f5ede1) !important;
   background-size: 14px 1px, 1px 14px, 14px 1px, 1px 14px, 14px 1px, 1px 14px, 14px 1px, 1px 14px, auto, auto !important;
-  box-shadow: inset 0 1px 3px rgba(40, 60, 40, 0.35), 0 1px 0 rgba(255, 255, 255, 0.6) !important;
+  box-shadow: inset 0 1px 3px rgba(30, 40, 45, 0.12), 0 1px 0 rgba(255, 255, 255, 0.6) !important;
 }
 [data-theme="light"] .rt-frame[style*="background: var(--c-161613)"] { /* paper cards with a frame stay paper */
   background-image:
@@ -74,21 +81,21 @@
 }
 
 /* Paper panels: a hairline emboss instead of glow. */
-[data-theme="light"] div[style*="background: var(--c-161613)"][style*="border-radius: 10px"] {
+[data-theme="light"] div[style*="background: var(--c-161613)"][style*="border-radius: 0"] {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 1px 2px rgba(60, 50, 30, 0.08);
 }
 
 /* White logos -> charcoal. */
-[data-theme="light"] .rt-logo { filter: invert(0.88) sepia(0.15) !important; }
+[data-theme="light"] .rt-logo { filter: invert(0.95) !important; }
 
 /* Testnet banner: soft amber with dark type and stripes. */
-[data-theme="light"] [data-screen-label="Demo banner"] { background: #efd58a !important; color: #3a2c08 !important; }
-[data-theme="light"] [data-screen-label="Demo banner"] a { color: #3a2c08 !important; }
-[data-theme="light"] .rt-hazard::after { background: repeating-linear-gradient(-45deg, #3a2c08 0 6px, transparent 6px 12px); opacity: 0.55; }
+[data-theme="light"] [data-screen-label="Demo banner"] { background: #ffd9a8 !important; color: #3a2000 !important; }
+[data-theme="light"] [data-screen-label="Demo banner"] a { color: #3a2000 !important; }
+[data-theme="light"] .rt-hazard::after { background: repeating-linear-gradient(-45deg, #3a2000 0 6px, transparent 6px 12px); opacity: 0.55; }
 
 /* ---- Theme toggle (desktop icon button + mobile menu row) --------------------------------------------- */
 .rt-theme-btn {
-  width: 40px; height: 40px; flex: none; padding: 0; border-radius: 4px; cursor: pointer;
+  width: 40px; height: 40px; flex: none; padding: 0; border-radius: 2px; cursor: pointer;
   display: flex; align-items: center; justify-content: center;
   border: 1px solid var(--c-3c372f); background: var(--c-161613); color: var(--c-e6dac0);
   font: 17px/1 'JetBrains Mono', monospace;
@@ -106,3 +113,22 @@
 .rt-theme-row::before { content: "> Light mode"; }
 .rt-theme-row::after { content: "[ OFF ]"; font-size: 13px; color: var(--c-a09173); }
 [data-theme="light"] .rt-theme-row::after { content: "[ ON ]"; color: var(--c-b7ffae); }
+
+/* ---- Terminal mode (design system): glow and scanlines live only in terminal panels -------------------- */
+
+/* Everything else is flat. The 404 code and alert glyph keep their RGB split. */
+*:not(.rt-404num):not(.rt-alert-i) { text-shadow: none !important; }
+
+/* Terminal panels are the old dark-green "screens": surface + amber scanlines, soft glow on their text. */
+div[style*="background: var(--c-0f2a18)"]:not(.rt-frame),
+input[style*="background: var(--c-0f2a18)"] {
+  background-image: repeating-linear-gradient(180deg, rgba(var(--term-rgb), 0.05) 0 1px, transparent 1px 3px) !important;
+  font-variant-numeric: tabular-nums;
+}
+:root:not([data-theme="light"]) div[style*="background: var(--c-0f2a18)"],
+:root:not([data-theme="light"]) div[style*="background: var(--c-0f2a18)"] * {
+  text-shadow: 0 0 6px rgba(var(--term-rgb), 0.35) !important;
+}
+
+/* Focus ring: 2px cyan, everywhere. */
+:focus-visible { outline-color: #6fe3ff !important; }

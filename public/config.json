@@ -50,6 +50,8 @@
     "morphoApyPct": 3.9,
     "carryApyPct": 16.9,
     "usdgIdleApyPct": 3.9,
+    "idleSleeveLive": false,
+    "_idleSleeveNote": "false = no Morpho sleeve on idle USDG (v3 testnet): the UI counts idle USDG at 0%. Set true when the sleeve ships.",
     "juniorTargetAprPct": 5,
     "seniorTargetAprPct": 12,
     "earlyExitFloorAprPct": 3.9,

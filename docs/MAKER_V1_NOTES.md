@@ -3,11 +3,11 @@
 Product rules locked with Maker Lee, set next to the Oct 2 research zips
 (`Carry LP Keeper Research`, `Carry Pool v1 Build Plan`). This is the living
 spec for UI copy and config. On-chain testnet today is the UUPS product vault
-(`version()` = **`v2.5-funder-idle`**) on Robinhood Chain Testnet **46630**
+(`version()` = **`v3-lender-pool`**, PROXY `0x24B7…3E35`) on Robinhood Chain Testnet **46630**
 (no DualPool, no Morpho sleeve). Site: [usecarry.io](https://usecarry.io).
 
 **Fee waterfall (source of truth):** [`MAKER_FEE_WATERFALL.md`](./MAKER_FEE_WATERFALL.md).  
-**Accounting (v2.5):** [`ACCOUNTING_V25.md`](./ACCOUNTING_V25.md).  
+**Accounting (v3):** [`ACCOUNTING_V3.md`](./ACCOUNTING_V3.md) (v2.5 history: [`ACCOUNTING_V25.md`](./ACCOUNTING_V25.md)).  
 Those docs supersede older claimFees / flat 4%-pace / protocol-cut-on-fee-in /
 global freePrincipal product stories.
 
@@ -68,7 +68,7 @@ session bands stay in config under `product.researchRanges` for keeper/DualPool 
 
 | Piece | Testnet 46630 today | Product intent |
 | --- | --- | --- |
-| Vault | **Live UUPS PROXY** `0xc801…72bd` / impl `v2.5-funder-idle` (`0xe498…d0e8`). Maker waterfall; per-lender idle; FIFO funders; settle default IdleCarry | Same product CA path; DualPool later |
+| Vault | **Live UUPS PROXY** `0x24B7…3E35` / impl `v3-lender-pool` (`0x7BeE…778E`). Maker waterfall; one lender pool with shares; FIFO withdraw queue; floating rate index | Same product CA path; DualPool later |
 | Pool | Fee donor / inventory held in vault | DualPool hook + keeper `remark()` |
 | Morpho | UI + on-chain rate stub (Steakhouse native supply figure); no ERC-4626 sleeve | Steakhouse USDG sleeve on matched/idle USDG |
 | Ranges / recenter | Display-only | Keeper + hook on mainnet |

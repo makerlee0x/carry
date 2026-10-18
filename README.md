@@ -9,33 +9,34 @@ Carry pays you trading fees on stock tokens that would otherwise sit idle in a w
 This repo is the **working Carry app + contracts**:
 
 - **UI** — static site in `public/` (hash-routed marketing + app prototype)
-- **Vault** — `contracts/` Forge project (`LeveredLpVaultV2`) on **Robinhood Chain Testnet (46630)**
-- **Product rules** — Maker-locked notes + live accounting in [`docs/MAKER_V1_NOTES.md`](./docs/MAKER_V1_NOTES.md) and [`docs/ACCOUNTING_V25.md`](./docs/ACCOUNTING_V25.md)
+- **Vault** — `contracts/` Forge project (`LeveredLpVault`) on **Robinhood Chain Testnet (46630)**
+- **Product rules** — Maker-locked notes + live accounting in [`docs/MAKER_V1_NOTES.md`](./docs/MAKER_V1_NOTES.md), [`docs/MAKER_FEE_WATERFALL.md`](./docs/MAKER_FEE_WATERFALL.md) and [`docs/ACCOUNTING_V3.md`](./docs/ACCOUNTING_V3.md)
 - **Keeper** — dry-run skeleton in [`keeper/`](./keeper/) (Hyperliquid read, no keys, no DualPool txs)
 
 ## Live product (testnet 46630)
 
 | Deployed | Address |
 | --- | --- |
-| LeveredLpVault (**PROXY** / product CA) | [`0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd`](https://explorer.testnet.chain.robinhood.com/address/0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd) |
-| Implementation (`version()` = **`v2.5-funder-idle`**) | [`0xe498F43ED10a37E22Fe046A3FDAAFD4E9080d0e8`](https://explorer.testnet.chain.robinhood.com/address/0xe498F43ED10a37E22Fe046A3FDAAFD4E9080d0e8) |
-| CarryBook library | `0x2988DFc48BE4AB47B40Ad151f1F213619cdB0794` |
+| LeveredLpVault (**PROXY** / product CA) | [`0x24B799026AA7baa6856bCFD00c1Be1f583A83e35`](https://explorer.testnet.chain.robinhood.com/address/0x24B799026AA7baa6856bCFD00c1Be1f583A83e35) |
+| Implementation (`version()` = **`v3-lender-pool`**) | [`0x7BeED7F65A9D4aF4E67553d984800F6268a3778E`](https://explorer.testnet.chain.robinhood.com/address/0x7BeED7F65A9D4aF4E67553d984800F6268a3778E) |
 | CarryMath library | `0x98574A1719E647775BE39Ec713B657c2CF27Adc5` |
 | mockMSTR | `0x762019309B536bbb89577422FaaFBeC9659f8728` |
 | mockUSDG | `0x25030Bff74764aD72b912276a603717DB1C00644` |
+| v2.5 PROXY (**superseded**; settle-watch #5/#6/#7 remain) | `0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd` |
 | v1 grant/history reference (**not in use**) | `0x72A053120f03B10c5506d2325f92F59B0FfC36c8` |
 
-Upgradeability: **UUPS**. Future logic upgrades keep the same PROXY CA. UI money paths use `public/config.json` → `chain.vault` (PROXY).
+Upgradeability: **UUPS**. v3 is a fresh PROXY (v2.5 was not upgraded in place). UI money paths use `public/config.json` → `chain.vault` (PROXY).
 
-### Live accounting (v2.5)
+### Live accounting (v3)
 
-- Per-lender `seniorIdle` (not a global freePrincipal pool)
-- FIFO idle queue + per-position funder slices
-- Senior yield to **position funders** only (amount × time matched on that position)
-- Min deposit / match **$25**; market totals **$25k** senior / junior; **no per-wallet cap** (`maxPerWalletUsdg = 0`)
-- Settle default **IdleCarry** (USDG); Boosted STRATEGY stake **tiers**; auto-compound; junior `gasCredit`
+- One lender pool (`totalSeniorAssets`) with non-transferable internal shares; senior yield compounds into the pool
+- Lender withdraw instant when idle USDG allows, else FIFO queue + `claimWithdraw()`
+- Fee split at `claimFees` / `earlyExit` / `settle`: Morpho-rate floor → 20% treasury (Boosted tiers 15/10/5%) → up to 20% senior perf → junior
+- Floating `rateIndex` (owner-set `morphoRateWad`, ≤5%); interest stops at maturity
+- Min deposit / match **$25**; senior pool uncapped; junior market **$25k**; **no per-wallet cap**
+- Auto-compound; junior `gasCredit`; idle Morpho yield display-only on testnet
 
-Details: [`docs/ACCOUNTING_V25.md`](./docs/ACCOUNTING_V25.md) · settle watch: [`docs/SETTLE_WATCH.md`](./docs/SETTLE_WATCH.md) · security: [`docs/SECURITY_V2.md`](./docs/SECURITY_V2.md).
+Details: [`docs/ACCOUNTING_V3.md`](./docs/ACCOUNTING_V3.md) · settle watch: [`docs/SETTLE_WATCH.md`](./docs/SETTLE_WATCH.md) · security: [`docs/SECURITY_V3.md`](./docs/SECURITY_V3.md).
 
 Docs index: [`docs/README.md`](./docs/README.md).
 
