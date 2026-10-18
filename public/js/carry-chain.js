@@ -423,7 +423,8 @@
         }
         ms += cur * (nowMs - prevT);
         const stockDays = ms / 864e5, winDays = (nowMs - start) / 864e5;
-        if (nFee > 0 && stockDays > 0 && winDays >= 1) mstrApy = { pct: round(Math.min(999, Math.max(0, (fee / stockDays * 365 - apr) * 100)), 1), days: round(winDays, 1), fees: round(fee, 2) };
+        // grossPct is fees per matched stock-$ a year; the UI applies the fee split to it.
+        if (nFee > 0 && stockDays > 0 && winDays >= 1) mstrApy = { pct: round(Math.min(999, Math.max(0, (fee / stockDays * 365 - apr) * 100)), 1), grossPct: round(Math.min(999, Math.max(0, fee / stockDays * 365 * 100)), 1), days: round(winDays, 1), fees: round(fee, 2) };
       }
     }
     const inflow = arr.dep.map((v, i) => v - arr.wd[i]);
