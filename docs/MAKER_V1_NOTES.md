@@ -24,9 +24,9 @@ global freePrincipal product stories.
 | Fees | Accrue raw on fee-in. **Split only** at `claimFees` / `earlyExit` / `settle` via Maker waterfall (senior Morpho accrual floor → treasury → senior perf → junior). See [`MAKER_FEE_WATERFALL.md`](./MAKER_FEE_WATERFALL.md). |
 | Early cover | User chooses; default **wallet USDG → Idle USDG on Carry → sell from position**. |
 | Position states | Only **Idle / Active / Boosted / Closed**. Open→Idle (unmatched); Settled→Closed. “Early fee due” is a frontend label only. |
-| Boosted | Stake STRATEGY **before** open (MSTR market first). Cannot boost an already Active position (reopen). On-chain: owner `setBoostStakeAmount` / `setBoostTiers` stub; live STRATEGY token wire later. Junior only; treasury cut of **fees** locks at first match (base 20%; tiers 15/10/5%). LONG creator fee share later (separate). |
+| Boosted | Stake STRATEGY **before** open (MSTR market first). Cannot boost an already Active position (reopen). On-chain (`main`): the vault reads the cut from a separate `StrategyBoostHook` (reads `StrategyStaking`); live STRATEGY token wire later. Junior only; treasury cut of **fees** locks at first match (base 20%; Level I-V placeholder 17.5/16.25/13.75/10/5%). LONG creator fee share later (separate). |
 | Multi-position | Extra MSTR deposit = new vault position; frontend combines into one MSTR card. |
-| Caps | Day-1: **$25k** market totals senior/junior, **$25** min deposit/match, **no per-wallet cap** (`maxPerWalletUsdg=0`). Older research $2.5k/wallet is **not** live. |
+| Caps | **$25** min deposit/match, senior pool uncapped, junior market **$25k**. **No per-wallet cap on any market** (maker, 2026-10-18). |
 | Treasury | Base **20% of fees** at split and on shortfall cover. Boosted tiers reduce cut. Target ≥ **10%** of book/cap (Vault v2 / option B). |
 | Keeper | Maintainer-operated bot first; permissionless later. |
 | Chain | Robinhood Chain. Testnet pack is **46630**; research DualPool path targets mainnet **4663**. |
@@ -42,10 +42,10 @@ Highlights:
 
 - Base fee **0.20%** (Safe limits 0.10–0.30%); surcharge cap **3%**
 - Dead bands (literal): regular 0.25%, pre/post 0.45%, overnight 0.60%, weekend 1.00%
-- Morpho rate stub ~**3.9%** (Steakhouse USDG **native supply** APY; not Merkl)
+- Morpho rate: testnet stub only (Steakhouse USDG **native supply**; not Merkl). Mainnet lender return = Morpho yield (floating) + Carry's share of fees, no fixed rate (issue #20, PR #21)
 - Junior/senior **targets** 5% / 12%
 - Inventory band **5%**; Hyperliquid `xyz:MSTR` as off-hours reference
-- Launch caps **$25k** total senior/junior, **$25** min, **no per-wallet cap** on live UUPS; treasury seed ≥10% of cap (product-target)
+- Launch caps: **$25** min, senior pool uncapped, junior market **$25k**, no per-wallet cap; treasury seed ≥10% of cap (product-target)
 - Research range bands: ±1× five-session expected move (wider overnight/weekend)
 
 Label in config whether each value is **UI display**, **product target**, or **on-chain today**.
@@ -73,8 +73,8 @@ session bands stay in config under `product.researchRanges` for keeper/DualPool 
 | Morpho | UI + on-chain rate stub (Steakhouse native supply figure); no ERC-4626 sleeve | Steakhouse USDG sleeve on matched/idle USDG |
 | Ranges / recenter | Display-only | Keeper + hook on mainnet |
 | Fee claim without close | `claimFees` live on PROXY; waterfall at claim/exit/settle | Same |
-| Boosted | On-chain stake tiers (treasury cut of fees); no STRATEGY yield minted | Live STRATEGY token + creator fee later |
-| Caps | $25 min; $25k totals; no per-wallet cap | May reintroduce wallet caps later if Maker wants |
+| Boosted | `boostHook` treasury cut of fees (on `main`; not yet on the live impl); no STRATEGY yield minted | Live STRATEGY token + creator fee later |
+| Caps | $25 min; senior uncapped; junior $25k; no per-wallet cap | No per-wallet cap on any market |
 | v1 grant vault `0x72A0…` | Left on-chain; **not in use** | Archive only |
 
 Do **not** imply DualPool or Morpho sleeves are executing on testnet. The site already

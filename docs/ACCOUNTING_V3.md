@@ -6,11 +6,14 @@
 
 | Role | Address |
 | --- | --- |
-| **v3 product PROXY (live after deploy)** | see `public/config.json` → `chain.vault` |
+| **v3 product PROXY** | `0x24B799026AA7baa6856bCFD00c1Be1f583A83e35` (`public/config.json` → `chain.vault`) |
+| Live implementation | `0x7BeED7F65A9D4aF4E67553d984800F6268a3778E` |
 | Superseded v2.5 PROXY | `0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd` |
 | Version string | `v3-lender-pool` |
 
-v2.5 was **not** UUPS-upgraded in place: open settle-watch positions (#5/#6/#7) and ~4.1k senior USDG remain on the superseded PROXY. v3 is a **fresh UUPS PROXY**.
+v2.5 was **not** UUPS-upgraded in place; v3 is a **fresh UUPS PROXY**. v2.5 settle-watch positions #5/#6/#7 have since been settled on the superseded PROXY.
+
+**Live vs `main`.** The testnet proxy still runs the original v3 implementation. `main` adds the EIP-170 fit (#3), rolling positions (#16) and the boost hook (#23); those sections below are marked *main*. They reach testnet with the next owner-signed upgrade.
 
 ## Lender pool
 
@@ -33,9 +36,12 @@ v2.5 was **not** UUPS-upgraded in place: open settle-watch positions (#5/#6/#7) 
 
 ## Rate
 
-- Global floating `rateIndex` advanced by owner-set `morphoRateWad` (testnet).
+- Global floating `rateIndex` advanced by owner-set `morphoRateWad` (testnet stub, ≤5%). Not a promised rate.
 - Positions store `rateIndexSnapshot`; accrual = index delta × principal.
-- Interest stops at maturity (`min(now, openedAt+term)`).
+- Live impl: interest stops at maturity (`min(now, openedAt+term)`).
+- *main*: positions roll at term; interest accrues until the position closes and only the junior settles a healthy one. Early exit stays inside the first term. A position more than 32% below entry stops rolling; 48h after the last term boundary anyone can settle it (a non-junior caller covers from fees and junior idle only, the rest is forgiven).
+- *main*: a filled queued withdrawal pays what the locked shares are worth at claim time.
+- **Planned:** the stored rate goes away. Lender return becomes Morpho yield (floating) + Carry's share of fees, with no floor or coupon (issue #20, PR #21, spec in progress).
 
 ## Removed vs v2.5
 
@@ -55,6 +61,14 @@ v2.5 was **not** UUPS-upgraded in place: open settle-watch positions (#5/#6/#7) 
 - `treasuryCutIsSet` flag (clear ≠ “set to 0” confusion for callers).
 - Backstop withdraw floor: `totalSeniorAssets + backstop + totalUnsplitFees`.
 
+## Boost (*main*)
+
+The vault asks `boostHook.treasuryCutOf(junior, baseCut)` at match and caps the answer at the base cut, so a hook can only lower Carry's take. `StrategyBoostHook` maps `StrategyStaking.stakedOf` to Level I-V (placeholder 17.5 / 16.25 / 13.75 / 10 / 5%). The old owner-set boost stub is gone; its storage slots stay for an in-place upgrade.
+
+## Caps
+
+$25 min deposit/match, senior pool uncapped, junior market $25k, **no per-wallet cap** on any market.
+
 ## Size
 
-Runtime impl measured in Forge (`test_runtimeSize_measured`). **EIP-170 (24576) NOT met yet** (~29.6k). Mainnet path must shrink further before prod.
+Runtime impl measured in Forge (`test_runtimeSize_measured`). Live impl ~29.6k (deployed with the size limit disabled). On `main` the vault is ~23.4k, under EIP-170 (24,576).

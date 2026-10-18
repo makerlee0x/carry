@@ -19,6 +19,8 @@ accrual = seniorPrincipal × morphoRate × elapsed / 365
 
 `morphoRate` = **Steakhouse Morpho native supply APY** (not Merkl rewards).
 
+> **Changing.** On testnet `morphoRate` is an owner-set stub, not a promised rate. The planned mainnet model drops the stored rate and the `seniorFloor`: lenders earn Morpho yield (floating) + their 20% `seniorPerf` share of fees (issue #20, PR #21,). Treasury and boost cuts stay as below.
+
 Then, on **gross** LP fees for the period:
 
 ```
@@ -133,7 +135,7 @@ Legacy global TW indices are frozen (no new credits). See [`ACCOUNTING_V25.md`](
 Implementation: `0x7BeED7F65A9D4aF4E67553d984800F6268a3778E` (also in `public/config.json` → `chain.vaultImplementation`).  
 Superseded v2.5 PROXY/impl (`0xc801…72bd` / `0xe498…d0e8`) is settle-watch history only.
 
-Live: Maker waterfall, Boosted STRATEGY **tiers** via `boostHook` (Level I-V), gasCredit + auto-refund,
+Live (`main`; the testnet impl picks up rolling positions and `boostHook` at its next upgrade): Maker waterfall, Boosted STRATEGY **tiers** via `boostHook` (Level I-V), gasCredit + auto-refund,
 early-exit cover revert, SellShares router interface (testnet router=0), auto-compound,
 **v3 lender pool** (internal shares + FIFO withdraw queue + floating `rateIndex`),
 settle cover path: backstop → junior idle/wallet/SellShares → pool idle last resort,
