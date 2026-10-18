@@ -1,9 +1,9 @@
 # Maker fee waterfall (source of truth)
 
-Locked with Maker Lee (Oct 5, 2026). Updated Oct 10 leftovers + **v2.5 funder-idle accounting**
+Locked with Maker Lee (Oct 5, 2026). Updated Oct 10 leftovers + **v2.5 funder-idle accounting**; lender side now **v3 lender pool**
 (per-lender idle, FIFO funders, yield to position funders, settle default IdleCarry, boost tiers).
 
-Accounting model (v2.5): [`ACCOUNTING_V25.md`](./ACCOUNTING_V25.md).  
+Accounting model (v3, live): [`ACCOUNTING_V3.md`](./ACCOUNTING_V3.md). v2.5 history: [`ACCOUNTING_V25.md`](./ACCOUNTING_V25.md).  
 Product narrative: [`MAKER_V1_NOTES.md`](./MAKER_V1_NOTES.md).  
 On-chain today: [`CARRY_CONTRACT.md`](../CARRY_CONTRACT.md) + [`CARRY_TESTNET.md`](../CARRY_TESTNET.md).
 
@@ -108,9 +108,12 @@ See [`GAS_CREDIT.md`](./GAS_CREDIT.md).
 
 ---
 
-## Senior yield timing (v2.5)
+## Senior yield timing
 
-USDG (and testnet SellShares MSTR) credits go to **that position’s funders only**,
+**v3 (live):** senior USDG yield compounds into the single lender pool (share price rises);
+every lender earns pro-rata by pool shares. See [`ACCOUNTING_V3.md`](./ACCOUNTING_V3.md).
+
+**v2.5 (superseded PROXY only):** USDG (and testnet SellShares MSTR) credits go to **that position’s funders only**,
 weighted by amount × time matched on the position:
 
 ```
@@ -125,7 +128,7 @@ Legacy global TW indices are frozen (no new credits). See [`ACCOUNTING_V25.md`](
 
 ## On-chain status
 
-**Landed on testnet PROXY** `0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd` (UUPS, **`v2.5-funder-idle`**).  
+**Live on testnet PROXY** `0x24B799026AA7baa6856bCFD00c1Be1f583A83e35` (UUPS, **`v3-lender-pool`**). In v3, senior yield compounds into one lender pool instead of per-position funders (see [`ACCOUNTING_V3.md`](./ACCOUNTING_V3.md)); the waterfall itself is unchanged.  
 Implementation: `0xe498F43ED10a37E22Fe046A3FDAAFD4E9080d0e8` (also in `public/config.json`).
 
 Live: Maker waterfall, Boosted STRATEGY **tiers** (15/10/5%), gasCredit + auto-refund,
