@@ -12,6 +12,9 @@ import {MockMstrSellRouter} from "../src/mocks/MockMstrSellRouter.sol";
 import {PushablePriceOracle} from "../src/oracle/PushablePriceOracle.sol";
 import {CarryMath} from "../src/libraries/CarryMath.sol";
 import {CarryPool} from "../src/libraries/CarryPool.sol";
+import {StrategyStaking} from "../src/StrategyStaking.sol";
+import {IStrategyStaking} from "../src/interfaces/IStrategyStaking.sol";
+import {IERC20Minimal} from "../src/interfaces/IERC20Minimal.sol";
 
 contract LeveredLpVaultTest is Test {
     uint256 internal constant PRICE = 100 ether;
@@ -501,6 +504,82 @@ contract LeveredLpVaultTest is Test {
         // morphoRateWad 3.9% → floor 3900 on 100k / year
         assertEq(s.seniorFloor, 3900 ether);
     }
+    // ─── STRATEGY staking hook ───────────────────────────────────────────────
+
+    function _cutLocked(uint256 id) internal view returns (uint256 cut) {
+        (,,,,,,,,,,,, cut) = vault.positions(id);
+    }
+
+    function _staking() internal returns (MockERC20 strategy, StrategyStaking staking) {
+        strategy = new MockERC20("Strategy", "STRATEGY", 18);
+        staking = new StrategyStaking(IERC20Minimal(address(strategy)), 7 days);
+        vault.setStrategyStaking(IStrategyStaking(address(staking)));
+    }
+
+    function _stake(MockERC20 strategy, StrategyStaking staking, address who, uint256 amount, address positionWallet)
+        internal
+    {
+        strategy.mint(who, amount);
+        vm.startPrank(who);
+        strategy.approve(address(staking), amount);
+        staking.stakeAndLink(amount, positionWallet);
+        vm.stopPrank();
+    }
+
+    function test_boostTiers_defaultToSiteLevels() public view {
+        assertEq(vault.boostTierCount(), 5);
+        assertEq(vault.boostTierMinStake(0), 25_000 ether);
+        assertEq(vault.boostTierMinStake(4), 10_000_000 ether);
+        assertEq(vault.boostTierCutWad(0), 0.175e18);
+        assertEq(vault.boostTierCutWad(4), 0.05e18);
+    }
+
+    function test_stakingHook_locksTierAtMatch() public {
+        (MockERC20 strategy, StrategyStaking staking) = _staking();
+        _stake(strategy, staking, junior, 2_000_000 ether, junior); // Level IV
+        _depositSenior(senior, 100 ether);
+        uint256 id = _depositJunior(junior, 1 ether);
+        assertEq(_cutLocked(id), 0.1e18);
+        assertEq(uint8(vault.positionState(id)), uint8(LeveredLpVault.PositionState.Boosted));
+
+        // Unstaking later does not change the locked cut.
+        vm.prank(junior);
+        staking.requestUnstake(2_000_000 ether);
+        assertEq(_cutLocked(id), 0.1e18);
+    }
+
+    function test_stakingHook_readsLinkedStake() public {
+        (MockERC20 strategy, StrategyStaking staking) = _staking();
+        address cold = makeAddr("cold");
+        _stake(strategy, staking, cold, 10_000_000 ether, junior); // Level V via link
+        _depositSenior(senior, 100 ether);
+        uint256 id = _depositJunior(junior, 1 ether);
+        assertEq(_cutLocked(id), 0.05e18);
+    }
+
+    function test_stakingHook_belowLevelOnePaysBase() public {
+        (MockERC20 strategy, StrategyStaking staking) = _staking();
+        _stake(strategy, staking, junior, 24_999 ether, junior);
+        _depositSenior(senior, 100 ether);
+        uint256 id = _depositJunior(junior, 1 ether);
+        assertEq(_cutLocked(id), vault.treasuryCutWad());
+        assertEq(uint8(vault.positionState(id)), uint8(LeveredLpVault.PositionState.Active));
+    }
+
+    function test_stakingHook_ownerSetAmountIgnoredOnceSet() public {
+        vault.setBoostStakeAmount(junior, 10_000_000 ether);
+        _staking();
+        _depositSenior(senior, 100 ether);
+        uint256 id = _depositJunior(junior, 1 ether);
+        assertEq(_cutLocked(id), vault.treasuryCutWad());
+    }
+
+    function test_setStrategyStaking_onlyOwner() public {
+        vm.prank(junior);
+        vm.expectRevert();
+        vault.setStrategyStaking(IStrategyStaking(address(1)));
+    }
+
 
     function test_runtimeSize_measured() public {
         LeveredLpVaultV2 impl = new LeveredLpVaultV2();

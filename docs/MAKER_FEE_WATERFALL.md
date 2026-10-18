@@ -36,8 +36,8 @@ senior      = seniorFloor + seniorPerf
 | Position / stake | Treasury cut of **fees** (not position size) |
 | --- | --- |
 | Active (no STRATEGY stake) | **20%** (`treasuryCutWad`) |
-| Boosted tiers (STRATEGY stake stub, owner-configurable) | 15% / 10% / 5% at ≥100 / ≥1k / ≥10k |
-| Legacy `setBoostStaked` without amount | flat **10%** (`boostedTreasuryCutWad`) |
+| Boosted Level I–V (STRATEGY staked or linked in `StrategyStaking`, owner-configurable) | 17.5% / 16.25% / 13.75% / 10% / 5% at ≥25k / ≥100k / ≥500k / ≥2M / ≥10M |
+| No `strategyStaking` set (testnet) | Same tiers on the owner-set `setBoostStakeAmount` |
 
 Creator fee boost is **later** and is **not** this cut. Cut locks at first match (`treasuryCutLocked`).
 
