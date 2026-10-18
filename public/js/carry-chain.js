@@ -565,7 +565,7 @@
     return hash;
   }
 
-  async function deposit({ sym, amount, onStep }) {
+  async function deposit({ sym, amount, onStep, autoCompound }) {
     try {
       guard();
       const wei = toWei(amount), token = sym === 'USDG' ? cfg.usdg : cfg.mstr, name = sym === 'USDG' ? 'mUSDG' : 'mMSTR';
@@ -573,6 +573,12 @@
       if (bal < wei) throw user(`Not enough ${name}. You have ${num(bal)}.`);
       const have = await pub.readContract({ address: token, abi: ERC20(), functionName: 'allowance', args: [S.account, cfg.vault] });
       if (have < wei) await send({ address: token, abi: ERC20(), functionName: 'approve', args: [cfg.vault, wei] }, onStep, 'Approve ' + name + ' in MetaMask…');
+      // Auto-compound is a per-wallet vault setting (default off on-chain). The deposit form defaults it on;
+      // send setAutoCompound first only when the wallet's setting differs from what the form asks for.
+      if (autoCompound != null && onChainFlag('autoCompound')) {
+        const cur = await pub.readContract({ address: cfg.vault, abi: vaultAbi, functionName: 'autoCompound', args: [S.account] }).catch(() => null);
+        if (cur != null && !!cur !== !!autoCompound) await send({ address: cfg.vault, abi: vaultAbi, functionName: 'setAutoCompound', args: [!!autoCompound] }, onStep, (autoCompound ? 'Turn on' : 'Turn off') + ' auto-compound in MetaMask…');
+      }
       const before = sig();
       const fn = sym === 'USDG' ? 'depositSenior' : 'depositJunior';
       const hash = await send({ address: cfg.vault, abi: vaultAbi, functionName: fn, args: [wei] }, onStep, 'Confirm the deposit in MetaMask…');
@@ -734,7 +740,7 @@
         enabled ? 'Enable auto-compound in MetaMask…' : 'Disable auto-compound in MetaMask…'
       );
       await settleAfterTx(before);
-      return { ok: true, hash, msg: enabled ? 'Auto-compound on. Exit capital+fees reopen as Idle.' : 'Auto-compound off. Yield goes to your wallet on withdraw.' };
+      return { ok: true, hash, msg: enabled ? 'Auto-compound on. At close, your stock and fees reopen as a new deposit.' : 'Auto-compound off. At close, your stock and fees go to your wallet.' };
     } catch (e) { return fail(e); }
   }
 
