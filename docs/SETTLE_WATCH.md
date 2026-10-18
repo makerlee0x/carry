@@ -2,25 +2,30 @@
 
 > **Carry v3 note:** Positions **#5 / #6 / #7** below live on the **superseded v2.5** PROXY `0xc801…72bd`.
 > Under v3 lender-pool they are **stale for the new product CA**. Do not treat them as v3 pool accounting.
-> Keep this page for v2.5 maturity observation only. New v3 positions will be listed separately after deploy.
+>
+> **Tonight (v3):** matched positions **#1 / #3 / #5** on live PROXY `0x24B7…3e35` mature **Oct 18 9:35–9:39 PM CDT**.
+> See **[V3 maturity watch](#v3-maturity-watch-live-proxy)** below and [`V3_MATURITY_SETTLE.md`](./V3_MATURITY_SETTLE.md).
 
-Live 7-day **fully matched / Active** positions on the **v2.5** vault for end-of-term `settle` testing.
+## v2.5 (superseded — settled)
 
-**Do not call `earlyExit` or `settle` until after maturity.** Leave open for the full term.
+Live 7-day **fully matched** positions on the **v2.5** vault for end-of-term `settle` testing.
+
+**Maturity settle (2026-10-17):** #5, #6, and #7 all settled. #5/#7 permissionless IdleCarry; #6 permissionless after vault `backstop` covered residual shortfall (`coverUsdg=0`).
 
 | Field | Position **#5** | Position **#6** |
 | --- | --- | --- |
 | Network | Robinhood Chain Testnet **46630** | same |
 | Vault PROXY (product CA) | [`0xc801…72bd`](https://explorer.testnet.chain.robinhood.com/address/0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd) | same |
-| State | Active, fully matched | Active, fully matched |
-| Junior | deployer `0xcA44…3c57` | `0x7b0B…a549` |
-| Senior funder(s) | deployer 100 mUSDG | lender A `0x6943…651c` 771.7 mUSDG |
+| State | **Settled** | **Settled** |
+| Junior | deployer `0xcA44F2dbB2D43b93b39F01B88E0f0e2966983c57` | `0x7b0B5a326Aa4d95968e88654aF9b87624383A549` |
+| Senior funder(s) | deployer 100 mUSDG | lender A `0x6943f0875AA9138F1E65a27Be48Af4312751651c` 771.7 mUSDG |
 | Junior amount | 1 mMSTR | 5 mMSTR |
 | Senior principal | 100 mUSDG | 771.7 mUSDG |
 | Gross LP fees | 1 mUSDG | 0 (unpaid accrual dust only) |
 | `openedAt` (UTC) | 2026-10-10 03:37:51 UTC | 2026-10-11 02:07:41 UTC |
 | **Settle after (UTC)** | **2026-10-17 03:37:51 UTC** | **2026-10-18 02:07:41 UTC** |
 | **Settle after (Central)** | **2026-10-16 10:37:51 PM CDT** | **2026-10-17 9:07:41 PM CDT** |
+| **Settle status** | **Settled** (see below) | **Settled** (see below) |
 
 ### Upgrade impact (v2.5 funder-idle)
 
@@ -48,16 +53,60 @@ Junior needed ~771 USDG. Lender A deposited 1000 (matched most). Lender B deposi
 - Prefer `settle(id)` (default IdleCarry). If residual cover is needed, junior uses Wallet / IdleCarry; SellShares only if junior enabled it or chooses it explicitly.
 - Until maturity, `TermNotElapsed` is expected.
 
+### Settle outcomes (2026-10-17 ~11:52–11:57 PM CDT)
 
-### Position #7 (also Active — protect)
+Signer: deployer `0xcA44…3c57` (permissionless where residual `coverUsdg=0` after backstop).
+
+| Id | Result | Tx | Notes |
+| --- | --- | --- | --- |
+| **#5** | **SUCCESS** | [`0x8d87401634c0b9315a946c1d8f1c89afd3befeb51b0a1cb759f63e0182f8d41f`](https://explorer.testnet.chain.robinhood.com/tx/0x8d87401634c0b9315a946c1d8f1c89afd3befeb51b0a1cb759f63e0182f8d41f) | `settle(5)` IdleCarry; `Settled` emitted; `settled=true` |
+| **#6** | **SUCCESS** | [`0x5662ba2923c761fab819ba4eb6434d4fe941fc9f88b2bb02359865eeb22c2322`](https://explorer.testnet.chain.robinhood.com/tx/0x5662ba2923c761fab819ba4eb6434d4fe941fc9f88b2bb02359865eeb22c2322) | `settle(6)` IdleCarry permissionless; vault `backstop` paid ~0.0868 USDG shortfall (`fromBackstop>0`, residual `coverUsdg=0`); `Settled` emitted; `settled=true`. Earlier “BLOCKED / needs junior key” was a **Settlement field-order misread** (fromBackstop vs coverUsdg). |
+| **#7** | **SUCCESS** | [`0x3801215495116f3dafa0fc6482b1708b7ab2a19ad2260f2c23fae1caa74365f9`](https://explorer.testnet.chain.robinhood.com/tx/0x3801215495116f3dafa0fc6482b1708b7ab2a19ad2260f2c23fae1caa74365f9) | `settle(7)` IdleCarry; `Settled` emitted; `settled=true` |
+
+Re-verified after #6: `#5`/`#6`/`#7` all `settled=true`. Backstop remaining ~0.3868 USDG.
+
+
+### Position #7 (settled 2026-10-17)
 
 | Field | Value |
 | --- | --- |
 | positionId | **7** |
-| Junior | `0x2f1B…74Bf` (also a senior funder) |
+| Junior | `0x2f1BB0AA6118f0c172A3d8b4d1D45b2F626E74Bf` (also a senior funder) |
 | Senior principal | 308.68 mUSDG |
 | Funders (migrated) | A 230.299… then B 78.380… @ openedAt |
 | `openedAt` UTC | 2026-10-11 02:40:38 UTC |
 | **Settle after (Central)** | **2026-10-17 9:40:38 PM CDT** |
+| **Settled tx** | [`0x380121…65f9`](https://explorer.testnet.chain.robinhood.com/tx/0x3801215495116f3dafa0fc6482b1708b7ab2a19ad2260f2c23fae1caa74365f9) |
 
-Do not earlyExit/settle #7 before maturity. Included in v2.5 `migrateAccountingV25`.
+Included in v2.5 `migrateAccountingV25`.
+
+---
+
+## v3 maturity watch (live PROXY)
+
+Product CA: [`0x24B799026AA7baa6856bCFD00c1Be1f583A83e35`](https://explorer.testnet.chain.robinhood.com/address/0x24B799026AA7baa6856bCFD00c1Be1f583A83e35) · impl `0x7BeED7…778E` · `v3-lender-pool`.  
+Full settle pack (cast one-liners, caveats, checklist): [`V3_MATURITY_SETTLE.md`](./V3_MATURITY_SETTLE.md).
+
+| Field | **#1** | **#3** | **#5** |
+| --- | --- | --- | --- |
+| Junior | `0x76339f8D6640D6dF94037D87c2c9503C98391803` | same | same |
+| Senior principal | 154.34 mUSDG | 154.34 mUSDG | 56.32 mUSDG (partial) |
+| `openedAt` (unix) | 1791772514 | 1791772652 | 1791772738 |
+| **Settle after (UTC)** | **2026-10-19 02:35:14 UTC** | **2026-10-19 02:37:32 UTC** | **2026-10-19 02:38:58 UTC** |
+| **Settle after (CDT)** | **2026-10-18 9:35:14 PM CDT** | **2026-10-18 9:37:32 PM CDT** | **2026-10-18 9:38:58 PM CDT** |
+| State (as of prep) | Active — not mature | Active — not mature | Active — not mature |
+| Settle tx | _pending_ | _pending_ | _pending_ |
+
+### Quick cast (after each clock; no keys in repo)
+
+```bash
+export PATH="$PATH:$HOME/.foundry/bin"
+RPC=https://rpc.testnet.chain.robinhood.com
+PROXY=0x24B799026AA7baa6856bCFD00c1Be1f583A83e35
+# dry-run (expect TermNotElapsed before maturity):
+cast call $PROXY "previewSettle(uint256,uint8)((uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint8))" 1 1 --rpc-url $RPC
+# broadcast only after CDT time + coverUsdg==0 (load DEPLOYER_PRIVATE_KEY in local shell):
+# cast send $PROXY "settle(uint256)" 1 --rpc-url $RPC --private-key "$DEPLOYER_PRIVATE_KEY"
+```
+
+Pre-maturity check (2026-10-18 prep): `previewSettle(1,1)` → **`TermNotElapsed`** (expected).
