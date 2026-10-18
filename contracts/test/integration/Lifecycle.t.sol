@@ -114,7 +114,7 @@ contract LifecycleTest is CarryBase {
 
         uint256 next = vault.nextPositionId() - 1;
         assertGt(next, id, "rollover opened a new position");
-        (address o, uint256 amt,,,,,,, bool settled,,,,) = vault.positions(next);
+        (address o, uint256 amt,,,,,,, bool settled,,,,,) = vault.positions(next);
         assertEq(o, juniorA);
         assertEq(amt, 50 ether, "all MSTR rolled");
         assertFalse(settled);
@@ -236,7 +236,7 @@ contract LifecycleTest is CarryBase {
         id = _stake(juniorA, 50 ether);
         vm.prank(lenderA);
         vault.withdrawSenior(5_000 ether);
-        (,,,, uint256 entry,,,,,,,,) = vault.positions(id);
+        (,,,, uint256 entry,,,,,,,,,) = vault.positions(id);
         oracle.setPrice(entry * 60 / 100);
         assertLt(entry * 60 / 100, entry * (1e18 - UNDERWATER_DROP_WAD) / 1e18);
         _warpToMaturity(id);

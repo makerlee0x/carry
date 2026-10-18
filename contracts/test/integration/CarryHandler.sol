@@ -51,7 +51,7 @@ contract CarryHandler is Test {
         uint256 n = vault.nextPositionId();
         if (n <= 1) return (0, address(0));
         id = 1 + seed % (n - 1);
-        (owner_,,,,,,,,,,,,) = vault.positions(id);
+        (owner_,,,,,,,,,,,,,) = vault.positions(id);
     }
 
     /// @dev First open, matched position at or after `seed` (wraps). Biases the fuzzer toward live positions.
@@ -61,7 +61,7 @@ contract CarryHandler is Test {
         uint256 count = n - 1;
         for (uint256 k; k < count; ++k) {
             uint256 cand = 1 + (seed + k) % count;
-            (address o,, uint256 principal,,,,,, bool settled,,,,) = vault.positions(cand);
+            (address o,, uint256 principal,,,,,, bool settled,,,,,) = vault.positions(cand);
             if (!settled && principal > 0) return (cand, o);
         }
     }
@@ -164,7 +164,7 @@ contract CarryHandler is Test {
     function settle(uint256 seed, uint256 topUp, bool byKeeper) external {
         (uint256 id, address o) = _active(seed);
         if (id == 0) return;
-        (,,,,,, uint64 openedAt,,,,,,) = vault.positions(id);
+        (,,,,,, uint64 openedAt,,,,,,,) = vault.positions(id);
         uint256 maturity = uint256(openedAt) + vault.term();
         if (block.timestamp <= maturity) vm.warp(maturity + 1);
         _topUp(o, topUp);

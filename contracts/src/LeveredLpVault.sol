@@ -26,6 +26,8 @@ import {CarryPool} from "./libraries/CarryPool.sol";
 ///    plus its share of LP fees. Positions roll at term.
 /// 4. Senior yield compounds into the pool. Lenders paid only USDG (stock fees swapped before payout).
 /// 5. Withdrawal queue paid before new matching. Lender withdraw never closes a junior position.
+/// 6. One lender pool serves many stock markets. Each market has its own token, oracle, range and junior cap;
+///    market 0 is the original MSTR market (the `mstr` / `oracle` slots).
 ///
 /// Fresh product PROXY for v3 (v2.5 funder-idle PROXY superseded — open settle-watch stays there).
 contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, ReentrancyGuardUpgradeable {
@@ -38,9 +40,9 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
     uint256 internal constant DEFAULT_GAS_REFUND_WEI = 0.0001 ether;
     uint256 internal constant DEFAULT_MIN_DEPOSIT_USDG = 25 ether;
     uint64 internal constant MAX_TERM = 7 days;
-    /// @dev Positions roll at term. One priced this far below entry (the MSTR range) stops rolling, and
-    ///      after this grace from the last term boundary anyone may settle it.
-    uint256 internal constant UNDERWATER_DROP_WAD = 0.32e18;
+    /// @dev Positions roll at term. One priced more than its market's range below entry stops rolling, and
+    ///      after this grace from the last term boundary anyone may settle it. This is market 0's (MSTR) range.
+    uint256 internal constant MSTR_RANGE_DROP_WAD = 0.32e18;
     uint256 internal constant UNDERWATER_GRACE = 48 hours;
     uint256 internal constant DEFAULT_MAX_PRICE_STALE = 1 hours;
 
@@ -72,6 +74,21 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         /// @notice Rate index snapshot at last fee split / match checkpoint (floating rate).
         uint256 rateIndexSnapshot;
         uint256 treasuryCutLocked;
+        /// @notice Market this position belongs to (0 = MSTR; appended, so older positions read 0).
+        uint256 marketId;
+    }
+
+    /// @notice One stock market sharing the lender pool.
+    struct Market {
+        IERC20Minimal token;
+        uint8 decimals;
+        bool active;
+        /// @dev Drop below entry, in WAD, past which a position stops rolling (MSTR 0.32e18).
+        uint64 rangeDropWad;
+        IPriceOracle oracle;
+        /// @dev Junior notional cap for this market in USDG (0 = none).
+        uint256 juniorCapUsdg;
+        uint256 juniorUsdg;
     }
 
     struct WaterfallSplit {
@@ -200,7 +217,11 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
     /// @notice USDG principal plus booked yield currently held by `strategy`.
     uint256 public strategyDeployed;
 
-    uint256[37] private __gap;
+    mapping(uint256 => Market) public markets;
+    uint256 public marketCount;
+    mapping(address => bool) public isMarketToken;
+
+    uint256[34] private __gap;
 
     error Paused();
     error ZeroAmount();
@@ -220,6 +241,7 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
     error InsufficientFree();
     error InsufficientIdleCover();
     error PrincipalToken();
+    error BadMarket();
     error TransferFailed();
     error FeeOnTransfer();
     error CapExceeded();
@@ -306,6 +328,9 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
     event PendingEthCredited(address indexed to, uint256 amount, uint256 balance);
     event PendingEthWithdrawn(address indexed to, uint256 amount);
     event MaxPriceStaleUpdated(uint256 maxPriceStale);
+    event MarketSet(
+        uint256 indexed marketId, address indexed token, address oracle, uint64 rangeDropWad, uint256 juniorCapUsdg, bool active
+    );
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -346,8 +371,30 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         mstrDecimals = mstr.decimals();
         usdgDecimals = usdg.decimals();
         nextPositionId = 1;
+        _initMarket0();
         paused = true;
         emit PausedDeposits(true);
+    }
+
+    /// @notice One-time upgrade step for the live v3 proxy: registers the existing MSTR market as market 0.
+    function initializeMarkets() external reinitializer(2) onlyOwner {
+        if (marketCount != 0) revert BadMarket();
+        _initMarket0();
+    }
+
+    function _initMarket0() internal {
+        markets[0] = Market({
+            token: mstr,
+            decimals: mstrDecimals,
+            active: true,
+            rangeDropWad: uint64(MSTR_RANGE_DROP_WAD),
+            oracle: oracle,
+            juniorCapUsdg: 0,
+            juniorUsdg: totalJuniorUsdg
+        });
+        isMarketToken[address(mstr)] = true;
+        marketCount = 1;
+        emit MarketSet(0, address(mstr), address(oracle), uint64(MSTR_RANGE_DROP_WAD), 0, true);
     }
 
     function _authorizeUpgrade(address) internal override onlyOwner {}
@@ -376,6 +423,45 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         maxTotalJuniorUsdg = maxTotalJuniorUsdg_;
         maxPerWalletUsdg = maxPerWalletUsdg_;
         emit CapsUpdated(maxTotalSeniorUsdg_, maxTotalJuniorUsdg_, maxPerWalletUsdg_);
+    }
+
+    /// @notice Add a stock market to the shared lender pool. No new contract, no upgrade.
+    function addMarket(IERC20Minimal token, IPriceOracle oracle_, uint64 rangeDropWad, uint256 juniorCapUsdg)
+        external
+        onlyOwner
+        returns (uint256 marketId)
+    {
+        if (address(token) == address(0) || address(token) == address(usdg) || isMarketToken[address(token)]) {
+            revert BadMarket();
+        }
+        marketId = marketCount++;
+        isMarketToken[address(token)] = true;
+        Market storage m = markets[marketId];
+        m.token = token;
+        m.decimals = token.decimals();
+        _setMarket(marketId, oracle_, rangeDropWad, juniorCapUsdg, true);
+    }
+
+    /// @notice Change a market's oracle, range or junior cap, or stop new junior deposits (`active` false).
+    ///         Open positions keep running either way.
+    function setMarket(uint256 marketId, IPriceOracle oracle_, uint64 rangeDropWad, uint256 juniorCapUsdg, bool active)
+        external
+        onlyOwner
+    {
+        if (marketId >= marketCount) revert BadMarket();
+        _setMarket(marketId, oracle_, rangeDropWad, juniorCapUsdg, active);
+    }
+
+    function _setMarket(uint256 marketId, IPriceOracle oracle_, uint64 rangeDropWad, uint256 juniorCapUsdg, bool active)
+        internal
+    {
+        if (address(oracle_) == address(0) || rangeDropWad == 0 || rangeDropWad >= WAD) revert BadMarket();
+        Market storage m = markets[marketId];
+        m.oracle = oracle_;
+        m.rangeDropWad = rangeDropWad;
+        m.juniorCapUsdg = juniorCapUsdg;
+        m.active = active;
+        emit MarketSet(marketId, address(m.token), address(oracle_), rangeDropWad, juniorCapUsdg, active);
     }
 
     function setTreasuryCuts(uint256 treasuryCutWad_, uint256 boostedTreasuryCutWad_) external onlyOwner {
@@ -450,7 +536,7 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
     }
 
     function rescueToken(address token, address to, uint256 amount) external onlyOwner nonReentrant {
-        if (token == address(mstr) || token == address(usdg)) revert PrincipalToken();
+        if (isMarketToken[token] || token == address(usdg)) revert PrincipalToken();
         if (to == address(0)) revert ZeroAddress();
         _push(IERC20Minimal(token), to, amount);
     }
@@ -588,11 +674,22 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
 
     // ─── junior ──────────────────────────────────────────────────────────────
 
+    /// @notice Open a junior position in market 0 (MSTR).
     function depositJunior(uint256 mstrAmount) external nonReentrant returns (uint256 positionId) {
+        positionId = _depositJunior(0, mstrAmount);
+    }
+
+    /// @notice Open a junior position with `amount` of market `marketId`'s stock token.
+    function depositJunior(uint256 marketId, uint256 amount) external nonReentrant returns (uint256 positionId) {
+        positionId = _depositJunior(marketId, amount);
+    }
+
+    function _depositJunior(uint256 marketId, uint256 amount) internal returns (uint256 positionId) {
         if (paused) revert Paused();
-        if (mstrAmount == 0) revert ZeroAmount();
-        _pullExact(mstr, msg.sender, mstrAmount);
-        positionId = _openJuniorFromVaultBalance(msg.sender, mstrAmount, false);
+        if (amount == 0) revert ZeroAmount();
+        if (!markets[marketId].active) revert BadMarket();
+        _pullExact(markets[marketId].token, msg.sender, amount);
+        positionId = _openJuniorFromVaultBalance(msg.sender, marketId, amount, false);
     }
 
     /// @notice Explicit unmatched withdraw always pays wallet (auto-compound must not reopen).
@@ -611,7 +708,7 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
 
         emit UnmatchedWithdraw(positionId, msg.sender, amount);
         _refundAllGasCredit(msg.sender);
-        _push(mstr, msg.sender, amount);
+        _push(markets[position.marketId].token, msg.sender, amount);
     }
 
     function accrueLpFee(uint256 positionId, uint256 amount) external nonReentrant {
@@ -743,13 +840,19 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         return CarryPool.claimableQueued(wqRequested[user], wqClaimed[user], wqCursor[user], wqCumulativeFulfilled);
     }
 
+    /// @notice USDG a market-0 (MSTR) junior of `mstrAmount` is matched against at the current price.
     function previewSeniorAssets(uint256 mstrAmount) public view returns (uint256) {
-        return previewSeniorAssets(mstrAmount, _priceView());
+        return previewMarketSeniorAssets(0, mstrAmount);
     }
 
     function previewSeniorAssets(uint256 mstrAmount, uint256 priceWad) public view returns (uint256) {
         if (priceWad == 0) revert BadPrice();
         return CarryMath.seniorAssets(mstrAmount, priceWad, mstrDecimals, usdgDecimals);
+    }
+
+    /// @notice USDG a junior of `amount` stock tokens in `marketId` is matched against at the current price.
+    function previewMarketSeniorAssets(uint256 marketId, uint256 amount) public view returns (uint256) {
+        return CarryMath.seniorAssets(amount, _priceView(marketId), markets[marketId].decimals, usdgDecimals);
     }
 
     /// @notice Compatibility alias: senior principal ≈ share assets (incl. queued).
@@ -784,7 +887,7 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
 
         _fillWithdrawQueue();
         _refundAllGasCredit(junior);
-        _deliverJuniorExit(junior, result.mstrKept, result.juniorYield);
+        _deliverJuniorExit(junior, position.marketId, result.mstrKept, result.juniorYield);
         // Rematch only after withdrawal queue paid.
         if (autoCompound[junior]) {
             _matchOpenPositions(_effectiveMatchCap());
@@ -819,7 +922,7 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
 
         _fillWithdrawQueue();
         _refundAllGasCredit(msg.sender);
-        _deliverJuniorExit(msg.sender, result.mstrReturned, result.juniorLeftoverFees);
+        _deliverJuniorExit(msg.sender, position.marketId, result.mstrReturned, result.juniorLeftoverFees);
     }
 
     /// @dev Fee split quote shared by `previewSettle` and `_settle`. There is no lender coupon, so
@@ -867,7 +970,8 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         if (block.timestamp < start + t) return false;
         uint256 boundary = start + (block.timestamp - start) / t * t;
         if (block.timestamp < boundary + UNDERWATER_GRACE) return false;
-        return _price() < position.entryPriceWad * (WAD - UNDERWATER_DROP_WAD) / WAD;
+        uint256 id = position.marketId;
+        return _price(id) < position.entryPriceWad * (WAD - markets[id].rangeDropWad) / WAD;
     }
 
     /// @dev Open, matched, term elapsed.
@@ -977,7 +1081,7 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         if (delta < minDep && (starting || !completing)) return 0;
 
         if (starting) {
-            position.entryPriceWad = _price();
+            position.entryPriceWad = _price(position.marketId);
             position.openedAt = uint64(block.timestamp);
             position.lastFeeSplitAt = uint64(block.timestamp);
             position.treasuryCutLocked = _tierCutForUser(position.owner);
@@ -1103,10 +1207,10 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         emit GasCreditWithdrawn(junior, bal, 0);
     }
 
-    function _deliverJuniorExit(address junior, uint256 mstrAmt, uint256 usdgAmt) internal {
-        // Auto-compound reopens the MSTR as a new position (or returns it if under the minimum).
-        if (autoCompound[junior]) _openJuniorFromVaultBalance(junior, mstrAmt, true);
-        else if (mstrAmt > 0) _push(mstr, junior, mstrAmt);
+    function _deliverJuniorExit(address junior, uint256 marketId, uint256 stockAmt, uint256 usdgAmt) internal {
+        // Auto-compound reopens the stock as a new position in the same market (or returns it if under the minimum).
+        if (autoCompound[junior]) _openJuniorFromVaultBalance(junior, marketId, stockAmt, true);
+        else if (stockAmt > 0) _push(markets[marketId].token, junior, stockAmt);
         _deliverJuniorUsdg(junior, usdgAmt);
     }
 
@@ -1124,18 +1228,20 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         }
     }
 
-    function _openJuniorFromVaultBalance(address junior, uint256 mstrAmount, bool fromExit)
+    function _openJuniorFromVaultBalance(address junior, uint256 marketId, uint256 mstrAmount, bool fromExit)
         internal
         returns (uint256 positionId)
     {
         if (mstrAmount == 0) return 0;
         if (!fromExit && paused) revert Paused();
-        uint256 notional = previewSeniorAssets(mstrAmount);
+        Market storage m = markets[marketId];
+        uint256 notional = previewMarketSeniorAssets(marketId, mstrAmount);
         if (!fromExit) {
             if (notional < _minDeposit()) revert BelowMinDeposit();
             _enforceJuniorCap(junior, notional);
-        } else if (notional < _minDeposit()) {
-            _push(mstr, junior, mstrAmount);
+            if (m.juniorCapUsdg != 0 && m.juniorUsdg + notional > m.juniorCapUsdg) revert CapExceeded();
+        } else if (notional < _minDeposit() || !m.active) {
+            _push(m.token, junior, mstrAmount);
             return 0;
         }
 
@@ -1155,9 +1261,11 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
             boosted: false,
             unpaidSeniorAccrual: 0,
             rateIndexSnapshot: 0,
-            treasuryCutLocked: 0
+            treasuryCutLocked: 0,
+            marketId: marketId
         });
         _enqueueOpen(positionId);
+        m.juniorUsdg += notional;
         totalJuniorUsdg += notional;
         walletJuniorUsdg[junior] += notional;
         positionJuniorUsdg[positionId] = notional;
@@ -1205,10 +1313,10 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         return position.owner;
     }
 
-    function _price() internal view returns (uint256 price) {
-        price = _priceView();
+    function _price(uint256 marketId) internal view returns (uint256 price) {
+        price = _priceView(marketId);
         if (maxPriceStale != 0) {
-            try IPushablePriceOracle(address(oracle)).lastUpdatedAt() returns (uint64 updated) {
+            try IPushablePriceOracle(address(markets[marketId].oracle)).lastUpdatedAt() returns (uint64 updated) {
                 if (block.timestamp > uint256(updated) + maxPriceStale) revert StalePrice();
             } catch {
                 // Non-pushable oracle (FixedPrice / Mock): no staleness data.
@@ -1216,8 +1324,10 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         }
     }
 
-    function _priceView() internal view returns (uint256 price) {
-        price = oracle.mstrPriceWad();
+    function _priceView(uint256 marketId) internal view returns (uint256 price) {
+        IPriceOracle o = markets[marketId].oracle;
+        if (address(o) == address(0)) revert BadMarket();
+        price = o.mstrPriceWad();
         if (price == 0) revert BadPrice();
     }
 
@@ -1239,6 +1349,8 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         uint256 notional = positionJuniorUsdg[positionId];
         if (notional == 0) return;
         positionJuniorUsdg[positionId] = 0;
+        Market storage m = markets[positions[positionId].marketId];
+        m.juniorUsdg = notional > m.juniorUsdg ? 0 : m.juniorUsdg - notional;
         if (notional > totalJuniorUsdg) totalJuniorUsdg = 0;
         else totalJuniorUsdg -= notional;
         uint256 credited = walletJuniorUsdg[junior];
