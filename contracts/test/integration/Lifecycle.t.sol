@@ -44,20 +44,19 @@ contract LifecycleTest is CarryBase {
         assertLe(usdg.balanceOf(address(vault)), vault.backstop() + DUST, "vault should hold only backstop");
     }
 
-    /// Early exit with no fees: junior pays the interest from wallet; lender is credited it.
-    function test_earlyExit_walletCover_creditsLenders() public {
+    /// Early exit with no fees costs nothing: junior gets all MSTR back, lender stays whole.
+    function test_earlyExit_noFees_everyoneWhole() public {
         _lend(lenderA, 10_000 ether);
         uint256 id = _stake(juniorA, 50 ether);
         vm.warp(block.timestamp + 2 days);
-        _giveUsdg(juniorA, 100 ether);
 
         vm.prank(juniorA);
-        LeveredLpVault.EarlyExitResult memory r = vault.earlyExit(id, LeveredLpVault.CoverMode.Wallet);
+        LeveredLpVault.EarlyExitResult memory r = vault.earlyExit(id);
         _assertBooks("after earlyExit");
 
-        assertGt(r.accrual, 0);
-        assertEq(mstr.balanceOf(juniorA), 50 ether, "early exit must not sell junior shares");
-        assertGe(_lenderAssets(lenderA) + 1, 10_000 ether + r.accrual, "lender must receive the accrued interest");
+        assertEq(r.coverUsdg, 0);
+        assertEq(mstr.balanceOf(juniorA), 50 ether, "junior gets all MSTR back");
+        assertGe(_lenderAssets(lenderA) + 1, 10_000 ether, "lender principal intact");
     }
 
     /// A lender who arrives after yield was earned must not capture it.
@@ -121,82 +120,23 @@ contract LifecycleTest is CarryBase {
         assertFalse(settled);
     }
 
-    /// Sell-shares with a real router: MSTR leaves, real USDG arrives, books balance.
-    function test_sellShares_withRouter_booksBalance() public {
-        MockMstrSellRouter router = new MockMstrSellRouter(address(mstr), address(usdg), PRICE);
-        usdg.mint(address(router), 1_000 ether);
-        vault.setSellSharesRouter(address(router));
 
+    // ─── Oct 13 2026 product rules ──
+
+
+
+    /// Settle with no fees: nothing is owed, lender principal is intact and the books balance.
+    function test_settle_noFees_lenderWhole() public {
         _lend(lenderA, 10_000 ether);
         uint256 id = _stake(juniorA, 50 ether);
-        vm.prank(juniorA);
-        vault.setSellSharesEnabled(true);
         _warpToMaturity(id);
 
         vm.prank(juniorA);
-        vault.settle(id, LeveredLpVault.CoverMode.SellShares);
-        _assertBooks("after sell-shares settle");
-    }
-
-    // ─── v3 bugs + Oct 13 2026 product rules. These FAIL until the vault is fixed. ──
-
-    /// BUG 1: settle cover paid by the junior's wallet is never credited to the lender pool.
-    function test_settle_juniorWalletCover_isCreditedToLenders() public {
-        _lend(lenderA, 10_000 ether);
-        uint256 id = _stake(juniorA, 50 ether);
-        _warpToMaturity(id); // no fees → full interest shortfall
-        _giveUsdg(juniorA, 100 ether);
-
-        vm.prank(juniorA);
-        LeveredLpVault.Settlement memory s = vault.settle(id, LeveredLpVault.CoverMode.Wallet);
-        assertGt(s.coverUsdg, 0, "scenario needs a shortfall");
-        assertEq(100 ether - usdg.balanceOf(juniorA), s.coverUsdg, "junior paid the cover");
-
-        assertGe(
-            _lenderAssets(lenderA) + 1,
-            10_000 ether + s.accrual,
-            "BUG: junior paid the interest shortfall but lenders were not credited (_applySettleCover)"
-        );
-        _assertBooks("after wallet-covered settle");
-    }
-
-    /// BUG 1 (idle variant): cover taken from the junior's own lender balance must land in the pool.
-    function test_settle_juniorIdleCover_isCreditedToLenders() public {
-        _lend(lenderA, 5_000 ether);
-        uint256 id = _stake(juniorA, 50 ether); // uses all of lenderA
-        _lend(juniorA, 1_000 ether); // junior also lends; idle
-        _warpToMaturity(id);
-
-        uint256 poolBefore = vault.totalSeniorAssets();
-        vm.prank(juniorA);
-        LeveredLpVault.Settlement memory s = vault.settle(id, LeveredLpVault.CoverMode.Wallet);
-        assertGt(s.coverUsdg, 0);
-
-        // Junior's idle moved to pay lender interest: pool total should net to +0 (minus treasury cut).
-        assertGe(
-            vault.totalSeniorAssets() + s.treasuryOnCover + 1,
-            poolBefore,
-            "BUG: junior idle burned for cover but never credited back to the pool"
-        );
-        _assertBooks("after idle-covered settle");
-    }
-
-    /// BUG 2: "pool idle last resort" makes lenders pay their own interest out of principal.
-    function test_settle_poolLastResort_doesNotCostLenderPrincipal() public {
-        _lend(lenderA, 10_000 ether);
-        uint256 id = _stake(juniorA, 50 ether);
-        _warpToMaturity(id); // junior has no USDG, no idle, no fees, no backstop
-
-        vm.prank(juniorA);
-        LeveredLpVault.Settlement memory s = vault.settle(id, LeveredLpVault.CoverMode.IdleCarry);
-        assertGt(s.fromPool, 0, "scenario hits pool last resort");
-
-        assertGe(
-            _lenderAssets(lenderA) + 1,
-            10_000 ether,
-            "BUG: pool last resort cut lender principal to cover the junior's interest shortfall"
-        );
-        _assertBooks("after pool-last-resort settle");
+        LeveredLpVault.Settlement memory s = vault.settle(id);
+        assertEq(s.coverUsdg + s.fromPool + s.fromBackstop, 0);
+        assertGe(_lenderAssets(lenderA) + 1, 10_000 ether, "lender principal intact");
+        assertEq(mstr.balanceOf(juniorA), 50 ether);
+        _assertBooks("after no-fee settle");
     }
 
     /// Product rule: a queued withdraw pays what the shares are worth when it is paid, not a USDG
@@ -302,19 +242,4 @@ contract LifecycleTest is CarryBase {
         _warpToMaturity(id);
     }
 
-    /// Product rule: sell-shares needs a real router. Without one it must revert, never credit USDG
-    /// that doesn't exist.
-    function test_sellShares_noRouter_reverts() public {
-        _lend(lenderA, 10_000 ether);
-        uint256 id = _stake(juniorA, 50 ether);
-        vm.prank(juniorA);
-        vault.setSellSharesEnabled(true);
-        _warpToMaturity(id);
-
-        vm.prank(juniorA);
-        try vault.settle(id, LeveredLpVault.CoverMode.SellShares) {
-            fail("BUG: sell-shares without a router settled (credits the pool with USDG that does not exist)");
-        } catch {}
-        _assertBooks("after rejected sell-shares settle");
-    }
 }

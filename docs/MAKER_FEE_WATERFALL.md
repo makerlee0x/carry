@@ -1,7 +1,7 @@
 # Maker fee waterfall (source of truth)
 
-Locked with Maker Lee (Oct 5, 2026). Updated for **live v3 lender pool** (shared pool shares, FIFO withdraw queue,
-floating rate index, Maker waterfall unchanged, boost tiers). v2.5 funder-idle is historical only.
+Locked with Maker Lee (Oct 5, 2026); fee split and order updated Oct 18, 2026 (Stage 1: no fixed rate, 40/40/20).
+v2.5 funder-idle is historical only.
 
 Accounting model (v3, live): [`ACCOUNTING_V3.md`](./ACCOUNTING_V3.md). v2.5 history: [`ACCOUNTING_V25.md`](./ACCOUNTING_V25.md).  
 Product narrative: [`MAKER_V1_NOTES.md`](./MAKER_V1_NOTES.md).  
@@ -11,25 +11,22 @@ On-chain today: [`CARRY_CONTRACT.md`](../CARRY_CONTRACT.md) + [`CARRY_TESTNET.md
 
 ## Waterfall (on gross LP fees)
 
-Senior accrual is the opportunity cost of supplying USDG on Carry instead of Morpho:
+> **Stage 1 (in code from Oct 18, 2026; live after the next proxy upgrade, `version()` = `v3.1-morpho-yield`).**
+> The live proxy (`v3-lender-pool`) still runs the old fixed-rate floor and cover until it is upgraded.
+
+Lenders earn **Morpho + Carry**: whatever the Steakhouse USDG Morpho vault pays on lender USDG
+(through `CarryStrategy`, booked into the share price by `harvest`), plus a share of LP fees.
+There is no stored rate, no floor and no coupon, so nothing is ever owed beyond fees.
+
+Fees are split in a fixed order, treasury first, then senior, then junior (Maker, Oct 18, 2026):
 
 ```
-accrual = seniorPrincipal × morphoRate × elapsed / 365
+treasury    = gross × treasuryCut                // base 20%; Boosted Level I-V 17.5/16.25/13.75/10/5%
+seniorPerf  = gross × 0.40                        // SENIOR_PERF_CUT_WAD
+junior      = gross − treasury − seniorPerf       // 40% at the base cut, more when boosted
 ```
 
-`morphoRate` = **Steakhouse Morpho native supply APY** (not Merkl rewards).
-
-Then, on **gross** LP fees for the period:
-
-```
-seniorFloor = min(gross, accrual)
-left        = gross − seniorFloor
-treasury    = min(left, gross × treasuryCut)   // base 20%; Boosted Level I-V 17.5/16.25/13.75/10/5%
-left        = left − treasury
-seniorPerf  = min(left, gross × 0.20)
-junior      = left − seniorPerf
-senior      = seniorFloor + seniorPerf
-```
+Example on $10 of fees at the base cut: treasury $2, senior $4, junior $4.
 
 **Treasury cut surface (Maker Oct 10 leftovers):**
 
@@ -57,34 +54,17 @@ waterfall is applied at claim / exit / settle.
 
 ---
 
-## Shortfall cover (settle vs early exit)
+## Shortfall cover
 
-If fees cannot cover senior accrual:
+**Stage 1:** there is no lender coupon, so settle and early exit never need cover. Early exit returns all
+MSTR and the junior's fee share at no cost; settle is the same at term. The `CoverMode` argument is kept
+for the ABI and ignored; the accrual, floor and cover fields in the preview structs read zero.
 
-### Settle (maturity / normal exit)
-
-1. **Backstop first** (treasury/backstop USDG).
-2. **Residual:** junior chooses Wallet USDG, IdleCarry, or SellShares.
-3. **Treasury-on-cover:** same base/Boosted cut as waterfall.  
-   `coverTotal = residualShortfall + treasuryOnCover`.
-
-Settle default mode = **IdleCarry** (USDG path). Permissionless when residual cover is zero.
-Wallet / IdleCarry with cover require the junior. SellShares requires junior opt-in (`sellSharesEnabled`) or junior caller.
-
-### Early exit (before term)
-
-1. **Junior only** — Wallet / IdleCarry / SellShares.
-2. **NO backstop** draw on early exit.
-3. Fees apply to cover first; then Wallet pull / Idle burn.
-4. If junior cannot cover with USDG/fees and does **not** choose SellShares →
-   **REVERT** (`JuniorCoverRequired`); position stays open.
-
-### SellShares
-
-| Network | Behavior |
-| --- | --- |
-| Testnet (`sellSharesRouter == 0`) | Extra MSTR credited to **position funders** (amount × time matched on that position). |
-| Mainnet (router set) | `IMstrSellRouter` Uniswap AMM stub: swap MSTR→USDG, cover seniors/treasury, remainder to junior (or auto-compound). |
+**Stage 2 (matched capital in DualPool, not built yet):** if a position closes with pool value below the
+senior's principal, the gap is covered in this order (Maker, Oct 18, 2026): position fees, then the Morpho
+yield accrued on that position, then the backstop (the treasury balance). Lenders earn less Morpho yield
+before they lose principal. The backstop target is 10% of active positions, as an operating goal only
+(not enforced in the contract).
 
 ---
 

@@ -18,14 +18,14 @@ Layers:
 | Base fee | 0.20% (limits 0.10–0.30%) | product-target |
 | Surcharge cap | 3% | product-target |
 | Dead bands | 0.25 / 0.45 / 0.45 / 0.60 / 1.00% | product-target |
-| Morpho rate (Steakhouse native supply) | **3.9%** stub; owner-settable ≤**5%**; **floating global rate index** (not locked per position) | on-chain / ui-display |
+| Morpho rate (Steakhouse native supply) | Floating, whatever the vault pays (Stage 1; no stored rate). Live proxy: 3.9% stub until upgraded | on-chain / ui-display |
 | Junior / senior targets | 5% / 12% | ui-display |
 | Fee split timing | claimFees / earlyExit / settle only | on-chain |
-| Unpaid senior accrual | Carried on position when fees &lt; accrual | on-chain |
+| Unpaid senior accrual | Removed in Stage 1 (nothing is owed beyond fees) | on-chain |
 | Treasury share of fees | 20% default; Boosted STRATEGY tiers **15% / 10% / 5%** | on-chain |
-| Senior perf share of gross | 20% (after seniorFloor + treasury) | on-chain |
+| Senior perf share of gross | **40%** (Stage 1; live proxy 20% until upgraded). Order: treasury, senior, junior | on-chain |
 | Senior pool / yield | One USDG pool + internal shares; yield compounds into pool | on-chain |
-| Early cover order | fees → junior lender balance → wallet → sell-shares (no backstop) | on-chain |
+| Early cover order | Removed in Stage 1 (early exit costs nothing). Stage 2 principal shortfall: fees → Morpho yield on the position → backstop | on-chain |
 | Maturity settle | backstop → junior idle → wallet → sell-shares → pool idle last resort | on-chain |
 | Early-exit / Morpho floor (UI) | **3.9%** (`earlyExitFloorAprPct` / `morphoFloorAprPct`) | ui-display |
 | Maker UI ranges | MSTR ±32%, NVDA ±8% | ui-display |

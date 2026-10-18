@@ -8,7 +8,6 @@ import {LeveredLpVault} from "../src/LeveredLpVault.sol";
 import {LeveredLpVaultV2} from "../src/LeveredLpVaultV2.sol";
 import {MockERC20} from "../src/mocks/MockERC20.sol";
 import {MockOracle} from "../src/mocks/MockOracle.sol";
-import {MockMstrSellRouter} from "../src/mocks/MockMstrSellRouter.sol";
 import {PushablePriceOracle} from "../src/oracle/PushablePriceOracle.sol";
 import {CarryMath} from "../src/libraries/CarryMath.sol";
 import {CarryPool} from "../src/libraries/CarryPool.sol";
@@ -96,7 +95,7 @@ contract LeveredLpVaultTest is Test {
     // ─── pool shares ─────────────────────────────────────────────────────────
 
     function test_version_is_v3() public view {
-        assertEq(vault.version(), "v3-lender-pool");
+        assertEq(vault.version(), "v3.1-morpho-yield");
     }
 
     function test_startsPaused() public {
@@ -291,124 +290,90 @@ contract LeveredLpVaultTest is Test {
         assertEq(senior.balance, b);
     }
 
-    function test_earlyExit_coverOrder_feesThenIdleThenWallet() public {
-        uint256 need = vault.previewSeniorAssets(1 ether);
-        _depositSenior(senior, need);
-        // Junior also lends (idle)
-        _depositSenior(junior, 50 ether);
-        uint256 id = _depositJunior(junior, 1 ether);
-
-        usdg.mint(donor, 1);
-        // No fees; accrual will need cover. Warp some time.
-        vm.warp(block.timestamp + 30 minutes); // term is 1 hour in setUp
-
-        // Fund junior wallet for residual
-        usdg.mint(junior, 10 ether);
-        vm.startPrank(junior);
-        usdg.approve(address(vault), type(uint256).max);
-        vault.earlyExit(id, LeveredLpVault.CoverMode.IdleCarry);
+    function _payFee(uint256 id, uint256 amount) internal {
+        usdg.mint(donor, amount);
+        vm.startPrank(donor);
+        usdg.approve(address(vault), amount);
+        vault.accrueLpFee(id, amount);
         vm.stopPrank();
+    }
 
+    /// No lender coupon: an early exit with no fees costs the junior nothing and leaves the pool as it was.
+    function test_earlyExit_noFees_costsNothing() public {
+        _depositSenior(senior, 1_000 ether);
+        uint256 id = _depositJunior(junior, MSTR_IN);
+        assertTrue(vault.isFullyMatched(id));
+        uint256 poolBefore = vault.totalSeniorAssets();
+        vm.warp(block.timestamp + 30 minutes);
+
+        vm.prank(junior);
+        LeveredLpVault.EarlyExitResult memory r = vault.earlyExit(id);
+
+        assertEq(r.accrual, 0);
+        assertEq(r.coverUsdg, 0);
+        assertEq(r.mstrReturned, MSTR_IN);
+        assertEq(mstr.balanceOf(junior), MSTR_IN);
+        assertEq(usdg.balanceOf(junior), 0);
+        assertEq(vault.totalSeniorAssets(), poolBefore);
+        assertEq(vault.reservedSenior(), 0);
         assertEq(uint256(vault.positionState(id)), uint256(LeveredLpVault.PositionState.Closed));
     }
 
-    function test_settle_backstopFirst_thenJunior() public {
-        LeveredLpVault v = _deployVault(1 hours, MORPHO, address(this));
-        v.unpause();
-        usdg.mint(senior, 100 ether);
-        vm.startPrank(senior);
-        usdg.approve(address(v), 100 ether);
-        v.depositSenior(100 ether);
-        vm.stopPrank();
-        mstr.mint(junior, 1 ether);
-        vm.startPrank(junior);
-        mstr.approve(address(v), 1 ether);
-        uint256 id = v.depositJunior(1 ether);
-        vm.stopPrank();
-
-        // No fees → full accrual shortfall at settle
-        usdg.mint(address(this), 1 ether);
-        usdg.approve(address(v), 1 ether);
-        v.fundBackstop(0.01 ether);
-
-        vm.warp(block.timestamp + 1 hours + 1);
-        usdg.mint(junior, 10 ether);
-        vm.startPrank(junior);
-        usdg.approve(address(v), type(uint256).max);
-        LeveredLpVault.Settlement memory s = v.settle(id, LeveredLpVault.CoverMode.Wallet);
-        vm.stopPrank();
-        assertGt(s.fromBackstop, 0);
-        assertEq(uint256(v.positionState(id)), uint256(LeveredLpVault.PositionState.Closed));
-    }
-
-    function test_floatingRateIndex_notLockedPerPosition() public {
+    /// Settle with no fees owes nothing, so the backstop is never drawn.
+    function test_settle_noFees_backstopUntouched() public {
         _depositSenior(senior, 100 ether);
         uint256 id = _depositJunior(junior, 1 ether);
-        (,,,,,,,,,,, uint256 idx0,) = vault.positions(id);
-        assertGt(idx0, 0);
+        usdg.mint(address(this), 1 ether);
+        usdg.approve(address(vault), 1 ether);
+        vault.fundBackstop(1 ether);
+        vm.warp(block.timestamp + 1 hours + 1);
 
-        vm.warp(block.timestamp + 30 minutes); // stay inside 1h term
-        vault.setMorphoRate(0.05e18); // syncs index then updates rate
-        assertGt(vault.currentRateIndex(), idx0);
-
-        // Accrual uses floating index (view)
-        uint256 accrual = vault.previewEarlyExit(id).accrual;
-        assertGt(accrual, 0);
+        vm.prank(junior);
+        LeveredLpVault.Settlement memory s = vault.settle(id);
+        assertEq(s.fromBackstop, 0);
+        assertEq(s.coverUsdg, 0);
+        assertEq(vault.backstop(), 1 ether);
+        assertEq(mstr.balanceOf(junior), 1 ether);
     }
 
-    /// Positions roll at term: a matched position keeps accruing interest past it until it closes.
-    function test_rolledPosition_keepsAccruingPastTerm() public {
-        LeveredLpVault v = _deployVault(1 days, MORPHO, address(this));
-        v.unpause();
-        usdg.mint(senior, 100 ether);
-        vm.startPrank(senior);
-        usdg.approve(address(v), 100 ether);
-        v.depositSenior(100 ether);
-        vm.stopPrank();
-        mstr.mint(junior, 1 ether);
-        vm.startPrank(junior);
-        mstr.approve(address(v), 1 ether);
-        uint256 id = v.depositJunior(1 ether);
-        vm.stopPrank();
-
-        vm.warp(block.timestamp + 1 days);
-        LeveredLpVault.Settlement memory a = v.previewSettle(id);
-        vm.warp(block.timestamp + 10 days);
-        LeveredLpVault.Settlement memory b = v.previewSettle(id);
-        assertGt(a.accrual, 0);
-        assertApproxEqAbs(b.accrual, a.accrual * 11, 1e6, "accrual grows linearly past the term");
-    }
-
-    /// A later match must not change a rolled position's interest; a rate change applies from when it is set.
-    function test_accrual_exactAcrossLaterMatchAndRateChange() public {
-        _depositSenior(senior, 1_000 ether);
-        uint256 id = _depositJunior(junior, MSTR_IN); // $1k, fully matched
-        (,,,,,,,,,,, uint256 idx0,) = vault.positions(id);
-
-        vm.warp(block.timestamp + 1 hours + 5 days); // rolled past the term
-        _depositSenior(senior2, 100 ether);
-        _depositJunior(donor, 1 ether); // a later match
-        uint256 idxAtChange = vault.currentRateIndex();
-        vault.setMorphoRate(0.05e18); // and a later rate change
-        vm.warp(block.timestamp + 5 days);
-
-        uint256 idxEnd = idxAtChange + idxAtChange * 0.05e18 * 5 days / (1e18 * 365 days);
-        assertEq(vault.previewSettle(id).accrual, 1_000 ether * (idxEnd - idx0) / 1e18, "interest off the rate index");
-    }
-
-    /// A rate change accrues each segment at its own rate.
-    function test_rateChangeMidTerm_accruesPiecewise() public {
+    /// Fees split 40% senior, 20% treasury (base cut), 40% junior.
+    function test_settle_splits40_40_20() public {
         _depositSenior(senior, 1_000 ether);
         uint256 id = _depositJunior(junior, MSTR_IN);
-        vm.warp(block.timestamp + 30 minutes);
-        vault.setMorphoRate(0.05e18);
-        vm.warp(block.timestamp + 2 hours);
-        vault.setMorphoRate(0.01e18);
+        _payFee(id, 10 ether);
+        uint256 poolBefore = vault.totalSeniorAssets();
+        vm.warp(block.timestamp + 1 hours + 1);
 
-        uint256 idx1 = 1e18 + 1e18 * MORPHO * 30 minutes / (1e18 * 365 days);
-        uint256 idx2 = idx1 + idx1 * 0.05e18 * 2 hours / (1e18 * 365 days);
-        uint256 expected = 1_000 ether * (idx2 - 1e18) / 1e18;
-        assertEq(vault.previewSettle(id).accrual, expected);
+        vm.prank(junior);
+        LeveredLpVault.Settlement memory s = vault.settle(id);
+        assertEq(s.seniorPerf, 4 ether);
+        assertEq(s.treasury, 2 ether);
+        assertEq(s.juniorYield, 4 ether);
+        assertEq(vault.totalSeniorAssets(), poolBefore + 4 ether, "senior share compounds into the pool");
+        assertEq(vault.backstop(), 2 ether);
+        assertEq(usdg.balanceOf(junior), 4 ether);
+    }
+
+    /// Whatever the gross and cut, the parts add up to the gross and the senior gets 40%.
+    function testFuzz_waterfall_partsSumToGross(uint256 gross, uint256 cutWad) public pure {
+        gross = bound(gross, 0, 1e30);
+        cutWad = bound(cutWad, 0, 0.2e18);
+        CarryMath.WaterfallSplit memory w = CarryMath.waterfallFromGross(gross, 0, cutWad, 0.4e18);
+        assertEq(w.seniorFloor, 0);
+        assertEq(w.treasury + w.seniorPerf + w.junior, gross);
+        assertEq(w.seniorPerf, gross * 0.4e18 / 1e18);
+        assertGe(w.junior, w.seniorPerf);
+    }
+
+    /// Positions roll at term without building up any interest owed.
+    function test_rolledPosition_owesNothingPastTerm() public {
+        _depositSenior(senior, 100 ether);
+        uint256 id = _depositJunior(junior, 1 ether);
+        vm.warp(block.timestamp + 30 days);
+        LeveredLpVault.Settlement memory s = vault.previewSettle(id);
+        assertEq(s.accrual, 0);
+        assertEq(s.coverUsdg, 0);
+        assertEq(s.mstrKept, 1 ether);
     }
 
     /// A partially matched position past its term can never match again; it must leave the open queue
@@ -428,38 +393,14 @@ contract LeveredLpVaultTest is Test {
         assertTrue(vault.isFullyMatched(b), "expired partial position blocked matching");
     }
 
-    function _routerAndMaturedPosition() internal returns (uint256 id) {
-        MockMstrSellRouter router = new MockMstrSellRouter(address(mstr), address(usdg), PRICE);
-        usdg.mint(address(router), 1_000 ether);
-        vault.setSellSharesRouter(address(router));
+    /// A lender cannot settle a healthy position: positions roll and only the junior closes them.
+    function test_settle_lenderCannotCloseHealthyPosition() public {
         _depositSenior(senior, 1_000 ether);
-        id = _depositJunior(junior, MSTR_IN); // $1k, fully matched, no fees
+        uint256 id = _depositJunior(junior, MSTR_IN);
         vm.warp(block.timestamp + 1 hours + 1);
-    }
-
-    /// Junior settles with no USDG (or no approval): MSTR is sold for the interest instead of forgiving it.
-    function test_settle_juniorWithoutUsdg_sellsMstrToCover() public {
-        uint256 id = _routerAndMaturedPosition();
-        uint256 poolBefore = vault.totalSeniorAssets();
-        vm.prank(junior);
-        LeveredLpVault.Settlement memory s = vault.settle(id);
-
-        assertGt(s.coverUsdg, 0);
-        assertGt(s.mstrSold, 0, "MSTR sold to cover");
-        assertEq(s.feeShortfallUsdg, 0, "nothing forgiven");
-        assertEq(vault.totalSeniorAssets(), poolBefore + s.accrual, "lenders get the full interest");
-        assertEq(mstr.balanceOf(junior), MSTR_IN - s.mstrSold);
-    }
-
-    /// A lender cannot settle a position that owes cover, so cannot force the junior's MSTR to be sold.
-    function test_settle_lenderCannotForceSale() public {
-        uint256 id = _routerAndMaturedPosition();
-        vm.startPrank(senior);
+        vm.prank(senior);
         vm.expectRevert(LeveredLpVault.NotJunior.selector);
         vault.settle(id);
-        vm.expectRevert(LeveredLpVault.SellSharesDisabled.selector);
-        vault.settle(id, LeveredLpVault.CoverMode.SellShares);
-        vm.stopPrank();
     }
 
     function test_treasuryCutZero_usesIsSetFlag() public {
@@ -620,7 +561,7 @@ contract LeveredLpVaultTest is Test {
         LeveredLpVaultV2 next = new LeveredLpVaultV2();
         vault.upgradeToAndCall(address(next), "");
         assertEq(vault.totalSeniorAssets(), assets);
-        assertEq(vault.version(), "v3-lender-pool");
+        assertEq(vault.version(), "v3.1-morpho-yield");
     }
 
     function test_pauseBlocksDeposits_notViews() public {
@@ -631,13 +572,6 @@ contract LeveredLpVaultTest is Test {
         vm.expectRevert(LeveredLpVault.Paused.selector);
         vault.depositSenior(25 ether);
         vm.stopPrank();
-    }
-
-    function test_makerWaterfall_stillApplies() public {
-        uint256 accrual = CarryMath.morphoAccrual(100_000 ether, vault.morphoRateWad(), 365 days, 365 days);
-        CarryMath.WaterfallSplit memory s = CarryMath.waterfallFromGross(10_000 ether, accrual, 0.2e18, 0.2e18);
-        // morphoRateWad 3.9% → floor 3900 on 100k / year
-        assertEq(s.seniorFloor, 3900 ether);
     }
 
     function test_runtimeSize_measured() public {

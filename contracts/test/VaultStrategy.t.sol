@@ -78,6 +78,48 @@ contract VaultStrategyTest is Test {
         vault.deployIdle(0);
     }
 
+    /// Matched USDG can earn in Morpho too; settle, junior payout and lender exit recall what they need.
+    function test_matchedUsdgDeployed_roundTrip() public {
+        _deposit(lender, 1_000 ether);
+        address junior = makeAddr("junior");
+        mstr.mint(junior, 10 ether);
+        vm.startPrank(junior);
+        mstr.approve(address(vault), 10 ether);
+        uint256 id = vault.depositJunior(10 ether); // $1k at $100: fully matched
+        vm.stopPrank();
+        assertTrue(vault.isFullyMatched(id));
+
+        vault.deployIdle(1_000 ether); // all of it, matched included
+        assertEq(usdg.balanceOf(address(vault)), 0);
+
+        usdg.mint(address(this), 10 ether);
+        usdg.approve(address(vault), 10 ether);
+        vault.accrueLpFee(id, 10 ether);
+        vm.warp(block.timestamp + 1 hours + 1);
+        vm.prank(junior);
+        LeveredLpVault.Settlement memory s = vault.settle(id);
+        assertEq(usdg.balanceOf(junior), s.juniorYield);
+        assertEq(mstr.balanceOf(junior), 10 ether);
+
+        uint256 all = vault.freePrincipal(lender);
+        assertGt(all, 1_000 ether, "Morpho yield + 40% fee share");
+        vm.prank(lender);
+        vault.withdrawSenior(all);
+        assertEq(usdg.balanceOf(lender), all);
+    }
+
+    /// The backstop solvency check counts USDG parked in the strategy.
+    function test_withdrawBackstop_withStrategyDeployed() public {
+        _deposit(lender, 1_000 ether);
+        usdg.mint(address(this), 5 ether);
+        usdg.approve(address(vault), 5 ether);
+        vault.fundBackstop(5 ether);
+        vault.deployIdle(1_000 ether);
+        address to = makeAddr("treasury");
+        vault.withdrawTreasuryFees(to, 5 ether);
+        assertEq(usdg.balanceOf(to), 5 ether);
+    }
+
     function test_harvestBooksMorphoYieldIntoSharePrice() public {
         _deposit(lender, 1_000 ether);
         vault.deployIdle(1_000 ether);
