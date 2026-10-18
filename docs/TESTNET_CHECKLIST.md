@@ -6,7 +6,7 @@ Live product CA: `public/config.json` → `chain.vault` (`0x24B7…3e35`, `versi
 Status key: ✅ passed · ❌ failed (link the issue) · ⬜ not run yet.
 Anything that fails gets a GitHub issue; link it in the Notes column.
 
-Last run: 2026-10-17.
+Last run: 2026-10-18 (read-only, no keys). Full readout and tx links: [run 2026-10-18](./testnet-runs/2026-10-18.md).
 
 ## 1. Contracts (local)
 
@@ -25,27 +25,30 @@ record is a local `/tmp` file.
 
 | Flow | Expected | Status | Notes |
 | --- | --- | --- | --- |
-| `version()` on PROXY | `v3-lender-pool` | ⬜ | |
-| Senior `depositSenior` ≥ $25 | Pool shares minted, idle USDG up | ⬜ | |
-| Senior deposit < $25 | Reverts | ⬜ | |
-| Junior `depositJunior` with enough idle USDG | Position Active, 7-day timer starts | ⬜ | |
-| Junior deposit with no idle USDG | Position Idle until a senior deposit matches it | ⬜ | |
-| Gas refund | Paid only when the deposit matched, scaled to the match | ⬜ | |
-| Fee in (`MockFeePool.payFee` / `accrueLpFee`) | Fees accrue raw; split only at claim/exit/settle | ⬜ | |
-| `claimFees` | Maker waterfall: senior floor → treasury → senior perf → junior | ⬜ | |
+| `version()` on PROXY | `v3-lender-pool` | ✅ | Read 2026-10-18; impl `0x7BeE…778E` |
+| Senior `depositSenior` ≥ $25 | Pool shares minted, idle USDG up | ✅ | `0xb9eb…8450`: 100 USDG → 1e26 shares |
+| Senior deposit < $25 | Reverts | ✅ | Simulated (`eth_call`): `BelowMinDeposit`. No tx on chain. |
+| Junior `depositJunior` with enough idle USDG | Position Active, 7-day timer starts | ✅ | `0xa516…fe82` (#1) |
+| Junior deposit with no idle USDG | Position Idle until a senior deposit matches it | ✅ | #5 idle at `0x1209…4a9d`, matched by `0xed4d…b3e8` |
+| Gas refund | Paid only when the deposit matched, scaled to the match | ✅ | `0xed4d…b3e8`: 0.0001 ETH for a 100%-matched deposit. Partial-match scaling not exercised. |
+| Fee in (`MockFeePool.payFee` / `accrueLpFee`) | Fees accrue raw; split only at claim/exit/settle | ⬜ | No fees paid in yet (`totalUnsplitFees` 0) |
+| `claimFees` | Maker waterfall: senior floor → treasury → senior perf → junior | ⬜ | Needs a fee first; simulates `ZeroGross` today |
 | Early exit, Wallet USDG cover | `previewEarlyExit` → approve → `earlyExit(id, 0)` succeeds | ⬜ | |
 | Early exit, Idle Carry cover | No wallet approve needed | ⬜ | |
-| Early exit, SellShares (mode 2) | Testnet stub path completes | ⬜ | |
-| Settle after term | Backstop first, then junior; default IdleCarry; permissionless when no cover | ⬜ | |
-| Settle before term | Reverts `TermNotElapsed` | ⬜ | |
-| Senior instant withdraw | Works when idle covers it and queue is empty | ⬜ | |
-| Senior withdraw when matched | Enters FIFO queue; claimable after positions close | ⬜ | |
-| Auto-compound on | Reopens position; payout under $25 goes to wallet | ⬜ | |
-| `withdrawUnmatched` | Always to wallet, ignores auto-compound | ⬜ | |
-| Pause | Blocks new deposits; exits and withdrawals still work | ⬜ | |
-| Two lenders, one junior | Each lender's idle and share NAV stay correct | ⬜ | Repeat of the v2.5 #6 bug case |
+| Early exit, SellShares (mode 2) | Testnet stub path completes | ⬜ | `sellSharesRouter` is `0x0` on v3; set it first |
+| Settle after term | Backstop first, then junior; default IdleCarry; permissionless when no cover | ⬜ | v3 #1/#3/#5 mature 2026-10-19 02:35–02:39 UTC |
+| Settle before term | Reverts `TermNotElapsed` | ✅ | Simulated `settle(1)` from the junior: `TermNotElapsed`. No tx on chain. |
+| Senior instant withdraw | Works when idle covers it and queue is empty | ✅ | `0x3cf3…396b` (25 USDG) |
+| Senior withdraw when matched | Enters FIFO queue; claimable after positions close | ⬜ | Queue works (`0x405d…cc10` → `0x9e88…aa57`), but it was filled by a new deposit, not a closing position. Re-check after settle. |
+| Auto-compound on | Reopens position; payout under $25 goes to wallet | ⬜ | Enabled for the v3 junior; needs a settle/exit to test |
+| `withdrawUnmatched` | Always to wallet, ignores auto-compound | ✅ | `0x0958…e563` with auto-compound on: MSTR left, no new position |
+| Pause | Blocks new deposits; exits and withdrawals still work | ⬜ | Pause/unpause work (deploy + `0x6a23…7c`); blocking not tested. `paused()` = false now. |
+| Source verified on explorer | Proxy and impl show verified source | ❌ | Both unverified as of 2026-10-18 |
+| Two lenders, one junior | Each lender's idle and share NAV stay correct | ✅ | #3 funded by both lenders; shares read 215 + 150 = 365 = `totalSeniorAssets`. Re-check NAV after fees. |
 
 ## 3. Site against testnet
+
+Not run: needs a browser wallet. From the cloud env, `usecarry.io` redirects to `www.usecarry.io`, which is still blocked.
 
 | Check | Expected | Status | Notes |
 | --- | --- | --- | --- |
@@ -61,9 +64,9 @@ Positions #5, #6 and #7 live on the old PROXY `0xc801…72bd`. See [`SETTLE_WATC
 
 | Position | Settle after (UTC) | Status | Notes |
 | --- | --- | --- | --- |
-| #5 | 2026-10-17 03:37:51 | ✅ | Settled 2026-10-17 — [`0x8d8740…d41f`](https://explorer.testnet.chain.robinhood.com/tx/0x8d87401634c0b9315a946c1d8f1c89afd3befeb51b0a1cb759f63e0182f8d41f) |
-| #6 | 2026-10-18 02:07:41 | ✅ | Settled 2026-10-17 — [`0x5662ba…2322`](https://explorer.testnet.chain.robinhood.com/tx/0x5662ba2923c761fab819ba4eb6434d4fe941fc9f88b2bb02359865eeb22c2322) (backstop covered residual) |
-| #7 | 2026-10-18 02:40:38 | ✅ | Settled 2026-10-17 — [`0x380121…65f9`](https://explorer.testnet.chain.robinhood.com/tx/0x3801215495116f3dafa0fc6482b1708b7ab2a19ad2260f2c23fae1caa74365f9) |
+| #5 | 2026-10-17 03:37:51 | ✅ | Settled 2026-10-18 04:52 UTC — [`0x8d8740…d41f`](https://explorer.testnet.chain.robinhood.com/tx/0x8d87401634c0b9315a946c1d8f1c89afd3befeb51b0a1cb759f63e0182f8d41f) |
+| #6 | 2026-10-18 02:07:41 | ✅ | Settled 2026-10-18 04:59 UTC — [`0x5662ba…2322`](https://explorer.testnet.chain.robinhood.com/tx/0x5662ba2923c761fab819ba4eb6434d4fe941fc9f88b2bb02359865eeb22c2322) (backstop covered residual) |
+| #7 | 2026-10-18 02:40:38 | ✅ | Settled 2026-10-18 04:52 UTC — [`0x380121…65f9`](https://explorer.testnet.chain.robinhood.com/tx/0x3801215495116f3dafa0fc6482b1708b7ab2a19ad2260f2c23fae1caa74365f9) |
 
 ## 5. v3 maturity watch (live PROXY)
 
