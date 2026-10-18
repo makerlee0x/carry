@@ -80,15 +80,16 @@
     "earlyExitFloorAprPct": 4,
     "layer": "ui-display",
     "morphoRateSource": "steakhouse-native-supply",
-    "morphoRateLabel": "Steakhouse Morpho native supply (not Merkl)"
+    "morphoRateLabel": "Steakhouse Morpho native supply (not Merkl)",
+    "_rateNote": "morphoApyPct / earlyExitFloorAprPct are testnet display stubs, not a promised rate. Mainnet lender return is planned as Morpho yield (floating) + Carry's share of fees, with no fixed rate (issue #20, PR #21); these fields change with that rework."
   },
   "caps": {
     "launchTotalUsd": 25000,
-    "launchPerWalletUsd": 2500,
     "rampTotalUsd": 250000,
     "treasuryMinOfCapPct": 10,
     "tvlCapMultipleOfTreasury": 10,
-    "layer": "ui-display"
+    "layer": "ui-display",
+    "_note": "No per-wallet cap on any market (maker, 2026-10-18)."
   },
   "treasury": {
     "fundedByProtocolCut": true,
@@ -107,25 +108,23 @@
   "onChainToday": {
     "chainId": 46630,
     "vault": "LeveredLpVaultV2",
-    "proxy": "0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd",
-    "version": "v2.3-maker-clarifications",
-    "implementation": "0xCE9495200b095ee83e3f23fdb34bfAb58b997674",
+    "proxy": "0x24B799026AA7baa6856bCFD00c1Be1f583A83e35",
+    "version": "v3-lender-pool",
+    "implementation": "0x7BeED7F65A9D4aF4E67553d984800F6268a3778E",
+    "_note": "Live testnet implementation predates main: EIP-170 fit (#3), rolling positions (#16), the boost hook (#23) and CarryStrategy wiring (#21) are in code but not yet upgraded on the proxy.",
     "termDays": 7,
-    "morphoRatePct": 3.9,
-    "morphoRateCapPct": 5,
-    "morphoRateLockedAtMatch": true,
-    "earlyExitFloorAprPct": 3.9,
+    "morphoRateWad": "owner-set testnet stub (0.039e18), cap 5%",
+    "floatingRateIndex": true,
     "treasuryCutPct": 20,
     "seniorPerfCutPct": 20,
+    "lenderPool": "one USDG pool, internal non-transferable shares",
     "dualPool": false,
     "morphoSleeve": false,
-    "depositCapsEnforced": true,
-    "maxTotalUsdg": 25000,
-    "maxPerWalletUsdg": 2500,
-    "settleSellsJuniorMstr": "only-on-residual-shortfall-after-backstop",
-    "matchCapDefault": 25,
-    "timeWeightedSeniorYield": true,
-    "ownerBackstopWithdraw": true,
+    "maxTotalSeniorUsdg": 0,
+    "maxTotalJuniorUsdg": 25000,
+    "minDepositUsdg": 25,
+    "perWalletCap": false,
+    "supersededV25Proxy": "0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd",
     "layer": "on-chain"
   }
 }

@@ -19,7 +19,7 @@ This repo is the **working Carry app + contracts**:
 | --- | --- |
 | LeveredLpVault (**PROXY** / product CA) | [`0x24B799026AA7baa6856bCFD00c1Be1f583A83e35`](https://explorer.testnet.chain.robinhood.com/address/0x24B799026AA7baa6856bCFD00c1Be1f583A83e35) |
 | Implementation (`version()` = **`v3-lender-pool`**) | [`0x7BeED7F65A9D4aF4E67553d984800F6268a3778E`](https://explorer.testnet.chain.robinhood.com/address/0x7BeED7F65A9D4aF4E67553d984800F6268a3778E) |
-| CarryMath library | `0x98574A1719E647775BE39Ec713B657c2CF27Adc5` |
+| Linked libraries (CarryMath / CarryPool / CarryCover) | `0x86b2…9344` / `0xf1d5…dc07` / `0x99f1…1ebd` |
 | mockMSTR | `0x762019309B536bbb89577422FaaFBeC9659f8728` |
 | mockUSDG | `0x25030Bff74764aD72b912276a603717DB1C00644` |
 | v2.5 PROXY (**superseded**; settle-watch #5/#6/#7 remain) | `0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd` |
@@ -27,13 +27,15 @@ This repo is the **working Carry app + contracts**:
 
 Upgradeability: **UUPS**. v3 is a fresh PROXY (v2.5 was not upgraded in place). UI money paths use `public/config.json` → `chain.vault` (PROXY).
 
+**`main` is ahead of the live implementation.** The proxy still runs the original v3 impl. Merged since and not yet upgraded on testnet: the EIP-170 fit (#3, runtime now ~24.4 KB), rolling positions with a 48h grace settle for underwater ones (#16), and the STRATEGY boost read from a separate `StrategyBoostHook` (#23). See [`docs/ACCOUNTING_V3.md`](./docs/ACCOUNTING_V3.md).
+
 ### Live accounting (v3)
 
 - One lender pool (`totalSeniorAssets`) with non-transferable internal shares; senior yield compounds into the pool
 - Lender withdraw instant when idle USDG allows, else FIFO queue + `claimWithdraw()`
-- Fee split at `claimFees` / `earlyExit` / `settle`: Morpho-rate floor → 20% treasury (Boosted tiers 15/10/5%) → up to 20% senior perf → junior
-- Floating `rateIndex` (owner-set `morphoRateWad`, ≤5%); interest stops at maturity
-- Min deposit / match **$25**; senior pool uncapped; junior market **$25k**; **no per-wallet cap**
+- Fee split at `claimFees` / `earlyExit` / `settle`: Morpho-rate floor → 20% treasury (Boosted Level I-V via `boostHook`, placeholder 17.5/16.25/13.75/10/5%) → up to 20% senior perf → junior
+- Floating `rateIndex` driven by an owner-set testnet stub (`morphoRateWad`, ≤5%). This is not a promised rate: the mainnet lender return is being reworked to Morpho yield + Carry's share of fees with no fixed rate (issue #20, PR #21)
+- Min deposit / match **$25**; senior pool uncapped; junior market **$25k**; no per-wallet cap on any market
 - Auto-compound; junior `gasCredit`; idle Morpho yield display-only on testnet
 
 Details: [`docs/ACCOUNTING_V3.md`](./docs/ACCOUNTING_V3.md) · settle watch: [`docs/SETTLE_WATCH.md`](./docs/SETTLE_WATCH.md) · security: [`docs/SECURITY_V3.md`](./docs/SECURITY_V3.md).
@@ -99,5 +101,5 @@ Production marketing/app: **usecarry.io**.
 - Pages use hash routing (`#home`, `#markets`, `#dashboard`, `#deposit`, …).
 - Product position labels: **Idle / Active / Boosted / Closed** (not Open/Settled).
 - `public/index.html` is a compiled bundle; live wiring is via `config.json` + `js/carry-vault.js` / `carry-chain.js`.
-- DualPool / Morpho sleeve / live STRATEGY token wiring are **not** on testnet 46630 (Morpho rate and Idle USDG APY are config stubs; Boosted is an on-chain stake-tier stub).
+- DualPool / Morpho sleeve / live STRATEGY token wiring are **not** on testnet 46630 (Morpho rate and Idle USDG APY are config stubs; on `main`, Boosted reads a `StrategyBoostHook`, none set on testnet yet).
 - Disclaimers are placeholders pending legal review.

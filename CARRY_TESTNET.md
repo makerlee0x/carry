@@ -48,16 +48,54 @@ Script does **not** unpause, seed user funds, or deploy a hook. Refuses chain id
 
 ---
 
-## Product vault v2.5 (UUPS) — current CA
+## Product vault v3 (UUPS) — current CA
 
 **Product CA = PROXY** (future logic upgrades keep this address).  
-`version()` = **`v2.5-funder-idle`**.  
+`version()` = **`v3-lender-pool`**. Deployed fresh by `contracts/script/DeployCarryV3.s.sol` (v2.5 was not upgraded in place).  
+Owner / upgrade authority: [`0xcA44F2dbB2D43b93b39F01B88E0f0e2966983c57`](https://explorer.testnet.chain.robinhood.com/address/0xcA44F2dbB2D43b93b39F01B88E0f0e2966983c57)  
+Security notes: [`docs/SECURITY_V3.md`](./docs/SECURITY_V3.md). Accounting: [`docs/ACCOUNTING_V3.md`](./docs/ACCOUNTING_V3.md). Maker waterfall: [`docs/MAKER_FEE_WATERFALL.md`](./docs/MAKER_FEE_WATERFALL.md). Latest on-chain pass: [`docs/testnet-runs/`](./docs/testnet-runs/).
+
+| Name | Address | Explorer |
+| --- | --- | --- |
+| **vault (PROXY / product CA)** | `0x24B799026AA7baa6856bCFD00c1Be1f583A83e35` | [contract](https://explorer.testnet.chain.robinhood.com/address/0x24B799026AA7baa6856bCFD00c1Be1f583A83e35?tab=contract) |
+| implementation (`v3-lender-pool`) | `0x7BeED7F65A9D4aF4E67553d984800F6268a3778E` | [contract](https://explorer.testnet.chain.robinhood.com/address/0x7BeED7F65A9D4aF4E67553d984800F6268a3778E?tab=contract) |
+| CarryMath library | `0x86b2f56e58c38f19559f28e1463f2dcac1c59344` | [contract](https://explorer.testnet.chain.robinhood.com/address/0x86b2f56e58c38f19559f28e1463f2dcac1c59344?tab=contract) |
+| CarryPool library | `0xf1d5cb8c25bc1b2ed147cb5f2f63ebfacddbdc07` | [contract](https://explorer.testnet.chain.robinhood.com/address/0xf1d5cb8c25bc1b2ed147cb5f2f63ebfacddbdc07?tab=contract) |
+| CarryCover library | `0x99f1702044603df846a038d4c1fb8563a57e1ebd` | [contract](https://explorer.testnet.chain.robinhood.com/address/0x99f1702044603df846a038d4c1fb8563a57e1ebd?tab=contract) |
+| mockMstr (reused) | `0x762019309B536bbb89577422FaaFBeC9659f8728` | [verified](https://explorer.testnet.chain.robinhood.com/address/0x762019309B536bbb89577422FaaFBeC9659f8728?tab=contract) |
+| mockUsdg (reused) | `0x25030Bff74764aD72b912276a603717DB1C00644` | [verified](https://explorer.testnet.chain.robinhood.com/address/0x25030Bff74764aD72b912276a603717DB1C00644?tab=contract) |
+| mockOracle (reused) | `0xc74Af7E23A2B4b46B5Fe05E5c7c5ec0BB5dbc5B7` | [verified](https://explorer.testnet.chain.robinhood.com/address/0xc74Af7E23A2B4b46B5Fe05E5c7c5ec0BB5dbc5B7?tab=contract) |
+| mockFeePool (reused) | `0xa4122524aD97Aab05cAC7F99c04Cd060D02F0771` | [verified](https://explorer.testnet.chain.robinhood.com/address/0xa4122524aD97Aab05cAC7F99c04Cd060D02F0771?tab=contract) |
+
+| Step | Tx |
+| --- | --- |
+| implementation | [`0x540dea9676b190d96e6c6b836a4a8f28a8ce7620b8d1e099620d00ad7cc42992`](https://explorer.testnet.chain.robinhood.com/tx/0x540dea9676b190d96e6c6b836a4a8f28a8ce7620b8d1e099620d00ad7cc42992) |
+| product proxy | [`0x2d635a365a73a8624e11b79aeebdea513855af5a246c1423b0d5fc58505fa695`](https://explorer.testnet.chain.robinhood.com/tx/0x2d635a365a73a8624e11b79aeebdea513855af5a246c1423b0d5fc58505fa695) |
+| caps, min deposit, gas refund, `unpause` | see [`docs/testnet-runs/2026-10-18.md`](./docs/testnet-runs/2026-10-18.md) |
+
+`public/config.json` → `chain.vault` = PROXY, `chain.vaultImplementation` = `0x7BeE…778E`. UI money paths point here.
+
+**Code on `main` is ahead of this implementation.** Merged and not yet upgraded on testnet: EIP-170 fit (#3), rolling positions with a 48h grace settle for underwater ones (#16), `StrategyBoostHook` (#23), and `CarryStrategy` wiring for idle USDG in Morpho (#21). Storage layout stays compatible, so the next step is an owner-signed `upgradeToAndCall` on this PROXY (`contracts/script/UpgradeCarryVault.s.sol`).
+
+### Confirm live bytecode
+
+```bash
+cast call 0x24B799026AA7baa6856bCFD00c1Be1f583A83e35 "version()(string)" \
+  --rpc-url https://rpc.testnet.chain.robinhood.com
+# => "v3-lender-pool"
+```
+
+---
+
+## Superseded vault v2.5 (UUPS) — history only
+
+**Not the product CA.** `version()` = **`v2.5-funder-idle`**. Its settle-watch positions #5/#6/#7 have been settled ([`docs/SETTLE_WATCH.md`](./docs/SETTLE_WATCH.md)).  
 Owner / upgrade authority: [`0xcA44F2dbB2D43b93b39F01B88E0f0e2966983c57`](https://explorer.testnet.chain.robinhood.com/address/0xcA44F2dbB2D43b93b39F01B88E0f0e2966983c57)  
 Security notes: [`docs/SECURITY_V2.md`](./docs/SECURITY_V2.md). Accounting: [`docs/ACCOUNTING_V25.md`](./docs/ACCOUNTING_V25.md). Maker waterfall: [`docs/MAKER_FEE_WATERFALL.md`](./docs/MAKER_FEE_WATERFALL.md).
 
 | Name | Address | Explorer |
 | --- | --- | --- |
-| **vault (PROXY / product CA)** | `0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd` | [Sourcify match](https://explorer.testnet.chain.robinhood.com/address/0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd?tab=contract) |
+| vault v2.5 (PROXY, superseded) | `0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd` | [Sourcify match](https://explorer.testnet.chain.robinhood.com/address/0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd?tab=contract) |
 | implementation (`v2.5-funder-idle`) | `0xe498F43ED10a37E22Fe046A3FDAAFD4E9080d0e8` | [contract](https://explorer.testnet.chain.robinhood.com/address/0xe498F43ED10a37E22Fe046A3FDAAFD4E9080d0e8?tab=contract) |
 | CarryBook library | `0x2988DFc48BE4AB47B40Ad151f1F213619cdB0794` | [contract](https://explorer.testnet.chain.robinhood.com/address/0x2988DFc48BE4AB47B40Ad151f1F213619cdB0794?tab=contract) |
 | CarryMath library | `0x98574A1719E647775BE39Ec713B657c2CF27Adc5` | [contract](https://explorer.testnet.chain.robinhood.com/address/0x98574A1719E647775BE39Ec713B657c2CF27Adc5?tab=contract) |
@@ -74,9 +112,7 @@ Security notes: [`docs/SECURITY_V2.md`](./docs/SECURITY_V2.md). Accounting: [`do
 | `migrateAccountingV25` | [`0x9f90d8d55932b39948b0eb8a98f6f49d88455adb9a44284497782b71418b1602`](https://explorer.testnet.chain.robinhood.com/tx/0x9f90d8d55932b39948b0eb8a98f6f49d88455adb9a44284497782b71418b1602) |
 | product proxy (original create) | [`0x457a1dc042a52f494d4b9a913ec8ad7d3348e02ef0825088dafc51cb232d0355`](https://explorer.testnet.chain.robinhood.com/tx/0x457a1dc042a52f494d4b9a913ec8ad7d3348e02ef0825088dafc51cb232d0355) |
 
-`public/config.json` → `chain.vault` = PROXY, `chain.vaultImplementation` = `0xe498…d0e8`. UI money paths (`claimFees`, cover-mode `earlyExit`, settle) point here.
-
-### Confirm live bytecode
+`public/config.json` keeps these as `chain.supersededV25Vault` / `chain.supersededV25Implementation`.
 
 ```bash
 cast call 0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd "version()(string)" \
@@ -163,23 +199,13 @@ Then owner calls `unpause()` when ready for deposits. Mint mock tokens via `Mock
 
 ---
 
-## v2.5 status
+## v3 status
 
-UUPS vault with Maker waterfall, **v2.5 funder-idle accounting**, Boosted STRATEGY stake **tiers** (15/10/5%), partial match, early/settle cover paths, early-exit cover revert, junior `gasCredit` + auto-refund, SellShares AMM stub (`sellSharesRouter=0` on testnet), auto-compound, $25 min deposit, $25k market totals, **no per-wallet cap**, and settle default **IdleCarry** is **live** at the PROXY above. `public/config.json` points at PROXY with `product.onChain.* = true`. Idle USDG Morpho on testnet remains a rate stub (no ERC-4626 sleeve). Do **not** advertise a promised APY.
+The live PROXY runs the v3 lender pool: one USDG pool with internal non-transferable shares, instant lender withdraw when idle USDG allows (else FIFO queue + `claimWithdraw()`), Maker waterfall at `claimFees` / `earlyExit` / `settle`, early and settle cover paths, junior `gasCredit` (refund only on match), SellShares stub (`sellSharesRouter=0` on testnet), auto-compound, $25 min deposit/match, senior pool uncapped, junior market $25k, and **no per-wallet cap on any market**.
 
-Note: v2.5 implementation runtime size (~32KB) exceeds EIP-170 (24KB). Robinhood testnet accepted the CREATE; **mainnet must shrink** before production deploy. See [`docs/SECURITY_V2.md`](./docs/SECURITY_V2.md).
+The lender rate on testnet is an owner-set stub (`morphoRateWad`, ≤5%) driving a floating rate index. It is not a promised APY. The mainnet lender return is being reworked to Morpho yield + Carry's share of fees with no fixed rate (issue #20, PR #21). Idle USDG Morpho on testnet is display-only (no ERC-4626 sleeve yet).
 
-### Live settle watch / multi-lender case (do not early-exit)
-
-Fully matched **Active** positions on PROXY `0xc801…72bd` (impl `v2.5-funder-idle` / `0xe498…d0e8`):
-
-- **#5** — 1 mMSTR / 100 mUSDG + 1 mUSDG fees; settle after **2026-10-17 03:37:51 UTC**
-- **#6** — multi-lender idle case (A matched / B idle); settle after **2026-10-18 02:07:41 UTC**
-
-Details + tx links + Central-time windows: [`docs/SETTLE_WATCH.md`](./docs/SETTLE_WATCH.md).  
-Accounting rewrite / multi-lender idle fix: [`docs/ACCOUNTING_V25.md`](./docs/ACCOUNTING_V25.md).
-
-No separate multi-wallet retest results file is checked into this repo; link those two docs for the live multi-lender scenario.
+Size: the live impl (~29.6KB) was deployed with the size limit disabled; on `main` the vault is ~24.4KB, under EIP-170.
 
 ### Wallet early-exit path (E2E)
 

@@ -157,41 +157,58 @@ Vault — Contract Overview</h1>
 <p>Grant and audit reference for <code>LeveredLpVault</code> on
 <strong>Robinhood Chain Testnet (chain id 46630)</strong>.</p>
 <p><strong>Product vault (PROXY):</strong> <a
-href="https://explorer.testnet.chain.robinhood.com/address/0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd?tab=contract"><code>0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd</code></a>
+href="https://explorer.testnet.chain.robinhood.com/address/0x24B799026AA7baa6856bCFD00c1Be1f583A83e35?tab=contract"><code>0x24B799026AA7baa6856bCFD00c1Be1f583A83e35</code></a>
 (UUPS)<br />
 <strong>Implementation:</strong> <a
-href="https://explorer.testnet.chain.robinhood.com/address/0xe498F43ED10a37E22Fe046A3FDAAFD4E9080d0e8?tab=contract"><code>0xe498F43ED10a37E22Fe046A3FDAAFD4E9080d0e8</code></a>
+href="https://explorer.testnet.chain.robinhood.com/address/0x7BeED7F65A9D4aF4E67553d984800F6268a3778E?tab=contract"><code>0x7BeED7F65A9D4aF4E67553d984800F6268a3778E</code></a>
 (<code>version()</code> =
-<strong><code>v2.5-funder-idle</code></strong>)<br />
+<strong><code>v3-lender-pool</code></strong>)<br />
 <strong>Site:</strong> <a
 href="https://usecarry.io">usecarry.io</a><br />
+<strong>Superseded v2.5 PROXY (history only):</strong>
+<code>0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd</code><br />
 <strong>v1 grant/history reference (not in use):</strong> <a
 href="https://explorer.testnet.chain.robinhood.com/address/0x72A053120f03B10c5506d2325f92F59B0FfC36c8?tab=contract"><code>0x72A053120f03B10c5506d2325f92F59B0FfC36c8</code></a></p>
 <p>Full pack: <a
 href="../../CARRY_CONTRACT.md"><code>../../CARRY_CONTRACT.md</code></a>.
 Accounting: <a
-href="../../docs/ACCOUNTING_V25.md"><code>../../docs/ACCOUNTING_V25.md</code></a>.</p>
+href="../../docs/ACCOUNTING_V3.md"><code>../../docs/ACCOUNTING_V3.md</code></a>.</p>
+<p>This overview describes the source on <code>main</code>. The live
+implementation predates four merged changes: the EIP-170 fit (#3),
+rolling positions (#16), <code>StrategyBoostHook</code> (#23) and
+<code>CarryStrategy</code> idle-USDG wiring (#21). They reach testnet
+with the next owner-signed upgrade.</p>
+<p><strong>Lender rate note.</strong> The Morpho rate here is an
+owner-set testnet stub, not a promised APY. The mainnet lender return is
+being reworked to Morpho yield (floating) + Carry’s share of fees, with
+no fixed rate or floor (issue #20, PR #21).</p>
 <hr />
 <h2 id="overview">1. Overview</h2>
 <p>Carry pairs a stock-token holder (<strong>junior</strong>) with a
 USDG lender (<strong>senior</strong>) into a <strong>50/50
-book</strong>: junior posts MSTR, senior posts matching USDG. Equity
-tracks the stock while the book accrues LP fees over a fixed term. This
-vault is the <strong>custody and accounting layer</strong>.</p>
+book</strong>: junior posts MSTR, lenders supply matching USDG from a
+shared pool. Equity tracks the stock while the book accrues LP fees.
+This vault is the <strong>custody and accounting layer</strong>.</p>
 <ul>
-<li>Junior deposits MSTR → <strong>Idle</strong> until USDG matches,
-then <strong>Active</strong> for <strong>7 days</strong>. Product
-states: Idle / Active / Boosted / Closed.</li>
-<li>Senior accrual = locked Morpho native supply rate (stub
-<strong>3.9%</strong>, owner cap <strong>≤5%</strong>) × elapsed.</li>
+<li>Junior deposits MSTR → <strong>Idle</strong> until pool USDG
+matches, then <strong>Active</strong>. Product states: Idle / Active /
+Boosted / Closed.</li>
+<li>Term is <strong>7 days</strong>; at term a position rolls rather
+than closing, and only the junior settles a healthy one. A position more
+than 32% below entry stops rolling; 48h after the last term boundary
+anyone can settle it.</li>
+<li>Senior accrual = principal × change in a floating rate index driven
+by <code>morphoRateWad</code> (testnet stub, cap
+<strong>≤5%</strong>).</li>
 <li>Fee waterfall runs only at <code>claimFees</code> /
 <code>earlyExit</code> / <code>settle</code> (no cut on fee-in).</li>
-<li><strong>Early exit</strong> cover: Wallet / IdleCarry / SellShares
-(junior only, NO backstop). <strong>Settle:</strong> backstop first,
-then junior Wallet / IdleCarry / SellShares; <strong>default =
-IdleCarry</strong>.</li>
-<li>Lenders withdraw <strong>their own idle</strong> USDG anytime;
-matched USDG returns to that lender’s idle on close.</li>
+<li><strong>Early exit</strong> (first term only) cover: Wallet /
+IdleCarry / SellShares (junior only, NO backstop).
+<strong>Settle:</strong> backstop first, then junior cover;
+<strong>default = IdleCarry</strong>.</li>
+<li>Lenders hold shares in <strong>one USDG pool</strong>. Withdraw is
+instant when idle USDG covers it, else FIFO queue +
+<code>claimWithdraw()</code>.</li>
 </ul>
 <h3 id="contract-snapshot">Contract snapshot</h3>
 <table>
@@ -200,52 +217,59 @@ matched USDG returns to that lender’s idle on close.</li>
 <col style="width: 50%" />
 </colgroup>
 <thead>
-<tr>
+<tr class="header">
 <th>Item</th>
 <th>Value</th>
 </tr>
 </thead>
 <tbody>
-<tr>
+<tr class="odd">
 <td>Contract</td>
 <td><code>LeveredLpVault</code> / <code>LeveredLpVaultV2</code> (UUPS
 PROXY product CA)</td>
 </tr>
-<tr>
+<tr class="even">
 <td>Tokens / oracle</td>
 <td>Immutable <code>mstr</code>, <code>usdg</code>; immutable
 <code>IPriceOracle</code></td>
 </tr>
-<tr>
+<tr class="odd">
 <td>Term / Morpho rate</td>
 <td>Immutable <code>term</code> ≤ 7 days; <code>morphoRateWad</code> ≤
-5%, locked at first match</td>
+5% (testnet stub) drives a floating <code>rateIndex</code></td>
 </tr>
-<tr>
+<tr class="even">
 <td>Fee cuts</td>
-<td>Treasury base 20% + Boosted STRATEGY tiers (15/10/5%) + senior perf
-20%</td>
+<td>Treasury base 20% (Boosted cut from <code>boostHook</code>, capped
+at base) + senior perf 20%</td>
 </tr>
-<tr>
+<tr class="odd">
 <td>Accounting</td>
-<td>Per-lender idle; FIFO funders; yield to position funders</td>
+<td>One lender pool (<code>totalSeniorAssets</code>), non-transferable
+internal shares; yield compounds into the pool</td>
 </tr>
-<tr>
+<tr class="even">
 <td>Caps</td>
-<td>Min $25; market $25k senior/junior; no per-wallet cap</td>
+<td>Min $25; senior pool uncapped; junior market $25k; <strong>no
+per-wallet cap</strong> on any market</td>
 </tr>
-<tr>
+<tr class="odd">
 <td>Unpaid accrual</td>
 <td>Carried on position when fees &lt; accrual</td>
 </tr>
-<tr>
+<tr class="even">
 <td>Pause / reentrancy</td>
 <td>Owner pause gates deposits; <code>nonReentrant</code> on value
 paths</td>
 </tr>
-<tr>
+<tr class="odd">
 <td>External LP</td>
 <td>No PoolManager approvals; <code>joinPool</code> reverts</td>
+</tr>
+<tr class="even">
+<td>Runtime size</td>
+<td><code>main</code> ~24.4KB (under EIP-170); live impl ~29.6KB
+(testnet only)</td>
 </tr>
 </tbody>
 </table>
@@ -260,40 +284,49 @@ equity vs an unlevered 50/50 √p comparison without moving inventory.</p>
 <col style="width: 33%" />
 </colgroup>
 <thead>
-<tr>
+<tr class="header">
 <th>Actor</th>
 <th>Role</th>
 <th>Key actions</th>
 </tr>
 </thead>
 <tbody>
-<tr>
+<tr class="odd">
 <td><strong>Junior</strong> (stock depositor)</td>
 <td>Posts MSTR</td>
 <td><code>depositJunior</code>, <code>withdrawUnmatched</code>,
-<code>earlyExit</code>, gasCredit, auto-compound</td>
+<code>earlyExit</code>, <code>claimFees</code>, <code>settle</code>,
+gasCredit, auto-compound</td>
 </tr>
-<tr>
+<tr class="even">
 <td><strong>Senior</strong> (lender)</td>
-<td>Posts USDG</td>
-<td><code>depositSenior</code>, <code>withdrawSenior</code> (own idle +
-claims), <code>seniorEarlyExit</code></td>
+<td>Posts USDG into the pool</td>
+<td><code>depositSenior</code>, <code>withdrawSenior</code> (instant or
+queued), <code>claimWithdraw</code></td>
 </tr>
-<tr>
+<tr class="odd">
 <td><strong>Owner / protocol</strong></td>
 <td>Pause + upgrade + knobs</td>
-<td><code>pause</code>, <code>unpause</code>, UUPS upgrade, caps/tiers;
-cannot pull MSTR/USDG principal</td>
+<td><code>pause</code>, <code>unpause</code>, UUPS upgrade, caps,
+<code>setBoostHook</code>, <code>setMorphoRate</code>; cannot pull
+MSTR/USDG principal</td>
 </tr>
-<tr>
+<tr class="even">
+<td><strong>Boost hook</strong></td>
+<td>Maps STRATEGY stake to a treasury cut</td>
+<td><code>StrategyBoostHook.treasuryCutOf</code> (Level I-V, placeholder
+17.5/16.25/13.75/10/5%)</td>
+</tr>
+<tr class="odd">
 <td><strong>Fee source</strong></td>
 <td>Accrues LP fees</td>
 <td><code>accrueLpFee</code> / <code>MockFeePool.payFee</code></td>
 </tr>
-<tr>
+<tr class="even">
 <td><strong>Anyone</strong></td>
 <td>Keepers</td>
-<td><code>settle</code> after term when residual cover is zero</td>
+<td><code>settle</code> a position that stopped rolling, after the 48h
+grace</td>
 </tr>
 </tbody>
 </table>
@@ -304,18 +337,20 @@ cannot pull MSTR/USDG principal</td>
 <code>depositJunior(mstrAmount)</code>. Partial match OK; residual stays
 Idle.</li>
 <li><strong>Lend USDG</strong> — <code>depositSenior(amount)</code>.
-FIFO-matches Idle juniors; records funder slices; first match locks
-rate/cut and starts the term clock.</li>
-<li><strong>Active</strong> — Timer = <code>term</code> from first
-match. Accrual uses locked Morpho rate (≤5%).</li>
+Mints pool shares; fills the withdraw queue, then FIFO-matches Idle
+juniors. First match snapshots the rate index, locks the treasury cut
+and starts the term clock.</li>
+<li><strong>Active</strong> — Accrual follows the floating rate index.
+At term the position rolls.</li>
 <li><strong>Fee accrual</strong> — <code>accrueLpFee</code> pulls raw
 USDG onto the position (no cut on fee-in).</li>
 <li><strong>claimFees / early exit / settle</strong> — Maker waterfall
 only here. Early exit: junior cover only (NO backstop). Settle: backstop
 first, then junior cover; default IdleCarry.</li>
-<li><strong>Lender exit</strong> —
-<code>freePrincipal = seniorIdle</code> (own idle only); matched size
-returns to that lender’s idle on close.</li>
+<li><strong>Lender exit</strong> — <code>withdrawSenior(assets)</code>
+instant when idle covers and the queue is empty; else queued, and
+<code>claimWithdraw()</code> pays the locked shares’ value once
+filled.</li>
 </ol>
 <hr />
 <h2 id="function-reference">4. Function reference</h2>
@@ -328,7 +363,7 @@ returns to that lender’s idle on close.</li>
 <col style="width: 25%" />
 </colgroup>
 <thead>
-<tr>
+<tr class="header">
 <th>Function</th>
 <th>Who</th>
 <th>Preconditions</th>
@@ -336,24 +371,25 @@ returns to that lender’s idle on close.</li>
 </tr>
 </thead>
 <tbody>
-<tr>
+<tr class="odd">
 <td><code>pause()</code> / <code>unpause()</code></td>
 <td>owner</td>
 <td>—</td>
 <td>Gates new deposits</td>
 </tr>
-<tr>
+<tr class="even">
 <td><code>rescueToken(token,to,amount)</code></td>
 <td>owner</td>
 <td><code>token ∉ {mstr,usdg}</code></td>
 <td>Transfers non-principal token</td>
 </tr>
-<tr>
-<td>Caps / tiers / rate</td>
+<tr class="odd">
+<td>Caps / boost / rate</td>
 <td>owner</td>
 <td>—</td>
 <td><code>setDepositCaps</code>, <code>setMinDepositUsdg</code>,
-<code>setBoostTiers</code>, <code>setMorphoRate</code>, …</td>
+<code>setBoostHook</code>, <code>setMorphoRate</code>,
+<code>setTreasuryCuts</code>, …</td>
 </tr>
 </tbody>
 </table>
@@ -366,7 +402,7 @@ returns to that lender’s idle on close.</li>
 <col style="width: 25%" />
 </colgroup>
 <thead>
-<tr>
+<tr class="header">
 <th>Function</th>
 <th>Who</th>
 <th>Preconditions</th>
@@ -374,22 +410,22 @@ returns to that lender’s idle on close.</li>
 </tr>
 </thead>
 <tbody>
-<tr>
+<tr class="odd">
 <td><code>depositJunior(mstrAmount)</code></td>
 <td>anyone (when unpaused)</td>
 <td>min notional</td>
 <td>Pulls MSTR; enqueues Idle; tries match</td>
 </tr>
-<tr>
+<tr class="even">
 <td><code>withdrawUnmatched(positionId)</code></td>
 <td>position owner</td>
 <td>Idle</td>
 <td>Returns all MSTR; gasCredit refund</td>
 </tr>
-<tr>
+<tr class="odd">
 <td><code>earlyExit(positionId[, mode])</code></td>
 <td>position owner</td>
-<td>Matched, before term</td>
+<td>Matched, first term</td>
 <td>Maker waterfall; cover Wallet / Idle / SellShares</td>
 </tr>
 </tbody>
@@ -403,7 +439,7 @@ returns to that lender’s idle on close.</li>
 <col style="width: 25%" />
 </colgroup>
 <thead>
-<tr>
+<tr class="header">
 <th>Function</th>
 <th>Who</th>
 <th>Preconditions</th>
@@ -411,17 +447,23 @@ returns to that lender’s idle on close.</li>
 </tr>
 </thead>
 <tbody>
-<tr>
+<tr class="odd">
 <td><code>depositSenior(amount)</code></td>
 <td>anyone (when unpaused)</td>
 <td>min</td>
-<td>Credits own idle; FIFO match</td>
+<td>Mints pool shares; fills queue; FIFO match</td>
 </tr>
-<tr>
-<td><code>withdrawSenior(principalAmount)</code></td>
-<td>senior</td>
-<td><code>≤ freePrincipal</code> (own idle)</td>
-<td>Idle principal + claimable yield/MSTR</td>
+<tr class="even">
+<td><code>withdrawSenior(assets)</code></td>
+<td>lender</td>
+<td><code>≤</code> free share value</td>
+<td>Instant if idle covers and queue empty; else queued</td>
+</tr>
+<tr class="odd">
+<td><code>claimWithdraw()</code></td>
+<td>lender</td>
+<td>queued request filled</td>
+<td>Pays filled USDG</td>
 </tr>
 </tbody>
 </table>
@@ -434,7 +476,7 @@ returns to that lender’s idle on close.</li>
 <col style="width: 25%" />
 </colgroup>
 <thead>
-<tr>
+<tr class="header">
 <th>Function</th>
 <th>Who</th>
 <th>Preconditions</th>
@@ -442,27 +484,28 @@ returns to that lender’s idle on close.</li>
 </tr>
 </thead>
 <tbody>
-<tr>
+<tr class="odd">
 <td><code>accrueLpFee</code> / <code>claimFees</code> /
 <code>fundBackstop</code></td>
 <td>see full pack</td>
 <td>—</td>
 <td>Raw fee-in; waterfall on claim</td>
 </tr>
-<tr>
+<tr class="even">
 <td><code>settle(positionId[, mode])</code></td>
-<td>anyone / junior</td>
+<td>junior; anyone once a position stopped rolling</td>
 <td>term elapsed</td>
-<td>Default IdleCarry; no MSTR sold unless SellShares</td>
+<td>Default IdleCarry</td>
 </tr>
-<tr>
-<td><code>seniorIdle</code> / <code>freePrincipal</code> /
+<tr class="odd">
+<td><code>freePrincipal</code> / <code>convertToAssets</code> /
+<code>claimableWithdraw</code> / <code>currentRateIndex</code> /
 <code>isMatched</code> / <code>mark</code></td>
 <td>view</td>
 <td>—</td>
-<td>Per-lender idle / MTM</td>
+<td>Pool, queue, rate, MTM</td>
 </tr>
-<tr>
+<tr class="even">
 <td><code>joinPool(bytes)</code></td>
 <td>anyone</td>
 <td>—</td>
@@ -473,15 +516,16 @@ returns to that lender’s idle on close.</li>
 <hr />
 <h2 id="accounting">5. Accounting</h2>
 <pre><code>accrual = unpaidSeniorAccrual
-        + seniorPrincipal * morphoRateLocked * elapsed / (WAD * YEAR)</code></pre>
+        + seniorPrincipal * (rateIndexNow - rateIndexSnapshot) / WAD</code></pre>
 <p>Waterfall at claim/exit/settle:</p>
 <pre><code>seniorFloor = min(gross, accrual)
-treasury    = min(left, gross × cut)   // base 20%; Boosted tiers 15/10/5%
+treasury    = min(left, gross × cut)   // base 20%; Boosted cut from boostHook, capped at base
 seniorPerf  = min(left, gross × 0.20)
 junior      = remainder</code></pre>
-<p>v2.5: per-lender idle, FIFO funders, yield to position funders only.
-See <a
-href="../../docs/ACCOUNTING_V25.md"><code>ACCOUNTING_V25.md</code></a>.</p>
+<p>Senior USDG goes to the lender pool (share price rises). See <a
+href="../../docs/ACCOUNTING_V3.md"><code>ACCOUNTING_V3.md</code></a>.
+The <code>seniorFloor</code> / rate-index part is what the planned
+no-fixed-rate rework removes.</p>
 <hr />
 <h2 id="security-model">6. Security model</h2>
 <table>
@@ -490,40 +534,46 @@ href="../../docs/ACCOUNTING_V25.md"><code>ACCOUNTING_V25.md</code></a>.</p>
 <col style="width: 50%" />
 </colgroup>
 <thead>
-<tr>
+<tr class="header">
 <th>Control</th>
 <th>Behavior</th>
 </tr>
 </thead>
 <tbody>
-<tr>
+<tr class="odd">
 <td>Pause</td>
 <td>Blocks deposits only; exits/settle/withdraw remain</td>
 </tr>
-<tr>
+<tr class="even">
 <td>Owner cannot</td>
 <td>Pull MSTR/USDG principal via rescue</td>
 </tr>
-<tr>
+<tr class="odd">
 <td>Reentrancy</td>
 <td><code>nonReentrant</code> on value paths</td>
 </tr>
-<tr>
+<tr class="even">
 <td>Fee-on-transfer</td>
 <td>Rejected on pulls</td>
 </tr>
-<tr>
+<tr class="odd">
 <td>External LP</td>
 <td>Forbidden</td>
 </tr>
-<tr>
+<tr class="even">
+<td>Boost hook</td>
+<td>Result capped at base cut; a bad hook can only lower Carry’s
+take</td>
+</tr>
+<tr class="odd">
 <td>Impl size</td>
-<td>~32KB exceeds EIP-170; OK on RH testnet; shrink before mainnet</td>
+<td><code>main</code> under EIP-170; live testnet impl over it until
+upgraded</td>
 </tr>
 </tbody>
 </table>
 <p>Details: <a
-href="../../docs/SECURITY_V2.md"><code>SECURITY_V2.md</code></a>.</p>
+href="../../docs/SECURITY_V3.md"><code>SECURITY_V3.md</code></a>.</p>
 <hr />
 <h2 id="carry-ui-contract-mapping">7. Carry UI → contract mapping</h2>
 <table>
@@ -533,43 +583,44 @@ href="../../docs/SECURITY_V2.md"><code>SECURITY_V2.md</code></a>.</p>
 <col style="width: 33%" />
 </colgroup>
 <thead>
-<tr>
+<tr class="header">
 <th>Carry screen / control</th>
 <th>Vault call</th>
 <th>Notes</th>
 </tr>
 </thead>
 <tbody>
-<tr>
+<tr class="odd">
 <td>Deposit MSTR</td>
 <td><code>depositJunior</code></td>
 <td>Idle if no USDG; min $25</td>
 </tr>
-<tr>
+<tr class="even">
 <td>Badge <strong>Idle</strong> / <strong>Active</strong> /
 <strong>Boosted</strong> / <strong>Closed</strong></td>
 <td>match + settled + boost flags</td>
 <td>Not Open/Settled</td>
 </tr>
-<tr>
+<tr class="odd">
 <td>Lend USDG</td>
 <td><code>depositSenior</code></td>
-<td>Own idle + FIFO match</td>
+<td>Pool shares; fills queue then FIFO match</td>
 </tr>
-<tr>
+<tr class="even">
 <td>Withdraw Early</td>
 <td><code>earlyExit(id, mode)</code></td>
 <td>Wallet / Idle / SellShares</td>
 </tr>
-<tr>
+<tr class="odd">
 <td>Settle</td>
 <td><code>settle(id[, mode])</code></td>
 <td>Default IdleCarry</td>
 </tr>
-<tr>
-<td>Lender idle withdraw</td>
-<td><code>withdrawSenior(freePrincipal(me))</code></td>
-<td>Own idle only</td>
+<tr class="even">
+<td>Lender withdraw</td>
+<td><code>withdrawSenior(assets)</code> /
+<code>claimWithdraw()</code></td>
+<td>Instant or queued</td>
 </tr>
 </tbody>
 </table>
@@ -578,29 +629,29 @@ href="../../docs/SECURITY_V2.md"><code>SECURITY_V2.md</code></a>.</p>
 addresses (Robinhood Chain Testnet 46630)</h2>
 <table>
 <thead>
-<tr>
+<tr class="header">
 <th>Item</th>
 <th>Value</th>
 </tr>
 </thead>
 <tbody>
-<tr>
+<tr class="odd">
 <td>Network</td>
 <td>Robinhood Chain Testnet</td>
 </tr>
-<tr>
+<tr class="even">
 <td>Chain ID</td>
 <td><strong>46630</strong></td>
 </tr>
-<tr>
+<tr class="odd">
 <td>RPC</td>
 <td><code>https://rpc.testnet.chain.robinhood.com</code></td>
 </tr>
-<tr>
+<tr class="even">
 <td>Explorer</td>
 <td><code>https://explorer.testnet.chain.robinhood.com</code></td>
 </tr>
-<tr>
+<tr class="odd">
 <td>Site</td>
 <td><a href="https://usecarry.io">usecarry.io</a></td>
 </tr>
@@ -613,29 +664,37 @@ addresses (Robinhood Chain Testnet 46630)</h2>
 <col style="width: 50%" />
 </colgroup>
 <thead>
-<tr>
+<tr class="header">
 <th>Name</th>
 <th>Address</th>
 </tr>
 </thead>
 <tbody>
-<tr>
+<tr class="odd">
 <td><strong>LeveredLpVault (PROXY)</strong></td>
+<td><code>0x24B799026AA7baa6856bCFD00c1Be1f583A83e35</code></td>
+</tr>
+<tr class="even">
+<td>implementation (<code>v3-lender-pool</code>)</td>
+<td><code>0x7BeED7F65A9D4aF4E67553d984800F6268a3778E</code></td>
+</tr>
+<tr class="odd">
+<td>CarryMath</td>
+<td><code>0x86b2f56e58c38f19559f28e1463f2dcac1c59344</code></td>
+</tr>
+<tr class="even">
+<td>CarryPool</td>
+<td><code>0xf1d5cb8c25bc1b2ed147cb5f2f63ebfacddbdc07</code></td>
+</tr>
+<tr class="odd">
+<td>CarryCover</td>
+<td><code>0x99f1702044603df846a038d4c1fb8563a57e1ebd</code></td>
+</tr>
+<tr class="even">
+<td>v2.5 PROXY (superseded)</td>
 <td><code>0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd</code></td>
 </tr>
-<tr>
-<td>implementation (<code>v2.5-funder-idle</code>)</td>
-<td><code>0xe498F43ED10a37E22Fe046A3FDAAFD4E9080d0e8</code></td>
-</tr>
-<tr>
-<td>CarryBook</td>
-<td><code>0x2988DFc48BE4AB47B40Ad151f1F213619cdB0794</code></td>
-</tr>
-<tr>
-<td>CarryMath</td>
-<td><code>0x98574A1719E647775BE39Ec713B657c2CF27Adc5</code></td>
-</tr>
-<tr>
+<tr class="odd">
 <td>v1 grant reference (not in use)</td>
 <td><code>0x72A053120f03B10c5506d2325f92F59B0FfC36c8</code></td>
 </tr>
@@ -644,68 +703,76 @@ addresses (Robinhood Chain Testnet 46630)</h2>
 <h3 id="supporting-contracts">Supporting contracts</h3>
 <table>
 <thead>
-<tr>
+<tr class="header">
 <th>Name</th>
 <th>Address</th>
 </tr>
 </thead>
 <tbody>
-<tr>
+<tr class="odd">
 <td>mockMstr</td>
 <td><code>0x762019309B536bbb89577422FaaFBeC9659f8728</code></td>
 </tr>
-<tr>
+<tr class="even">
 <td>mockUsdg</td>
 <td><code>0x25030Bff74764aD72b912276a603717DB1C00644</code></td>
 </tr>
-<tr>
+<tr class="odd">
 <td>mockOracle ($100 WAD)</td>
 <td><code>0xc74Af7E23A2B4b46B5Fe05E5c7c5ec0BB5dbc5B7</code></td>
 </tr>
-<tr>
+<tr class="even">
 <td>mockFeePool</td>
 <td><code>0xa4122524aD97Aab05cAC7F99c04Cd060D02F0771</code></td>
 </tr>
-<tr>
+<tr class="odd">
 <td>vaultOwner</td>
 <td><code>0xcA44F2dbB2D43b93b39F01B88E0f0e2966983c57</code></td>
 </tr>
 </tbody>
 </table>
-<p>Live deploy constants: term <strong>7 days</strong>, Morpho rate stub
-<strong>3.9%</strong> (≤5%), treasury base <strong>20%</strong> +
-Boosted tiers, oracle <strong>$100</strong> WAD, min
-<strong>$25</strong>, market totals <strong>$25k</strong>, no per-wallet
-cap.</p>
+<p>Live deploy settings: term <strong>7 days</strong>,
+<code>morphoRateWad</code> testnet stub (≤5%), treasury base
+<strong>20%</strong>, oracle <strong>$100</strong> WAD, min
+<strong>$25</strong>, senior pool uncapped, junior market
+<strong>$25k</strong>, no per-wallet cap.</p>
 <hr />
 <h2 id="source-paths">Source paths</h2>
 <table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
 <thead>
-<tr>
+<tr class="header">
 <th>Path</th>
 <th>Role</th>
 </tr>
 </thead>
 <tbody>
-<tr>
+<tr class="odd">
 <td><code>contracts/src/LeveredLpVault.sol</code></td>
 <td>Vault</td>
 </tr>
-<tr>
+<tr class="even">
+<td><code>contracts/src/StrategyBoostHook.sol</code></td>
+<td>Boosted treasury cut from STRATEGY stake</td>
+</tr>
+<tr class="odd">
 <td><code>CARRY_CONTRACT.md</code></td>
 <td>Full contract pack</td>
 </tr>
-<tr>
+<tr class="even">
 <td><code>CARRY_TESTNET.md</code></td>
-<td>Deploy + upgrade addresses</td>
+<td>Deploy addresses and txs</td>
 </tr>
-<tr>
-<td><code>docs/ACCOUNTING_V25.md</code></td>
+<tr class="odd">
+<td><code>docs/ACCOUNTING_V3.md</code></td>
 <td>Live accounting model</td>
 </tr>
-<tr>
-<td><code>docs/SETTLE_WATCH.md</code></td>
-<td>Live Active positions / multi-lender case</td>
+<tr class="even">
+<td><code>docs/testnet-runs/</code></td>
+<td>Dated on-chain test passes</td>
 </tr>
 </tbody>
 </table>
