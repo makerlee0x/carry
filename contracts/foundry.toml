@@ -4,7 +4,7 @@ out = "out"
 libs = ["lib"]
 solc = "0.8.28"
 optimizer = true
-# Size-first: via_ir off + low runs often beats via_ir for this vault.
+# Size-first: runs = 1. via_ir is required (the legacy pipeline hits stack-too-deep on the vault).
 optimizer_runs = 1
 via_ir = true
 bytecode_hash = "none"

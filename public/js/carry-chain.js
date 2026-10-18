@@ -84,7 +84,8 @@
   const withTimeout = (p, ms, msg) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error(msg || 'timeout')), ms))]);
   let readyResolve; const readyP = new Promise((r) => { readyResolve = r; });   // resolves once the library and config have loaded
 
-  const num = (v, d = 18) => Number(viem.formatUnits(v, d));
+  // Missing fields (an event or struct from another vault version) read as 0 instead of throwing.
+  const num = (v, d = 18) => (v == null ? 0 : Number(viem.formatUnits(v, d)));
   const round = (n, dp) => Number(n.toFixed(dp));
 
   // Maker fee waterfall preview (product truth). Live UUPS vault applies this on-chain
@@ -341,10 +342,10 @@
     await Promise.all(closedRecs.map(([, r]) => Promise.all([timeOf(r.close.blockNumber), timeOf(r.dep.blockNumber)])));
     const rows = await Promise.all(closedRecs.map(async ([id, r]) => {
       const a = r.close.args, kind = r.close.eventName, p = await pub.readContract({ address: cfg.vault, abi: vaultAbi, functionName: 'positions', args: [BigInt(id)] });
-      const entry = num(p[3]), sharesIn = num(r.dep.args.mstrAmount), closedAt = blockTime.get(r.close.blockNumber);
+      const entry = num(p.length >= 10 ? p[4] : p[3]), sharesIn = num(r.dep.args.mstrAmount), closedAt = blockTime.get(r.close.blockNumber);
       const matchedAt = r.match ? Number(r.match.args.openedAt) * 1000 : 0, startAt = matchedAt || blockTime.get(r.dep.blockNumber);
       let out, sold = 0, net = 0, paid = 0, label;
-      if (kind === 'EarlyExit') { out = num(a.mstrReturned); sold = num(a.mstrSold); net = num(a.juniorLeftoverFees); paid = num(a.couponOwed); label = 'Early exit'; }
+      if (kind === 'EarlyExit') { out = num(a.mstrReturned); sold = num(a.mstrSold); net = num(a.juniorLeftoverFees); paid = num(a.accrual ?? a.couponOwed); label = 'Early exit'; }
       else if (kind === 'Settled') { out = num(a.mstrKept); sold = num(a.mstrSold); net = num(a.juniorYield); paid = Math.max(r.fees - net, 0); label = 'Term complete'; }
       else { out = num(a.mstrAmount); label = 'Idle withdrawal'; }
       const days = Math.max((closedAt - startAt) / 864e5, 0), paired = !!r.match && entry > 0;
@@ -382,8 +383,8 @@
       if (i > lastDay) { snap(i - 1); lastDay = i; }
       switch (l.eventName) {
         case 'JuniorDeposit': { const v = num(a.mstrAmount) * price; add(arr.dep, i, v); allDep += v; runStock += num(a.mstrAmount); touch(i, a.junior); break; }
-        case 'SeniorDeposit': { const v = num(a.amount); add(arr.dep, i, v); allDep += v; runTot += v; touch(i, a.senior); break; }
-        case 'SeniorWithdraw': { const v = num(a.principal); add(arr.wd, i, v); runTot -= v; touch(i, a.senior); break; }
+        case 'SeniorDeposit': { const v = num(a.assets ?? a.amount); add(arr.dep, i, v); allDep += v; runTot += v; touch(i, a.senior); break; }
+        case 'SeniorWithdraw': case 'SeniorWithdrawClaimed': { const v = num(a.assets ?? a.principal); add(arr.wd, i, v); runTot -= v; touch(i, a.senior); break; }
         case 'UnmatchedWithdraw': add(arr.wd, i, num(a.mstrAmount) * price); runStock -= num(a.mstrAmount); touch(i, a.junior); break;
         case 'PositionMatched': { const v = num(a.seniorPrincipal); matchedOf.set(a.positionId, v); runAct += v; touch(i, a.junior); break; }
         case 'EarlyExit': add(arr.wd, i, (num(a.mstrReturned) + num(a.mstrSold)) * price); runStock -= num(a.mstrReturned) + num(a.mstrSold); runAct -= matchedOf.get(a.positionId) || 0; touch(i, a.junior); break;
@@ -397,11 +398,12 @@
     // Newest-first transaction list for the Analytics table. Every row keeps its transaction hash.
     const EV = {
       JuniorDeposit: (a) => ({ k: 'dep', t: 'Deposit', n: num(a.mstrAmount), u: 'MSTR', who: a.junior, pid: a.positionId, note: a.matched ? 'Active · paired with USDG' : 'Idle · waiting for USDG' }),
-      SeniorDeposit: (a) => ({ k: 'dep', t: 'Deposit', n: num(a.amount), u: 'USDG', who: a.senior }),
+      SeniorDeposit: (a) => ({ k: 'dep', t: 'Deposit', n: num(a.assets ?? a.amount), u: 'USDG', who: a.senior }),
       PositionMatched: (a) => ({ k: 'match', t: 'Matched', n: num(a.seniorPrincipal), u: 'USDG', who: a.junior, pid: a.positionId }),
-      SeniorWithdraw: (a) => ({ k: 'wd', t: 'Withdraw', n: num(a.principal), u: 'USDG', who: a.senior }),
+      SeniorWithdraw: (a) => ({ k: 'wd', t: 'Withdraw', n: num(a.assets ?? a.principal), u: 'USDG', who: a.senior }),
+      SeniorWithdrawClaimed: (a) => ({ k: 'wd', t: 'Withdraw', n: num(a.assets), u: 'USDG', who: a.senior, note: 'Queued withdrawal paid' }),
       UnmatchedWithdraw: (a) => ({ k: 'wd', t: 'Withdraw', n: num(a.mstrAmount), u: 'MSTR', who: a.junior, pid: a.positionId }),
-      EarlyExit: (a) => ({ k: 'wd', t: 'Early exit', n: num(a.mstrReturned) + num(a.mstrSold), u: 'MSTR', who: a.junior, pid: a.positionId, note: 'Coupon ' + round(num(a.couponOwed), 2) + ' USDG' }),
+      EarlyExit: (a) => ({ k: 'wd', t: 'Early exit', n: num(a.mstrReturned) + num(a.mstrSold), u: 'MSTR', who: a.junior, pid: a.positionId, note: 'Interest ' + round(num(a.accrual ?? a.couponOwed), 2) + ' USDG' }),
       Settled: (a) => ({ k: 'wd', t: 'Settled', n: num(a.mstrKept) + num(a.mstrSold), u: 'MSTR', who: a.junior, pid: a.positionId, note: num(a.fromBackstop) > 0 ? 'Backstop paid ' + round(num(a.fromBackstop), 2) + ' USDG' : '' }),
       LpFeeAccrued: (a) => ({ k: 'fee', t: 'Fees', n: num(a.gross), u: 'USDG', pid: a.positionId, note: 'To position ' + round(num(a.toPosition), 2) + ' · backstop ' + round(num(a.toBackstop), 2) }),
       BackstopFunded: (a) => ({ k: 'bs', t: 'Backstop', n: num(a.amount), u: 'USDG', who: a.from }),
