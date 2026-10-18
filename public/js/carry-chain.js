@@ -203,18 +203,34 @@
         id,
         mstr: num(p[1]),
         senior: num(p[2]),
+        entry: num(v2 ? p[4] : p[3]),
         fee: num(v2 ? p[5] : p[4]),
         openedAt: Number(v2 ? p[6] : p[5]),
         settled: !!(v2 ? p[8] : p[6]),
         boosted: v2 ? !!p[9] : false,
         // v2.5 treasuryCutLocked (WAD) at index 12; 0 = not locked, fall back to flat display cut.
         cut: p.length > 12 && p[12] > 0n ? num(p[12]) : null,
+        unpaid: p.length > 10 ? num(p[10]) : 0,
         matched,
       };
     }));
 
     const now = Math.floor(Date.now() / 1000), term = S.vault.termSec, price = S.vault.price;
     const live = raw.filter((r) => !r.settled);
+    // Per-leg numbers straight from the vault: in-term legs via previewEarlyExit (wallet cover), past-term legs via
+    // previewSettle (default IdleCarry, backstop first). mine = depositor fee share, cover = USDG you would pay.
+    await Promise.all(live.map(async (r) => {
+      if (!r.matched) return;
+      const inTerm = r.openedAt + term > now;
+      try {
+        const v = await rd(inTerm ? 'previewEarlyExit' : 'previewSettle', [r.id, inTerm ? 0 : 1]);
+        r.pv = { accrual: num(v.accrual), mine: num(inTerm ? v.juniorLeftoverFees : v.juniorYield), cover: num(v.coverUsdg), fromBackstop: inTerm ? 0 : num(v.fromBackstop) };
+      } catch (e) {
+        const w = waterfallPreview({ seniorPrincipal: r.senior, morphoRate: S.vault.aprPct / 100, elapsedSec: Math.min(now, r.openedAt + term) - r.openedAt, gross: r.fee, boosted: r.boosted, cut: r.cut });
+        const short = Math.max(w.accrual - w.seniorFloor, 0);
+        r.pv = { accrual: w.accrual + r.unpaid, mine: w.junior, cover: inTerm ? short * (1 + w.treasuryCut) : 0, fromBackstop: 0, estimate: true };
+      }
+    }));
     S.raw = live;
     const positions = [];
 
@@ -260,7 +276,20 @@
             : 'Waiting for USDG · tip: fundGasCredit so lenders get a gas refund')
           : 'Waiting for USDG';
       }
-      positions.push({ sym: 'MSTR', shares: round(mstrTotal, 4), fees: round(fees, 4), days, earned: round(earned, 2), auto: autoCompoundOn, real: true, statusTxt, leftTxt, feeDue, feeDueLabel: feeDue ? 'Early fee due' : '', free: free_, count: live.length,
+      // Depositor card numbers (PR 3): what went in, what comes back, what leaving costs today.
+      const pvSum = (list, k) => list.reduce((x, r) => x + (r.pv ? r.pv[k] : 0), 0);
+      const withEntry = live.filter((r) => r.entry > 0), entryMstr = sumOf(withEntry);
+      const card = {
+        entryPrice: entryMstr > 0 ? round(withEntry.reduce((x, r) => x + r.mstr * r.entry, 0) / entryMstr, 4) : null,
+        mine: round(pvSum(live, 'mine'), 6), accrual: round(pvSum(live, 'accrual'), 6),
+        exitCost: round(pvSum(act, 'cover'), 6), settleCost: round(pvSum(rdy, 'cover'), 6), fromBackstop: round(pvSum(rdy, 'fromBackstop'), 6),
+        termEnd: soonest || null, termSec: term, ratePct: round(S.vault.aprPct, 4),
+        seniorMatched: round([...act, ...rdy].reduce((x, r) => x + r.senior, 0), 4),
+        cutPct: round(blendedCut([...act, ...rdy].length ? [...act, ...rdy] : live) * 100, 2),
+        cutLocked: [...act, ...rdy].some((r) => r.cut != null), estimate: live.some((r) => r.pv && r.pv.estimate),
+      };
+      if (act.length) feeDue = card.exitCost > 1e-9;
+      positions.push({ sym: 'MSTR', shares: round(mstrTotal, 4), fees: round(fees, 4), ...card, days, earned: round(earned, 2), auto: autoCompoundOn, real: true, statusTxt, leftTxt, feeDue, feeDueLabel: feeDue ? 'Early fee due' : '', free: free_, count: live.length,
         matchedPct: mstrTotal > 0 ? round((matchedShares / mstrTotal) * 100, 1) : 0, freeShares: round(freeShares, 4), activeShares: round(activeShares, 4),
         mixed, openShares: round(sumOf(opn), 4), readyShares: round(sumOf(rdy), 4), boosted: live.some((r) => r.boosted),
         gasCreditEth: round(num(gasCredit), 6) });
