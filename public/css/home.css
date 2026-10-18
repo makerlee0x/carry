@@ -53,3 +53,10 @@
 .hs-v { font-size: 20px; color: var(--c-e6dac0); }
 .hs-total { padding-top: 18px; border-top: 1px solid var(--c-2f2c27); }
 .hs-total .hs-v { font-size: clamp(32px, 4vw, 44px); color: var(--c-b7ffae); text-shadow: 0 0 14px rgba(var(--rgb-61-255-90), 0.4); }
+
+/* Hero terminal: lines type in once, then the cursor blinks. Values come from renderVals (heroTerm). */
+.ht-line { opacity: 0; animation: ht-in 0.01s linear forwards; }
+@keyframes ht-in { to { opacity: 1; } }
+.ht-cur { animation: ht-blink 1s steps(1) infinite; }
+@keyframes ht-blink { 50% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .ht-line { opacity: 1; animation: none; } .ht-cur { animation: none; } }

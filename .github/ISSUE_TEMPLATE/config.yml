@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Report a security issue privately
+    url: https://github.com/makerlee0x/carry/security/advisories/new
+    about: Anything that could put user funds at risk. This stays private until it's fixed.

@@ -1,0 +1,43 @@
+name: Bug report
+description: Something on the site or the vault doesn't work the way it should.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. If this could put funds at risk, **don't file it here**: use the private security report linked on the new-issue page instead.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Site / UI
+        - Vault contract
+        - Keeper
+        - Docs
+        - Not sure
+    validations:
+      required: true
+  - type: input
+    id: network
+    attributes:
+      label: Network and wallet
+      description: Chain (testnet 46630 or mainnet), wallet app, and browser if it's a UI bug.
+      placeholder: Testnet 46630, MetaMask, Chrome
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what you saw instead.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Tx hash, position id, or screenshot
+      description: Explorer links, position ids, error text, or screenshots help most.
+  - type: input
+    id: source
+    attributes:
+      label: Reported by
+      description: If this came in from someone else (Twitter DM, Discord), note who and where.
