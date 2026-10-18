@@ -23,7 +23,7 @@ Mainnet Robinhood Chain is **4663** — out of scope for this testnet pack.
 
 ### Uniswap on testnet
 
-There is **no official Uniswap v3/v4 deployment on chain 46630** (confirmed by public RH toolkit notes as of mid-2026). Deploy **mocks + vault** only. DualPool efficiency is **not** required for the contest.
+A Uniswap v4 PoolManager is deployed on chain 46630 at `0x8366a39CC670B4001A1121B8F6A443A643e40951` (verified on the explorer; the same address indexers list for Robinhood Chain). Uniswap has not published a deployments page for the chain, and Uniswap's DualPool factory is not on it, so the hook is deployed from our vendored copy (`contracts/hook/`, see `contracts/hook/PROVENANCE.md`). Idle USDG yield on testnet comes from `MockMorphoVault`, not real Morpho.
 
 ### Fallbacks (only if RH testnet is unreachable)
 
