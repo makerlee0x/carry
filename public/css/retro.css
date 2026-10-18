@@ -19,14 +19,15 @@
 }
 .rt-vfd {
   position: relative; isolation: isolate;
-  font-family: 'DSEG7 Classic', 'JetBrains Mono', monospace !important;
-  font-size: clamp(38px, 5vw, 54px) !important; letter-spacing: 0.04em;
+  font-family: 'JetBrains Mono', monospace !important; font-weight: 500; font-variant-numeric: tabular-nums;
+  font-size: clamp(38px, 5vw, 54px) !important; letter-spacing: -0.01em;
   text-shadow: 0 0 14px rgba(var(--rgb-61-255-90), 0.45);
 }
 .rt-vfd::before {
   content: attr(data-ghost);
   position: absolute; left: 0; top: 0; z-index: -1;
   color: var(--rt-green); opacity: 0.09; text-shadow: none; pointer-events: none;
+  display: none; /* the design system sets numbers in JetBrains Mono; the 7-segment ghost only fit DSEG7 */
 }
 
 /* #2 Viewfinder corner brackets (top-left + bottom-right), brighten on hover. */
