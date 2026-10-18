@@ -1,17 +1,29 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
+import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
+
 import {IERC20Minimal} from "./interfaces/IERC20Minimal.sol";
 import {IStrategyStaking} from "./interfaces/IStrategyStaking.sol";
 
 /// @title StrategyStaking
-/// @notice Holds STRATEGY for Carry boost tiers. No owner, no upgrade, no rewards.
+/// @notice Holds STRATEGY for Carry boost tiers. UUPS so revenue share can be added later; the owner
+/// can only upgrade (mainnet owner must be a multisig behind a timelock). No rewards yet.
 /// A staker credits one position wallet (itself by default). The vault reads `stakedOf` when a
 /// position matches and locks the tier for the term, so stake that has boosted a position is
 /// held in place for `cooldown`:
 /// - `requestUnstake` stops counting at once, but tokens leave only after `cooldown`.
 /// - A staker with active stake cannot re-link until `cooldown` after its last stake or link.
-contract StrategyStaking is IStrategyStaking {
+contract StrategyStaking is
+    IStrategyStaking,
+    Initializable,
+    OwnableUpgradeable,
+    UUPSUpgradeable,
+    ReentrancyGuardUpgradeable
+{
     error ZeroAmount();
     error ZeroAddress();
     error InsufficientStake();
@@ -20,7 +32,6 @@ contract StrategyStaking is IStrategyStaking {
     error NothingToWithdraw();
     error TransferFailed();
     error FeeOnTransfer();
-    error Reentrancy();
 
     event Staked(address indexed staker, address indexed positionWallet, uint256 amount);
     event UnstakeRequested(address indexed staker, address indexed positionWallet, uint256 amount, uint256 endsAt);
@@ -35,27 +46,30 @@ contract StrategyStaking is IStrategyStaking {
         address linkedTo; // zero means the staker itself
     }
 
-    IERC20Minimal public immutable strategy;
-    uint256 public immutable cooldown;
+    IERC20Minimal public strategy;
+    uint256 public cooldown;
 
     mapping(address => Staker) public stakers;
     mapping(address => uint256) internal _stakedOf;
     uint256 public totalStaked;
 
-    uint256 private _locked = 1;
+    uint256[45] private __gap;
 
-    modifier nonReentrant() {
-        if (_locked != 1) revert Reentrancy();
-        _locked = 2;
-        _;
-        _locked = 1;
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        _disableInitializers();
     }
 
-    constructor(IERC20Minimal strategy_, uint256 cooldown_) {
+    function initialize(IERC20Minimal strategy_, uint256 cooldown_, address owner_) external initializer {
         if (address(strategy_) == address(0)) revert ZeroAddress();
+        __Ownable_init(owner_);
+        __UUPSUpgradeable_init();
+        __ReentrancyGuard_init();
         strategy = strategy_;
         cooldown = cooldown_;
     }
+
+    function _authorizeUpgrade(address) internal override onlyOwner {}
 
     /// @inheritdoc IStrategyStaking
     function stakedOf(address positionWallet) external view returns (uint256) {

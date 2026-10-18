@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {Test} from "forge-std/Test.sol";
+import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
 import {StrategyStaking} from "../src/StrategyStaking.sol";
 import {IERC20Minimal} from "../src/interfaces/IERC20Minimal.sol";
@@ -19,13 +20,42 @@ contract StrategyStakingTest is Test {
 
     function setUp() public {
         strategy = new MockERC20("Strategy", "STRATEGY", 18);
-        staking = new StrategyStaking(IERC20Minimal(address(strategy)), COOLDOWN);
+        staking = _deploy(address(strategy));
         address[3] memory users = [alice, bob, carol];
         for (uint256 i; i < users.length; ++i) {
             strategy.mint(users[i], 100_000_000 ether);
             vm.prank(users[i]);
             strategy.approve(address(staking), type(uint256).max);
         }
+    }
+
+    function _deploy(address token) internal returns (StrategyStaking) {
+        bytes memory init = abi.encodeCall(StrategyStaking.initialize, (IERC20Minimal(token), COOLDOWN, address(this)));
+        return StrategyStaking(address(new ERC1967Proxy(address(new StrategyStaking()), init)));
+    }
+
+    function test_upgrade_onlyOwner_keepsStakes() public {
+        vm.prank(alice);
+        staking.stakeAndLink(25_000 ether, bob);
+        address next = address(new StrategyStaking());
+
+        vm.prank(alice);
+        vm.expectRevert();
+        staking.upgradeToAndCall(next, "");
+
+        staking.upgradeToAndCall(next, "");
+        assertEq(staking.stakedOf(bob), 25_000 ether);
+        assertEq(staking.positionWalletOf(alice), bob);
+        assertEq(address(staking.strategy()), address(strategy));
+        assertEq(staking.cooldown(), COOLDOWN);
+    }
+
+    function test_initialize_onlyOnce() public {
+        vm.expectRevert();
+        staking.initialize(IERC20Minimal(address(strategy)), COOLDOWN, alice);
+        StrategyStaking impl = new StrategyStaking();
+        vm.expectRevert();
+        impl.initialize(IERC20Minimal(address(strategy)), COOLDOWN, alice);
     }
 
     function test_stake_countsTowardSelf() public {
@@ -179,13 +209,15 @@ contract StrategyStakingTest is Test {
         vm.expectRevert(StrategyStaking.NothingToWithdraw.selector);
         staking.withdraw();
         vm.stopPrank();
+        address impl = address(new StrategyStaking());
+        bytes memory init = abi.encodeCall(StrategyStaking.initialize, (IERC20Minimal(address(0)), COOLDOWN, alice));
         vm.expectRevert(StrategyStaking.ZeroAddress.selector);
-        new StrategyStaking(IERC20Minimal(address(0)), COOLDOWN);
+        new ERC1967Proxy(impl, init);
     }
 
     function test_feeOnTransferToken_rejected() public {
         TaxToken tax = new TaxToken();
-        StrategyStaking s = new StrategyStaking(IERC20Minimal(address(tax)), COOLDOWN);
+        StrategyStaking s = _deploy(address(tax));
         tax.mint(alice, 100 ether);
         vm.startPrank(alice);
         tax.approve(address(s), type(uint256).max);
