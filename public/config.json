@@ -61,10 +61,6 @@
       "MSTR": {
         "halfWidthPct": 32,
         "source": "maker"
-      },
-      "NVDA": {
-        "halfWidthPct": 8,
-        "source": "maker"
       }
     },
     "researchRangesNote": "Research uses session-vol bands (\u00b11\u00d7 five-session); UI follows Maker until he picks.",

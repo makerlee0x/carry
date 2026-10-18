@@ -1,0 +1,22 @@
+name: Market request
+description: Ask for a new Stock Token market on Carry.
+title: "Market request: "
+labels: ["market request"]
+body:
+  - type: input
+    id: token
+    attributes:
+      label: Stock Token
+      description: Ticker or name, for example TSLA.
+    validations:
+      required: true
+  - type: input
+    id: contract
+    attributes:
+      label: Token contract on Robinhood Chain
+      description: Optional. The Stock Token's address, if you know it.
+  - type: textarea
+    id: why
+    attributes:
+      label: Why this market?
+      description: Optional. How much you would deposit, where it trades, anything we should know.
