@@ -95,7 +95,7 @@ contract LeveredLpVaultTest is Test {
     // ─── pool shares ─────────────────────────────────────────────────────────
 
     function test_version_is_v3() public view {
-        assertEq(vault.version(), "v3.1-morpho-yield");
+        assertEq(vault.version(), "v3.2-dualpool");
     }
 
     function test_startsPaused() public {
@@ -561,7 +561,7 @@ contract LeveredLpVaultTest is Test {
         LeveredLpVaultV2 next = new LeveredLpVaultV2();
         vault.upgradeToAndCall(address(next), "");
         assertEq(vault.totalSeniorAssets(), assets);
-        assertEq(vault.version(), "v3.1-morpho-yield");
+        assertEq(vault.version(), "v3.2-dualpool");
     }
 
     function test_pauseBlocksDeposits_notViews() public {

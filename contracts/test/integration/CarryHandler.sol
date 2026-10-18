@@ -155,7 +155,7 @@ contract CarryHandler is Test {
         if (id == 0) return;
         _topUp(o, topUp);
         vm.prank(o);
-        try vault.earlyExit(id, LeveredLpVault.CoverMode.Wallet) {
+        try vault.earlyExit(id) {
             calls["earlyExit"]++;
         } catch {}
     }
@@ -169,7 +169,7 @@ contract CarryHandler is Test {
         if (block.timestamp <= maturity) vm.warp(maturity + 1);
         _topUp(o, topUp);
         vm.prank(byKeeper ? keeper : o);
-        try vault.settle(id, LeveredLpVault.CoverMode.Wallet) {
+        try vault.settle(id) {
             calls["settle"]++;
         } catch {}
     }

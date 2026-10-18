@@ -2,24 +2,16 @@
 pragma solidity ^0.8.24;
 
 /// @title IMstrSellRouter
-/// @notice Mainnet SellShares path: swap position MSTR via Uniswap (or equivalent) AMM.
-///         Vault calls this when `sellSharesRouter != address(0)`.
+/// @notice Sells a market's stock token for USDG. One router serves every market.
+///         The strategy calls it at pool close when the USDG that came back can't pay the
+///         treasury and senior in full (Stage 2 pool flow).
 ///
-/// Testnet: leave router unset (`address(0)`). Vault keeps the existing behavior —
-/// credit sold MSTR notionally to seniors (no AMM).
-///
-/// Expected mainnet behavior:
-/// 1. Vault approves `mstrAmount` to the router.
-/// 2. Router pulls MSTR from the vault, swaps on Uniswap to USDG.
-/// 3. Router sends `usdgOut` to `recipient` (vault passes itself, then allocates
-///    senior cover + treasury-on-cover; remainder is delivered to the junior
-///    wallet or auto-compounded).
+/// Expected behavior:
+/// 1. Caller approves `amount` of `token` to the router.
+/// 2. Router pulls it, swaps to USDG on an AMM.
+/// 3. Router sends `usdgOut` to `recipient` and MUST revert below `minUsdgOut`.
 interface IMstrSellRouter {
-    /// @param mstrAmount Exact MSTR pulled from msg.sender (the vault).
-    /// @param minUsdgOut Slippage floor; router MUST revert if unmet.
-    /// @param recipient USDG recipient (vault on current wiring).
-    /// @return usdgOut USDG amount sent to `recipient`.
-    function sellMstrForUsdg(uint256 mstrAmount, uint256 minUsdgOut, address recipient)
+    function sellForUsdg(address token, uint256 amount, uint256 minUsdgOut, address recipient)
         external
         returns (uint256 usdgOut);
 }

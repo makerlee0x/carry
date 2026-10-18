@@ -29,7 +29,7 @@ contract V3UpgradeForkTest is Test {
         VAULT.setMaxPriceStale(0); // the fork warps past the oracle's last push
         vm.stopPrank();
 
-        assertEq(VAULT.version(), "v3.1-morpho-yield");
+        assertEq(VAULT.version(), "v3.2-dualpool");
         assertEq(VAULT.marketCount(), 1);
         (IERC20Minimal token,,,,,,) = VAULT.markets(0);
         assertEq(address(token), address(mstr));

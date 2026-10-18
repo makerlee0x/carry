@@ -8,9 +8,9 @@ import {ReentrancyGuardUpgradeable} from
     "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 
 import {IERC20Minimal} from "./interfaces/IERC20Minimal.sol";
-import {IMstrSellRouter} from "./interfaces/IMstrSellRouter.sol";
 import {IBoostHook} from "./interfaces/IBoostHook.sol";
-import {ICarryStrategy} from "./interfaces/ICarryStrategy.sol";
+import {ICarryStrategy, PoolExit} from "./interfaces/ICarryStrategy.sol";
+import {DualPoolKey} from "./interfaces/IDualPoolLp.sol";
 import {IPriceOracle} from "./interfaces/IPriceOracle.sol";
 import {IPushablePriceOracle} from "./interfaces/IPushablePriceOracle.sol";
 import {CarryMath} from "./libraries/CarryMath.sol";
@@ -70,9 +70,8 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         uint64 lastFeeSplitAt;
         bool settled;
         bool boosted;
-        uint256 unpaidSeniorAccrual;
-        /// @notice Rate index snapshot at last fee split / match checkpoint (floating rate).
-        uint256 rateIndexSnapshot;
+        uint256 unpaidSeniorAccrual; // retired; field kept for layout
+        uint256 rateIndexSnapshot; // retired; field kept for layout (live positions still hold old values)
         uint256 treasuryCutLocked;
         /// @notice Market this position belongs to (0 = MSTR; appended, so older positions read 0).
         uint256 marketId;
@@ -191,7 +190,7 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
     uint256[4] internal boostTierMinStake; // retired; slot kept for layout
     uint256[4] internal boostTierCutWad; // retired; slot kept for layout
     mapping(address => uint256) internal boostStakeAmount; // retired; slot kept for layout
-    mapping(address => bool) public sellSharesEnabled;
+    mapping(address => bool) internal sellSharesEnabled; // retired; slot kept for layout
 
     uint256 public totalShares;
     /// @notice USDG set aside for fulfilled withdraw-queue claims (still in vault).
@@ -221,7 +220,14 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
     uint256 public marketCount;
     mapping(address => bool) public isMarketToken;
 
-    uint256[34] private __gap;
+    /// @notice Each market's DualPool pool (`hooks` 0 = none: positions stay out of a pool).
+    mapping(uint256 => DualPoolKey) public marketPool;
+    /// @notice Senior USDG currently in pools, at what it put in.
+    uint256 public poolDeployed;
+    /// @notice DualPool shares the strategy holds for each position (0 = not in a pool).
+    mapping(uint256 => uint256) public positionPoolShares;
+
+    uint256[31] private __gap;
 
     error Paused();
     error ZeroAmount();
@@ -324,10 +330,10 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
     event BoostTiersUpdated(uint256 count);
     event BoostHookUpdated(address indexed hook);
     event BoostStakeAmountUpdated(address indexed user, uint256 amount);
-    event SellSharesEnabledUpdated(address indexed user, bool enabled);
     event PendingEthCredited(address indexed to, uint256 amount, uint256 balance);
     event PendingEthWithdrawn(address indexed to, uint256 amount);
     event MaxPriceStaleUpdated(uint256 maxPriceStale);
+    event MarketPoolSet(uint256 indexed marketId, address indexed hook);
     event MarketSet(
         uint256 indexed marketId, address indexed token, address oracle, uint64 rangeDropWad, uint256 juniorCapUsdg, bool active
     );
@@ -400,7 +406,7 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
     function _authorizeUpgrade(address) internal override onlyOwner {}
 
     function version() external pure returns (string memory) {
-        return "v3.1-morpho-yield";
+        return "v3.2-dualpool";
     }
 
     // ─── admin ───────────────────────────────────────────────────────────────
@@ -482,9 +488,23 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         emit TreasuryCutUpdated(0, 0, false);
     }
 
+    /// @notice Send a market's fully matched positions into this DualPool pool (`key.hooks` 0 turns it off;
+    ///         positions already in a pool stay there until they close).
+    function setMarketPool(uint256 marketId, DualPoolKey calldata key) external onlyOwner {
+        address t = address(markets[marketId].token);
+        address u = address(usdg);
+        if (
+            t == address(0)
+                || key.hooks != address(0)
+                    && !(key.currency0 == u && key.currency1 == t || key.currency0 == t && key.currency1 == u)
+        ) revert BadMarket();
+        marketPool[marketId] = key;
+        emit MarketPoolSet(marketId, key.hooks);
+    }
+
     /// @notice Point the vault at a strategy. The old one must be empty (recall first).
     function setStrategy(ICarryStrategy strategy_) external onlyOwner {
-        if (strategyDeployed != 0) revert InsufficientFree();
+        if (strategyDeployed != 0 || poolDeployed != 0) revert InsufficientFree();
         strategy = strategy_;
         if (address(strategy_) != address(0)) usdg.approve(address(strategy_), type(uint256).max);
     }
@@ -564,11 +584,6 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
     function setMaxPriceStale(uint256 maxPriceStale_) external onlyOwner {
         maxPriceStale = maxPriceStale_;
         emit MaxPriceStaleUpdated(maxPriceStale_);
-    }
-
-    function setSellSharesEnabled(bool enabled) external {
-        sellSharesEnabled[msg.sender] = enabled;
-        emit SellSharesEnabledUpdated(msg.sender, enabled);
     }
 
     function withdrawPendingEth() external nonReentrant {
@@ -761,17 +776,10 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         return _settle(positionId, CoverMode.IdleCarry);
     }
 
-    function settle(uint256 positionId, CoverMode mode) external nonReentrant returns (Settlement memory) {
-        return _settle(positionId, mode);
-    }
-
-    function previewSettle(uint256 positionId) external view returns (Settlement memory) {
-        return previewSettle(positionId, CoverMode.IdleCarry);
-    }
-
-    function previewSettle(uint256 positionId, CoverMode mode) public view returns (Settlement memory result) {
+    /// @notice Fee-pool part of a settle. A pooled position's pool share is split at close (see `PoolExit`).
+    function previewSettle(uint256 positionId) external view returns (Settlement memory result) {
         Position storage position = _maturedPosition(positionId);
-        result = _settleQuote(position, mode);
+        result = _settleQuote(position, CoverMode.IdleCarry);
         result.mstrKept = position.mstrAmount;
     }
 
@@ -779,22 +787,11 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         return _earlyExit(positionId, CoverMode.IdleCarry);
     }
 
-    function earlyExit(uint256 positionId, CoverMode mode) external nonReentrant returns (EarlyExitResult memory) {
-        return _earlyExit(positionId, mode);
-    }
-
-    function previewEarlyExit(uint256 positionId) public view returns (EarlyExitResult memory) {
-        return previewEarlyExit(positionId, CoverMode.IdleCarry);
-    }
-
-    function previewEarlyExit(uint256 positionId, CoverMode mode)
-        public
-        view
-        returns (EarlyExitResult memory result)
-    {
+    /// @notice Fee-pool part of an early exit. A pooled position's pool share is split at close (see `PoolExit`).
+    function previewEarlyExit(uint256 positionId) external view returns (EarlyExitResult memory result) {
         Position storage position = _inTermPosition(positionId);
         WaterfallSplit memory split = _positionSplit(position);
-        _fillEarlyExitQuote(result, position, split, mode);
+        _fillEarlyExitQuote(result, position, split, CoverMode.IdleCarry);
         result.mstrReturned = position.mstrAmount;
     }
 
@@ -845,11 +842,6 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         return previewMarketSeniorAssets(0, mstrAmount);
     }
 
-    function previewSeniorAssets(uint256 mstrAmount, uint256 priceWad) public view returns (uint256) {
-        if (priceWad == 0) revert BadPrice();
-        return CarryMath.seniorAssets(mstrAmount, priceWad, mstrDecimals, usdgDecimals);
-    }
-
     /// @notice USDG a junior of `amount` stock tokens in `marketId` is matched against at the current price.
     function previewMarketSeniorAssets(uint256 marketId, uint256 amount) public view returns (uint256) {
         return CarryMath.seniorAssets(amount, _priceView(marketId), markets[marketId].decimals, usdgDecimals);
@@ -874,8 +866,17 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
 
         // Senior fee share compounds into the pool; matched principal returns to idle.
         _creditPoolUsdg(result.seniorPerf);
-        reservedSenior -= position.seniorPrincipal;
         backstop += result.treasury;
+        reservedSenior -= position.seniorPrincipal;
+        if (positionPoolShares[positionId] != 0) {
+            // Pooled share: _exitPool books its treasury and senior parts itself.
+            PoolExit memory x = _exitPool(positionId, position);
+            result.treasury += x.treasury;
+            result.seniorPerf += x.senior;
+            result.juniorYield += x.juniorUsdg;
+            result.mstrKept = result.mstrKept + x.juniorStock - x.stockIn;
+            result.mstrSold = x.stockSold;
+        }
 
         position.settled = true;
         position.feeUsdg = 0;
@@ -902,6 +903,14 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         WaterfallSplit memory split = _splitAndClearFees(positionId);
         _fillEarlyExitQuote(result, position, split, mode);
         result.mstrReturned = position.mstrAmount;
+        if (positionPoolShares[positionId] != 0) {
+            PoolExit memory x = _exitPool(positionId, position);
+            result.treasury += x.treasury;
+            result.seniorPerf += x.senior;
+            result.juniorLeftoverFees += x.juniorUsdg;
+            result.mstrReturned = result.mstrReturned + x.juniorStock - x.stockIn;
+            result.mstrSold = x.stockSold;
+        }
 
         reservedSenior -= matchedPrincipal;
         position.settled = true;
@@ -981,6 +990,39 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         if (position.settled) revert AlreadySettled();
         if (position.seniorPrincipal == 0) revert NotMatched();
         if (block.timestamp < uint256(position.openedAt) + term) revert TermNotElapsed();
+    }
+
+    /// @dev Fully matched: move the position's stock and senior USDG into its market's pool, if it has one.
+    function _enterPool(uint256 positionId, Position storage position) internal {
+        DualPoolKey memory key = marketPool[position.marketId];
+        if (key.hooks == address(0)) return;
+        uint256 amount = position.seniorPrincipal;
+        _push(usdg, address(strategy), amount);
+        _push(markets[position.marketId].token, address(strategy), position.mstrAmount);
+        (uint256 lpShares, uint256 usdgUsed) = strategy.enterPool(positionId, key, position.mstrAmount, amount);
+        positionPoolShares[positionId] = lpShares;
+        poolDeployed += usdgUsed;
+    }
+
+    /// @dev Pool share out, split by the strategy (treasury, senior, junior). Books the treasury cut to the
+    ///      backstop and the senior's yield and cut to the pool; a senior payout below what it put in is
+    ///      covered by the backstop, and past that is a lender loss.
+    function _exitPool(uint256 positionId, Position storage position) internal returns (PoolExit memory x) {
+        uint256 id = position.marketId;
+        x = strategy.exitPool(
+            positionId, marketPool[id], _price(id), _cutWadForPosition(position), SENIOR_PERF_CUT_WAD, sellSharesRouter
+        );
+        positionPoolShares[positionId] = 0;
+        poolDeployed -= x.usdgIn;
+        backstop += x.treasury;
+        if (x.senior >= x.usdgIn) {
+            totalSeniorAssets += x.senior - x.usdgIn;
+        } else {
+            uint256 gap = x.usdgIn - x.senior;
+            uint256 cover = gap < backstop ? gap : backstop;
+            backstop -= cover;
+            totalSeniorAssets -= gap - cover;
+        }
     }
 
     function _closePosition(uint256 positionId, Position storage position) internal {
@@ -1093,6 +1135,7 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
 
         if (position.seniorPrincipal >= position.targetSenior) {
             _dequeueOpen(positionId);
+            _enterPool(positionId, position);
         }
         emit PositionMatched(positionId, position.owner, position.seniorPrincipal, delta, position.openedAt);
     }
@@ -1130,7 +1173,7 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         backstop -= amount;
         // Floor: senior pool NAV + remaining backstop + unsplit position fees (+ queue is inside NAV).
         uint256 floor = totalSeniorAssets + backstop + totalUnsplitFees;
-        if (usdg.balanceOf(address(this)) + strategyDeployed < floor) revert InsufficientBackstop();
+        if (usdg.balanceOf(address(this)) + strategyDeployed + poolDeployed < floor) revert InsufficientBackstop();
         _push(usdg, to, amount);
     }
 
@@ -1329,10 +1372,6 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         if (address(o) == address(0)) revert BadMarket();
         price = o.mstrPriceWad();
         if (price == 0) revert BadPrice();
-    }
-
-    function _usdgValue(uint256 mstrAmount, uint256 priceWad) internal view returns (uint256) {
-        return CarryMath.usdgValue(mstrAmount, priceWad, mstrDecimals, usdgDecimals);
     }
 
     function _enforceSeniorCap(address senior, uint256 amount) internal view {
