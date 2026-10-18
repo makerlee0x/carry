@@ -1,29 +1,23 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
-import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
-import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
-import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
+import {Checkpoints} from "@openzeppelin/contracts/utils/structs/Checkpoints.sol";
 
 import {IERC20Minimal} from "./interfaces/IERC20Minimal.sol";
 import {IStrategyStaking} from "./interfaces/IStrategyStaking.sol";
 
 /// @title StrategyStaking
-/// @notice Holds STRATEGY for Carry boost tiers. UUPS so revenue share can be added later; the owner
-/// can only upgrade (mainnet owner must be a multisig behind a timelock). No rewards yet.
+/// @notice Holds STRATEGY for Carry boost tiers. No owner, no upgrade, no rewards: nobody can move a
+/// staker's STRATEGY. Every stake change is checkpointed by timestamp so a separate, upgradeable
+/// rewards contract can later split treasury fees from `stakedOfAt` / `totalStakedAt` alone.
 /// A staker credits one position wallet (itself by default). The vault reads `stakedOf` when a
 /// position matches and locks the tier for the term, so stake that has boosted a position is
 /// held in place for `cooldown`:
 /// - `requestUnstake` stops counting at once, but tokens leave only after `cooldown`.
 /// - A staker with active stake cannot re-link until `cooldown` after its last stake or link.
-contract StrategyStaking is
-    IStrategyStaking,
-    Initializable,
-    OwnableUpgradeable,
-    UUPSUpgradeable,
-    ReentrancyGuardUpgradeable
-{
+contract StrategyStaking is IStrategyStaking {
+    using Checkpoints for Checkpoints.Trace208;
+
     error ZeroAmount();
     error ZeroAddress();
     error InsufficientStake();
@@ -32,6 +26,8 @@ contract StrategyStaking is
     error NothingToWithdraw();
     error TransferFailed();
     error FeeOnTransfer();
+    error Reentrancy();
+    error FutureLookup();
 
     event Staked(address indexed staker, address indexed positionWallet, uint256 amount);
     event UnstakeRequested(address indexed staker, address indexed positionWallet, uint256 amount, uint256 endsAt);
@@ -46,34 +42,45 @@ contract StrategyStaking is
         address linkedTo; // zero means the staker itself
     }
 
-    IERC20Minimal public strategy;
-    uint256 public cooldown;
+    IERC20Minimal public immutable strategy;
+    uint256 public immutable cooldown;
 
     mapping(address => Staker) public stakers;
-    mapping(address => uint256) internal _stakedOf;
-    uint256 public totalStaked;
+    mapping(address => Checkpoints.Trace208) internal _stakedOf;
+    Checkpoints.Trace208 internal _totalStaked;
 
-    uint256[45] private __gap;
+    uint256 private _locked = 1;
 
-    /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor() {
-        _disableInitializers();
+    modifier nonReentrant() {
+        if (_locked != 1) revert Reentrancy();
+        _locked = 2;
+        _;
+        _locked = 1;
     }
 
-    function initialize(IERC20Minimal strategy_, uint256 cooldown_, address owner_) external initializer {
+    constructor(IERC20Minimal strategy_, uint256 cooldown_) {
         if (address(strategy_) == address(0)) revert ZeroAddress();
-        __Ownable_init(owner_);
-        __UUPSUpgradeable_init();
-        __ReentrancyGuard_init();
         strategy = strategy_;
         cooldown = cooldown_;
     }
 
-    function _authorizeUpgrade(address) internal override onlyOwner {}
-
     /// @inheritdoc IStrategyStaking
     function stakedOf(address positionWallet) external view returns (uint256) {
-        return _stakedOf[positionWallet];
+        return _stakedOf[positionWallet].latest();
+    }
+
+    function totalStaked() external view returns (uint256) {
+        return _totalStaked.latest();
+    }
+
+    /// @notice Stake credited to `positionWallet` at the end of `timestamp`, which must be in the past.
+    function stakedOfAt(address positionWallet, uint256 timestamp) external view returns (uint256) {
+        return _stakedOf[positionWallet].upperLookupRecent(_pastKey(timestamp));
+    }
+
+    /// @notice Total active stake at the end of `timestamp`, which must be in the past.
+    function totalStakedAt(uint256 timestamp) external view returns (uint256) {
+        return _totalStaked.upperLookupRecent(_pastKey(timestamp));
     }
 
     /// @notice Position wallet this staker's stake counts toward.
@@ -107,8 +114,8 @@ contract StrategyStaking is
         s.staked -= amount;
         s.cooling += amount;
         s.coolingEnds = uint64(block.timestamp + cooldown);
-        _stakedOf[to] -= amount;
-        totalStaked -= amount;
+        _sub(_stakedOf[to], amount);
+        _sub(_totalStaked, amount);
         emit UnstakeRequested(msg.sender, to, amount, s.coolingEnds);
     }
 
@@ -133,8 +140,8 @@ contract StrategyStaking is
         address to = positionWalletOf(msg.sender);
         s.staked += amount;
         s.linkUnlocks = uint64(block.timestamp + cooldown);
-        _stakedOf[to] += amount;
-        totalStaked += amount;
+        _add(_stakedOf[to], amount);
+        _add(_totalStaked, amount);
         emit Staked(msg.sender, to, amount);
     }
 
@@ -146,11 +153,24 @@ contract StrategyStaking is
         uint256 amount = s.staked;
         if (amount > 0) {
             if (block.timestamp < s.linkUnlocks) revert LinkLocked(s.linkUnlocks);
-            _stakedOf[from] -= amount;
-            _stakedOf[positionWallet] += amount;
+            _sub(_stakedOf[from], amount);
+            _add(_stakedOf[positionWallet], amount);
             s.linkUnlocks = uint64(block.timestamp + cooldown);
         }
         s.linkedTo = positionWallet == msg.sender ? address(0) : positionWallet;
         emit Linked(msg.sender, from, positionWallet, amount);
+    }
+
+    function _add(Checkpoints.Trace208 storage trace, uint256 amount) private {
+        trace.push(uint48(block.timestamp), uint208(trace.latest() + amount));
+    }
+
+    function _sub(Checkpoints.Trace208 storage trace, uint256 amount) private {
+        trace.push(uint48(block.timestamp), uint208(trace.latest() - amount));
+    }
+
+    function _pastKey(uint256 timestamp) private view returns (uint48) {
+        if (timestamp >= block.timestamp) revert FutureLookup();
+        return uint48(timestamp);
     }
 }

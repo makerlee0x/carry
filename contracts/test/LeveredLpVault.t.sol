@@ -512,9 +512,7 @@ contract LeveredLpVaultTest is Test {
 
     function _staking() internal returns (MockERC20 strategy, StrategyStaking staking) {
         strategy = new MockERC20("Strategy", "STRATEGY", 18);
-        bytes memory init =
-            abi.encodeCall(StrategyStaking.initialize, (IERC20Minimal(address(strategy)), 7 days, address(this)));
-        staking = StrategyStaking(address(new ERC1967Proxy(address(new StrategyStaking()), init)));
+        staking = new StrategyStaking(IERC20Minimal(address(strategy)), 7 days);
         vault.setStrategyStaking(IStrategyStaking(address(staking)));
     }
 

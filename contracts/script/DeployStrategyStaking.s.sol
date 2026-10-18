@@ -2,7 +2,6 @@
 pragma solidity ^0.8.24;
 
 import {Script, console2} from "forge-std/Script.sol";
-import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {LeveredLpVault} from "../src/LeveredLpVault.sol";
 import {StrategyStaking} from "../src/StrategyStaking.sol";
 import {IStrategyStaking} from "../src/interfaces/IStrategyStaking.sol";
@@ -16,7 +15,6 @@ import {MockERC20} from "../src/mocks/MockERC20.sol";
 ///   DEPLOYER_PRIVATE_KEY
 ///   STRATEGY (optional; a mock STRATEGY is deployed when unset)
 ///   VAULT    (optional; fresh PROXY from DeployCarryV3 to call setStrategyStaking on, as its owner)
-///   STAKING_OWNER (defaults to msg.sender / deployer; mainnet must be a multisig behind a timelock)
 ///
 /// Set broadcastArmed() to true for live broadcast.
 contract DeployStrategyStaking is Script {
@@ -42,20 +40,14 @@ contract DeployStrategyStaking is Script {
         else console2.log("DRY-RUN: broadcastArmed=false; no broadcast txs");
 
         if (strategy == address(0)) strategy = address(new MockERC20("Mock STRATEGY", "STRATEGY", 18));
-        StrategyStaking impl = new StrategyStaking();
-        bytes memory init = abi.encodeCall(
-            StrategyStaking.initialize, (IERC20Minimal(strategy), COOLDOWN, vm.envOr("STAKING_OWNER", msg.sender))
-        );
-        StrategyStaking staking = StrategyStaking(address(new ERC1967Proxy(address(impl), init)));
+        StrategyStaking staking = new StrategyStaking(IERC20Minimal(strategy), COOLDOWN);
         if (vault != address(0)) LeveredLpVault(vault).setStrategyStaking(IStrategyStaking(address(staking)));
 
         if (live) vm.stopBroadcast();
 
         console2.log("chainId", block.chainid);
         console2.log("strategy", strategy);
-        console2.log("strategyStakingProxy", address(staking));
-        console2.log("strategyStakingImplementation", address(impl));
-        console2.log("stakingOwner", staking.owner());
+        console2.log("strategyStaking", address(staking));
         console2.log("cooldown", staking.cooldown());
         console2.log("vault", vault);
     }
