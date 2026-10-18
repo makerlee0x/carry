@@ -13,7 +13,7 @@ library CarryPool {
 
     /// @dev Deposit: mint shares rounded DOWN (pool favor).
     function convertToShares(uint256 assets, uint256 totalShares, uint256 totalAssets)
-        external
+        internal
         pure
         returns (uint256)
     {
@@ -23,7 +23,7 @@ library CarryPool {
 
     /// @dev Redeem: assets out rounded DOWN (pool favor).
     function convertToAssets(uint256 shares, uint256 totalShares, uint256 totalAssets)
-        external
+        internal
         pure
         returns (uint256)
     {
@@ -33,7 +33,7 @@ library CarryPool {
 
     /// @dev Shares needed to withdraw `assets`, rounded UP (pool favor).
     function previewWithdrawShares(uint256 assets, uint256 totalShares, uint256 totalAssets)
-        external
+        internal
         pure
         returns (uint256)
     {
@@ -49,7 +49,7 @@ library CarryPool {
         uint256 alreadyClaimed,
         uint256 cursor,
         uint256 cumulativeFulfilled
-    ) external pure returns (uint256) {
+    ) internal pure returns (uint256) {
         if (assetsRequested == 0 || alreadyClaimed >= assetsRequested) return 0;
         if (cumulativeFulfilled <= cursor) return 0;
         uint256 reached = cumulativeFulfilled - cursor;
