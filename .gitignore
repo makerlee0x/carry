@@ -26,3 +26,5 @@ contracts/.env*
 *.key
 
 contracts/.e2e/
+contracts/out-hook/
+contracts/cache-hook/
