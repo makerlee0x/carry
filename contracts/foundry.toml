@@ -16,3 +16,13 @@ ffi = false
 robinhood = "https://rpc.mainnet.chain.robinhood.com"
 # Robinhood Chain Testnet 46630 — preferred Carry deploy target (mocks + vault).
 robinhood_testnet = "https://rpc.testnet.chain.robinhood.com"
+
+[invariant]
+# Integration suite (test/integration/Invariants.t.sol). Kept short for the git hook; CI runs the ci profile.
+runs = 64
+depth = 50
+fail_on_revert = false
+
+[profile.ci.invariant]
+runs = 512
+depth = 100

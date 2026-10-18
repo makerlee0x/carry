@@ -63,7 +63,7 @@ Inventory stays in the vault until a reviewed DualPool adapter exists. Mark-to-m
 | **Senior** (lender) | Posts USDG | `depositSenior`, `withdrawSenior` (own idle + claims), `seniorEarlyExit` |
 | **Owner / protocol** | Pause + upgrade + knobs | `pause`, `unpause`, `upgradeToAndCall`, caps/tiers/rate, `rescueToken` (non-principal only). **Cannot** pull MSTR/USDG principal |
 | **Mock pool / fee donor** | Simulates LP fees | `accrueLpFee` / `MockFeePool.payFee` pushes USDG in |
-| **Anyone** | Keepers | `settle` after term when residual cover is zero (proceeds still go to junior + seniors, not caller) |
+| **Anyone** | Keepers, lenders, Carry | `settle` a position that has stopped rolling: past term, priced more than 32% below entry, and 48h past the last term boundary (proceeds still go to junior + seniors, not caller) |
 
 **NOT IMPLEMENTED as separate actors:** Morpho idle allocator, live STRATEGY token (stake amount is owner-settable stub), geoblock, DualPool hook, Yieldz.
 
@@ -147,7 +147,7 @@ Numbered happy path:
 
 | Function | Who | Preconditions | Effects / funds |
 | --- | --- | --- | --- |
-| `settle(positionId[, mode])` | anyone (if residual cover 0) / junior | Matched, term elapsed, not settled | Maturity waterfall; default IdleCarry; **no MSTR sold** unless SellShares chosen |
+| `settle(positionId[, mode])` | junior; anyone once the position stopped rolling (underwater, 48h grace over) | Matched, term elapsed, not settled | Closing waterfall; default IdleCarry. Junior: fees → idle → wallet → MSTR sale. Anyone else: fees → idle, rest forgiven (no wallet pull, no sale unless the junior enabled SellShares) |
 | `previewEarlyExit` / `previewClaimFees` | view | — | Mode-aware accrual + waterfall preview |
 | `previewSeniorAssets` | view | — | Quoting helper |
 | `seniorIdle` / `freePrincipal` / `isMatched` / `mark` | view | — | Per-lender idle / capacity / MTM |
@@ -171,7 +171,7 @@ accrual = unpaidSeniorAccrual
         + seniorPrincipal * morphoRateLocked * elapsed / (WAD * YEAR)
 ```
 
-Maker waterfall at claim/exit/settle: `seniorFloor → treasury(cut) → seniorPerf → junior`. Early-exit shortfall: junior only (NO backstop). Settle shortfall: backstop first, then junior fees → junior idle → wallet (or fees → MSTR sold through the sell router for SellShares; no router reverts). When the junior settles and still owes after fees, idle and wallet, enough position MSTR is sold through the router to cover it; lenders can never trigger that sale. Cover the junior pays is credited to the lender pool. Interest still unpaid (no router) is forgiven, never taken from lender principal. Accrual stops exactly at maturity, across later rate changes. Junior gas credit: see `docs/GAS_CREDIT.md`.
+Maker waterfall at claim/exit/settle: `seniorFloor → treasury(cut) → seniorPerf → junior`. Early-exit shortfall: junior only (NO backstop). Settle shortfall: backstop first, then junior fees → junior idle → wallet (or fees → MSTR sold through the sell router for SellShares; no router reverts). When the junior settles and still owes after fees, idle and wallet, enough position MSTR is sold through the router to cover it; lenders can never trigger that sale. Cover the junior pays is credited to the lender pool. Interest still unpaid (no router) is forgiven, never taken from lender principal. Positions roll at term: they stay matched and accrue at the floating rate until the junior settles them, or until they stop rolling (more than 32% below entry) and someone settles after the 48h grace. A queued lender withdrawal pays what the locked shares are worth when it is claimed, so yield earned while queued is paid too. Junior gas credit: see `docs/GAS_CREDIT.md`.
 
 ### v2.5 idle + funders
 
