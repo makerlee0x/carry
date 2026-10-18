@@ -5,17 +5,18 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>Carry Testnet Wireframe</title>
+<link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
 <link rel="icon" href="assets/favicon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #0b0c0a; --card: #161613; --inset: #22211d;
-    --line: #2f2c27; --line2: #3c372f;
-    --cream: #e6dac0; --muted: #d9ccad; --dim: #a09173;
-    --green: #b7ffae; --deep: #0f2a18; --deepline: #1d5a2a;
-    --up: #3dff5a; --down: #ff2a1a; --amber: #ffc21a;
+    --bg: #050607; --card: #0d1113; --inset: #131a1c;
+    --line: #1f2a2e; --line2: #2b3a40;
+    --cream: #f2f7f8; --muted: #c9d4d7; --dim: #8a9ba1;
+    --green: #ff9e2c; --deep: #0b0f11; --deepline: #2b3a40;
+    --up: #3dff8a; --down: #ff4d3d; --amber: #ff9e2c;
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--cream); font-family: 'Inter Tight', sans-serif; font-size: 15px; line-height: 1.5; }
@@ -40,7 +41,7 @@
   .row .v a:hover { text-decoration: underline; }
   .btn { font: 700 13px 'JetBrains Mono', monospace; border-radius: 4px; padding: 10px 16px; cursor: pointer; border: 1px solid transparent; }
   .btn:disabled { opacity: .5; cursor: not-allowed; }
-  .btn.primary { background: var(--green); color: #0b0c0a; }
+  .btn.primary { background: var(--green); color: #050607; }
   .btn.primary:hover:not(:disabled) { box-shadow: 0 0 18px rgba(183,255,174,.35); }
   .btn.secondary { background: var(--deep); color: var(--green); border-color: var(--deepline); }
   .btn.tertiary { background: var(--inset); color: var(--cream); border-color: var(--line2); }
@@ -93,7 +94,7 @@
 <div class="banner">TESTNET WIREFRAME · Robinhood Chain Testnet (46630) · mock tokens, no real value</div>
 <div class="wrap">
   <header>
-    <a href="/" aria-label="Carry home" style="display:block"><img src="assets/carry-logo-white.png" alt="Carry"></a>
+    <a href="/" aria-label="Carry home" style="display:block"><img src="assets/carry-lockup-white.svg" alt="Carry"></a>
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
       <span id="chainPill" class="pill">network: …</span>
       <button id="connectBtn" class="btn primary">Connect MetaMask</button>
