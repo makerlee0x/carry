@@ -24,7 +24,7 @@ Then, on **gross** LP fees for the period:
 ```
 seniorFloor = min(gross, accrual)
 left        = gross − seniorFloor
-treasury    = min(left, gross × treasuryCut)   // base 20%; Boosted tiers 15/10/5%
+treasury    = min(left, gross × treasuryCut)   // base 20%; Boosted Level I-V 17.5/16.25/13.75/10/5%
 left        = left − treasury
 seniorPerf  = min(left, gross × 0.20)
 junior      = left − seniorPerf
@@ -36,8 +36,9 @@ senior      = seniorFloor + seniorPerf
 | Position / stake | Treasury cut of **fees** (not position size) |
 | --- | --- |
 | Active (no STRATEGY stake) | **20%** (`treasuryCutWad`) |
-| Boosted tiers (STRATEGY stake stub, owner-configurable) | 15% / 10% / 5% at ≥100 / ≥1k / ≥10k |
-| Legacy `setBoostStaked` without amount | flat **10%** (`boostedTreasuryCutWad`) |
+| Boosted Level I-V (`StrategyBoostHook`, reads `StrategyStaking.stakedOf`) | 17.5% / 16.25% / 13.75% / 10% / 5% at ≥25k / ≥100k / ≥500k / ≥2M / ≥10M STRATEGY |
+
+The vault reads the cut from `boostHook` at match and caps it at the base cut. The owner swaps the hook with `setBoostHook` (multisig + timelock on mainnet).
 
 Creator fee boost is **later** and is **not** this cut. Cut locks at first match (`treasuryCutLocked`).
 
@@ -132,7 +133,7 @@ Legacy global TW indices are frozen (no new credits). See [`ACCOUNTING_V25.md`](
 Implementation: `0x7BeED7F65A9D4aF4E67553d984800F6268a3778E` (also in `public/config.json` → `chain.vaultImplementation`).  
 Superseded v2.5 PROXY/impl (`0xc801…72bd` / `0xe498…d0e8`) is settle-watch history only.
 
-Live: Maker waterfall, Boosted STRATEGY **tiers** (15/10/5%), gasCredit + auto-refund,
+Live: Maker waterfall, Boosted STRATEGY **tiers** via `boostHook` (Level I-V), gasCredit + auto-refund,
 early-exit cover revert, SellShares router interface (testnet router=0), auto-compound,
 **v3 lender pool** (internal shares + FIFO withdraw queue + floating `rateIndex`),
 settle cover path: backstop → junior idle/wallet/SellShares → pool idle last resort,
@@ -143,6 +144,6 @@ Idle Morpho sleeve is **not live** on testnet (`product.idleSleeveLive: false`).
 
 - Real Morpho sleeve on Robinhood
 - LONG / creator fee share into Boosted (separate from treasury cut)
-- Live STRATEGY stake token wiring beyond owner flag / balance config
+- Live STRATEGY token address and a deployed `StrategyStaking` + `StrategyBoostHook`
 - Mainnet Uniswap router deployment (interface + mock covered in Forge)
 - Mainnet 4663
