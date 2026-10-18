@@ -22,17 +22,16 @@ import {CarryPool} from "./libraries/CarryPool.sol";
 /// v3 lender model:
 /// 1. One USDG senior pool; non-transferable internal shares; round in pool favor; virtual offset.
 /// 2. Instant withdraw if idle covers and withdraw queue empty; else FIFO cumulative queue + lazy claim.
-/// 3. Floating Morpho rate via global rate index (not locked per position). Positions roll at term and accrue until closed.
+/// 3. No stored lender rate: senior USDG earns whatever the Morpho strategy pays (booked by `harvest`),
+///    plus its share of LP fees. Positions roll at term.
 /// 4. Senior yield compounds into the pool. Lenders paid only USDG (stock fees swapped before payout).
 /// 5. Withdrawal queue paid before new matching. Lender withdraw never closes a junior position.
 ///
 /// Fresh product PROXY for v3 (v2.5 funder-idle PROXY superseded — open settle-watch stays there).
 contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, ReentrancyGuardUpgradeable {
     uint256 internal constant WAD = 1e18;
-    uint256 internal constant YEAR = 365 days;
-    uint256 internal constant MAX_MORPHO_RATE_WAD = 0.05e18;
     uint256 internal constant MAX_TREASURY_CUT_WAD = 0.2e18;
-    uint256 public constant SENIOR_PERF_CUT_WAD = 0.2e18;
+    uint256 public constant SENIOR_PERF_CUT_WAD = 0.4e18;
     uint256 internal constant DEFAULT_TREASURY_CUT_WAD = 0.2e18;
     uint256 internal constant BOOSTED_TREASURY_CUT_WAD = 0.1e18;
     uint256 internal constant DEFAULT_MATCH_CAP = 25;
@@ -196,7 +195,7 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
     /// @notice Separate boost contract read at match; zero means no boost.
     IBoostHook public boostHook;
 
-    /// @notice CarryStrategy holding unmatched USDG in Morpho (0 = none; USDG stays in the vault).
+    /// @notice CarryStrategy holding lender USDG in Morpho (0 = none; USDG stays in the vault).
     ICarryStrategy public strategy;
     /// @notice USDG principal plus booked yield currently held by `strategy`.
     uint256 public strategyDeployed;
@@ -270,7 +269,6 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         CoverMode coverMode
     );
     event CapsUpdated(uint256 maxTotalSeniorUsdg, uint256 maxTotalJuniorUsdg, uint256 maxPerWalletUsdg);
-    event MorphoRateUpdated(uint256 morphoRateWad);
     event TreasuryCutUpdated(uint256 treasuryCutWad, uint256 boostedTreasuryCutWad, bool isSet);
     event BoostStakeUpdated(address indexed user, bool staked);
     event FeesClaimed(
@@ -308,26 +306,26 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
     event PendingEthCredited(address indexed to, uint256 amount, uint256 balance);
     event PendingEthWithdrawn(address indexed to, uint256 amount);
     event MaxPriceStaleUpdated(uint256 maxPriceStale);
-    event RateIndexUpdated(uint256 rateIndex, uint64 updatedAt);
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
         _disableInitializers();
     }
 
+    /// @dev The fifth argument was the fixed Morpho rate. It is unused (lenders earn the strategy's real
+    ///      yield) and kept only so deploy scripts keep their call shape.
     function initialize(
         address mstr_,
         address usdg_,
         address oracle_,
         uint64 term_,
-        uint256 morphoRateWad_,
+        uint256,
         address owner_
     ) external initializer {
         if (mstr_ == address(0) || usdg_ == address(0) || oracle_ == address(0) || owner_ == address(0)) {
             revert ZeroAddress();
         }
         if (term_ == 0 || term_ > MAX_TERM) revert BadTerm();
-        if (morphoRateWad_ == 0 || morphoRateWad_ > MAX_MORPHO_RATE_WAD) revert BadApr();
 
         __Ownable_init(owner_);
         __UUPSUpgradeable_init();
@@ -337,7 +335,6 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         usdg = IERC20Minimal(usdg_);
         oracle = IPriceOracle(oracle_);
         term = term_;
-        morphoRateWad = morphoRateWad_;
         treasuryCutWad = DEFAULT_TREASURY_CUT_WAD;
         boostedTreasuryCutWad = BOOSTED_TREASURY_CUT_WAD;
         treasuryCutIsSet = true;
@@ -349,8 +346,6 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         mstrDecimals = mstr.decimals();
         usdgDecimals = usdg.decimals();
         nextPositionId = 1;
-        rateIndex = WAD;
-        rateUpdatedAt = uint64(block.timestamp);
         paused = true;
         emit PausedDeposits(true);
     }
@@ -358,7 +353,7 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
     function _authorizeUpgrade(address) internal override onlyOwner {}
 
     function version() external pure returns (string memory) {
-        return "v3-lender-pool";
+        return "v3.1-morpho-yield";
     }
 
     // ─── admin ───────────────────────────────────────────────────────────────
@@ -381,13 +376,6 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         maxTotalJuniorUsdg = maxTotalJuniorUsdg_;
         maxPerWalletUsdg = maxPerWalletUsdg_;
         emit CapsUpdated(maxTotalSeniorUsdg_, maxTotalJuniorUsdg_, maxPerWalletUsdg_);
-    }
-
-    function setMorphoRate(uint256 morphoRateWad_) external onlyOwner {
-        if (morphoRateWad_ == 0 || morphoRateWad_ > MAX_MORPHO_RATE_WAD) revert BadApr();
-        _syncRateIndex();
-        morphoRateWad = morphoRateWad_;
-        emit MorphoRateUpdated(morphoRateWad_);
     }
 
     function setTreasuryCuts(uint256 treasuryCutWad_, uint256 boostedTreasuryCutWad_) external onlyOwner {
@@ -415,11 +403,12 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         if (address(strategy_) != address(0)) usdg.approve(address(strategy_), type(uint256).max);
     }
 
-    /// @notice Move up to the pool's unmatched, unclaimed USDG into the strategy to earn.
+    /// @notice Move lender USDG (matched or not, minus filled queue claims) into the strategy to earn.
+    ///         Payouts recall what they need from the strategy in `_push`.
     function deployIdle(uint256 amount) external onlyOwner nonReentrant {
         _harvest();
         if (amount == 0) revert ZeroAmount();
-        if (strategyDeployed + amount > _idleUsdg()) revert InsufficientFree();
+        if (strategyDeployed + amount + queueClaimable > totalSeniorAssets) revert InsufficientFree();
         strategyDeployed += amount;
         strategy.deposit(amount);
     }
@@ -650,7 +639,6 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         result = previewClaimFees(positionId);
         _splitAndClearFees(positionId);
         position.lastFeeSplitAt = uint64(block.timestamp);
-        position.rateIndexSnapshot = currentRateIndex();
 
         emit FeesClaimed(
             positionId, msg.sender, result.gross, result.seniorFloor, result.treasury, result.seniorPerf, result.toJunior
@@ -687,11 +675,7 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
     function previewSettle(uint256 positionId, CoverMode mode) public view returns (Settlement memory result) {
         Position storage position = _maturedPosition(positionId);
         result = _settleQuote(position, mode);
-        if (mode == CoverMode.SellShares) {
-            (result.mstrSold, result.feeShortfallUsdg) =
-                _previewSell(position, result.coverUsdg, result.juniorYield);
-        }
-        result.mstrKept = position.mstrAmount - result.mstrSold;
+        result.mstrKept = position.mstrAmount;
     }
 
     function earlyExit(uint256 positionId) external nonReentrant returns (EarlyExitResult memory) {
@@ -714,11 +698,7 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         Position storage position = _inTermPosition(positionId);
         WaterfallSplit memory split = _positionSplit(position);
         _fillEarlyExitQuote(result, position, split, mode);
-        if (mode == CoverMode.SellShares) {
-            (result.mstrSold, result.feeShortfallUsdg) =
-                _previewSell(position, result.coverUsdg, result.juniorLeftoverFees);
-        }
-        result.mstrReturned = position.mstrAmount - result.mstrSold;
+        result.mstrReturned = position.mstrAmount;
     }
 
     // ─── views ───────────────────────────────────────────────────────────────
@@ -763,11 +743,6 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         return CarryPool.claimableQueued(wqRequested[user], wqClaimed[user], wqCursor[user], wqCumulativeFulfilled);
     }
 
-    /// @notice Positions roll at term, so accrual always runs to now: only the current index is needed.
-    function currentRateIndex() public view returns (uint256) {
-        return CarryMath.advanceRateIndex(rateIndex, morphoRateWad, block.timestamp - rateUpdatedAt, YEAR);
-    }
-
     function previewSeniorAssets(uint256 mstrAmount) public view returns (uint256) {
         return previewSeniorAssets(mstrAmount, _priceView());
     }
@@ -775,10 +750,6 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
     function previewSeniorAssets(uint256 mstrAmount, uint256 priceWad) public view returns (uint256) {
         if (priceWad == 0) revert BadPrice();
         return CarryMath.seniorAssets(mstrAmount, priceWad, mstrDecimals, usdgDecimals);
-    }
-
-    function _mstrToCover(uint256 usdgShort, uint256 priceWad) internal view returns (uint256) {
-        return CarryMath.mstrToCover(usdgShort, priceWad, mstrDecimals, usdgDecimals);
     }
 
     /// @notice Compatibility alias: senior principal ≈ share assets (incl. queued).
@@ -793,38 +764,22 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         address junior = position.owner;
         uint256 gross = position.feeUsdg;
         result = _settleQuote(position, mode);
-        uint256 splitJunior = result.juniorYield;
-        uint256 coverTotal = result.coverUsdg;
 
-        if (msg.sender != junior) {
-            if (mode == CoverMode.SellShares && !sellSharesEnabled[junior]) revert SellSharesDisabled();
-            // Healthy positions roll at term; only the junior closes them.
-            if (!_stoppedPastGrace(position)) revert NotJunior();
-        }
-
-        if (coverTotal > 0) {
-            (result.juniorYield, result.mstrSold, result.feeShortfallUsdg) = _collectCover(
-                position, junior, mode, coverTotal - result.treasuryOnCover, result.treasuryOnCover, splitJunior, true
-            );
-            // Interest the junior could not pay is forgiven, never taken from lender principal.
-            result.fromPool = result.feeShortfallUsdg;
-        }
+        // Healthy positions roll at term; only the junior closes them.
+        if (msg.sender != junior && !_stoppedPastGrace(position)) revert NotJunior();
         result.mstrKept = position.mstrAmount;
 
-        // Senior yield + backstop top-up compound into the pool; matched principal returns to idle.
-        _creditPoolUsdg(result.seniorFloor + result.seniorPerf + result.fromBackstop);
+        // Senior fee share compounds into the pool; matched principal returns to idle.
+        _creditPoolUsdg(result.seniorPerf);
         reservedSenior -= position.seniorPrincipal;
-        backstop = backstop - result.fromBackstop + result.treasury;
+        backstop += result.treasury;
 
         position.settled = true;
         position.feeUsdg = 0;
         _reduceUnsplitFees(gross);
-        position.unpaidSeniorAccrual = 0;
         _closePosition(positionId, position);
 
-        emit WaterfallApplied(
-            positionId, gross, result.accrual, result.seniorFloor, result.treasury, result.seniorPerf, splitJunior
-        );
+        emit WaterfallApplied(positionId, gross, 0, 0, result.treasury, result.seniorPerf, result.juniorYield);
         emit Settled(positionId, junior, result.mstrKept, result.mstrSold, result.treasury, result.juniorYield);
 
         _fillWithdrawQueue();
@@ -843,24 +798,11 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         uint256 matchedPrincipal = position.seniorPrincipal;
         WaterfallSplit memory split = _splitAndClearFees(positionId);
         _fillEarlyExitQuote(result, position, split, mode);
-
-        if (result.coverUsdg > 0) {
-            (result.juniorLeftoverFees, result.mstrSold, result.feeShortfallUsdg) = _collectCover(
-                position,
-                msg.sender,
-                mode,
-                result.coverUsdg - result.treasuryOnCover,
-                result.treasuryOnCover,
-                split.junior,
-                false
-            );
-        }
         result.mstrReturned = position.mstrAmount;
 
         reservedSenior -= matchedPrincipal;
         position.settled = true;
         position.feeUsdg = 0;
-        position.unpaidSeniorAccrual = 0;
         _closePosition(positionId, position);
 
         emit EarlyExit(
@@ -880,125 +822,17 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         _deliverJuniorExit(msg.sender, result.mstrReturned, result.juniorLeftoverFees);
     }
 
-    /// @dev Collect `shortfall + treasuryOnCover` USDG for the senior pool from the junior, in order:
-    ///      position fees → junior idle (lender shares) → wallet → (settle, junior caller) sell MSTR,
-    ///      or fees → sell MSTR (SellShares).
-    ///      Collected USDG goes to the pool first, then the treasury cut to backstop, so the treasury
-    ///      only takes a cut of cover the junior actually paid.
-    ///      Early exit (`atSettle` false) must pay the wallet part in full. At settle the wallet pull is
-    ///      clamped to balance/allowance; interest still unpaid after the sale (or with no
-    ///      router) is forgiven and returned as `unpaid`.
-    function _collectCover(
-        Position storage position,
-        address junior,
-        CoverMode mode,
-        uint256 shortfall,
-        uint256 treasuryOnCover,
-        uint256 juniorFees,
-        bool atSettle
-    ) internal returns (uint256 feesLeft, uint256 mstrSold, uint256 unpaid) {
-        uint256 need = shortfall + treasuryOnCover;
-        uint256 got = juniorFees < need ? juniorFees : need;
-        feesLeft = juniorFees - got;
-
-        if (got < need && mode != CoverMode.SellShares) {
-            got += _consumeJuniorIdle(junior, need - got);
-            uint256 rest = need - got;
-            // Someone else settling a stopped position never pulls from the junior's wallet.
-            if (rest > 0 && msg.sender == junior) {
-                uint256 bal = usdg.balanceOf(junior);
-                uint256 allowed = usdg.allowance(junior, address(this));
-                uint256 pull = bal < allowed ? bal : allowed;
-                if (pull < rest) {
-                    if (!atSettle) revert JuniorCoverRequired();
-                } else {
-                    pull = rest;
-                }
-                if (pull > 0) {
-                    _pullExact(usdg, junior, pull);
-                    got += pull;
-                }
-            }
-        }
-        // SellShares sells for whatever fees left uncovered. At settle, a junior who still owes after
-        // idle + wallet also sells, so revoking the USDG approval cannot dodge interest. Only the junior
-        // (or anyone, if the junior opted into SellShares) reaches this; lenders cannot force a sale.
-        if (
-            got < need
-                && (mode == CoverMode.SellShares || (atSettle && msg.sender == junior && sellSharesRouter != address(0)))
-        ) {
-            uint256 usdgOut;
-            (mstrSold, usdgOut) = _sellPositionMstr(position, need - got);
-            got += usdgOut;
-            if (got > need) {
-                feesLeft += got - need;
-                got = need;
-            }
-        }
-
-        uint256 toPool = got < shortfall ? got : shortfall;
-        _creditPoolUsdg(toPool);
-        backstop += got - toPool;
-        unpaid = shortfall - toPool;
-    }
-
-    /// @dev Sell position MSTR worth `usdgNeed` through the router. Needs a real router: crediting USDG
-    ///      that was never received would make the pool insolvent.
-    function _sellPositionMstr(Position storage position, uint256 usdgNeed)
-        internal
-        returns (uint256 mstrSold, uint256 usdgOut)
-    {
-        address router = sellSharesRouter;
-        if (router == address(0)) revert NoSellRouter();
-        uint256 price = _price();
-        mstrSold = _mstrToCover(usdgNeed, price);
-        if (mstrSold > position.mstrAmount) mstrSold = position.mstrAmount;
-        if (mstrSold == 0) return (0, 0);
-        position.mstrAmount -= mstrSold;
-
-        uint256 minOut = _usdgValue(mstrSold, price) * 95 / 100;
-        if (!mstr.approve(router, mstrSold)) revert ApproveFailed();
-        uint256 before = usdg.balanceOf(address(this));
-        IMstrSellRouter(router).sellMstrForUsdg(mstrSold, minOut, address(this));
-        usdgOut = usdg.balanceOf(address(this)) - before;
-        if (usdgOut < minOut) revert TransferFailed();
-        if (!mstr.approve(router, 0)) revert ApproveFailed();
-    }
-
-    /// @dev Preview of the SellShares path: fees cover first, MSTR is sold for the rest at oracle price.
-    function _previewSell(Position storage position, uint256 coverUsdg, uint256 juniorFees)
-        internal
-        view
-        returns (uint256 mstrSold, uint256 feeShortfallUsdg)
-    {
-        if (coverUsdg <= juniorFees) return (0, 0);
-        uint256 need = coverUsdg - juniorFees;
-        uint256 price = _price();
-        mstrSold = _mstrToCover(need, price);
-        if (mstrSold > position.mstrAmount) {
-            mstrSold = position.mstrAmount;
-            feeShortfallUsdg = need - _usdgValue(mstrSold, price);
-        }
-    }
-
-    /// @dev Waterfall + backstop-first cover quote shared by `previewSettle` and `_settle`.
+    /// @dev Fee split quote shared by `previewSettle` and `_settle`. There is no lender coupon, so
+    ///      nothing is owed beyond fees: accrual, floor and cover fields stay zero (kept for the ABI).
     function _settleQuote(Position storage position, CoverMode mode) internal view returns (Settlement memory r) {
         WaterfallSplit memory split = _positionSplit(position);
-        r.accrual = split.accrual;
-        r.seniorFloor = split.seniorFloor;
         r.treasury = split.treasury;
         r.seniorPerf = split.seniorPerf;
         r.juniorYield = split.junior;
         r.coverMode = mode;
-
-        uint256 shortfall = split.accrual - split.seniorFloor;
-        r.fromBackstop = backstop < shortfall ? backstop : shortfall;
-        shortfall -= r.fromBackstop;
-        r.treasuryOnCover = shortfall * _cutWadForPosition(position) / WAD;
-        r.coverUsdg = shortfall + r.treasuryOnCover;
     }
 
-    /// @dev Early-exit quote (no backstop) shared by `previewEarlyExit` and `_earlyExit`.
+    /// @dev Early-exit quote shared by `previewEarlyExit` and `_earlyExit`. Exiting costs nothing.
     function _fillEarlyExitQuote(
         EarlyExitResult memory r,
         Position storage position,
@@ -1007,14 +841,9 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
     ) internal view {
         r.elapsed = _elapsedSinceSplit(position);
         r.coverMode = mode;
-        r.accrual = split.accrual;
-        r.seniorFloor = split.seniorFloor;
         r.treasury = split.treasury;
         r.seniorPerf = split.seniorPerf;
         r.juniorLeftoverFees = split.junior;
-        uint256 shortfall = split.accrual - split.seniorFloor;
-        r.treasuryOnCover = shortfall * _cutWadForPosition(position) / WAD;
-        r.coverUsdg = shortfall + r.treasuryOnCover;
     }
 
     /// @dev Open and matched. Positions roll at term, so this holds past the term too.
@@ -1057,7 +886,7 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
     }
 
     function _positionSplit(Position storage position) internal view returns (WaterfallSplit memory) {
-        return _waterfallFromGross(position.feeUsdg, _accrualFor(position), _cutWadForPosition(position));
+        return _waterfallFromGross(position.feeUsdg, 0, _cutWadForPosition(position));
     }
 
     function _reduceUnsplitFees(uint256 gross) internal {
@@ -1070,7 +899,6 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         split = _positionSplit(position);
         position.feeUsdg = 0;
         _reduceUnsplitFees(gross);
-        position.unpaidSeniorAccrual = split.accrual - split.seniorFloor;
         backstop += split.treasury;
         _creditPoolUsdg(split.seniorTotal);
         emit WaterfallApplied(
@@ -1091,26 +919,6 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         s.seniorPerf = w.seniorPerf;
         s.junior = w.junior;
         s.seniorTotal = w.seniorTotal;
-    }
-
-    function _accrualFor(Position storage position) internal view returns (uint256) {
-        if (position.seniorPrincipal == 0) return position.unpaidSeniorAccrual;
-        uint256 idxEnd = currentRateIndex();
-        uint256 idxStart = position.rateIndexSnapshot;
-        return position.unpaidSeniorAccrual + CarryMath.accrualFromIndex(position.seniorPrincipal, idxStart, idxEnd);
-    }
-
-    function _checkpointMatchAccrual(Position storage position) internal {
-        if (position.seniorPrincipal == 0) {
-            position.rateIndexSnapshot = currentRateIndex();
-            position.lastFeeSplitAt = uint64(block.timestamp);
-            return;
-        }
-        uint256 idxEnd = currentRateIndex();
-        position.unpaidSeniorAccrual +=
-            CarryMath.accrualFromIndex(position.seniorPrincipal, position.rateIndexSnapshot, idxEnd);
-        position.rateIndexSnapshot = idxEnd;
-        position.lastFeeSplitAt = uint64(block.timestamp);
     }
 
     // ─── pool / queue / match ────────────────────────────────────────────────
@@ -1172,11 +980,8 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
             position.entryPriceWad = _price();
             position.openedAt = uint64(block.timestamp);
             position.lastFeeSplitAt = uint64(block.timestamp);
-            position.rateIndexSnapshot = currentRateIndex();
             position.treasuryCutLocked = _tierCutForUser(position.owner);
             position.boosted = treasuryCutIsSet && position.treasuryCutLocked < treasuryCutWad;
-        } else {
-            _checkpointMatchAccrual(position);
         }
 
         position.seniorPrincipal += delta;
@@ -1191,18 +996,6 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
     function _creditPoolUsdg(uint256 amount) internal {
         if (amount == 0) return;
         totalSeniorAssets += amount;
-    }
-
-    function _consumeJuniorIdle(address junior, uint256 amount) internal returns (uint256 consumed) {
-        if (amount == 0) return 0;
-        uint256 freeSh = _freeShares(junior);
-        uint256 freeAssets = CarryPool.convertToAssets(freeSh, totalShares, totalSeniorAssets);
-        consumed = amount < freeAssets ? amount : freeAssets;
-        if (consumed == 0) return 0;
-        uint256 burn = CarryPool.previewWithdrawShares(consumed, totalShares, totalSeniorAssets);
-        if (burn > freeSh) burn = freeSh;
-        _redeem(junior, burn, consumed);
-        // USDG stays in vault; reclassified to cover.
     }
 
     function _freeShares(address user) internal view returns (uint256) {
@@ -1233,7 +1026,7 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         backstop -= amount;
         // Floor: senior pool NAV + remaining backstop + unsplit position fees (+ queue is inside NAV).
         uint256 floor = totalSeniorAssets + backstop + totalUnsplitFees;
-        if (usdg.balanceOf(address(this)) < floor) revert InsufficientBackstop();
+        if (usdg.balanceOf(address(this)) + strategyDeployed < floor) revert InsufficientBackstop();
         _push(usdg, to, amount);
     }
 
@@ -1410,14 +1203,6 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         Position storage position = positions[id];
         if (position.owner == address(0) || position.settled) return address(0);
         return position.owner;
-    }
-
-    function _syncRateIndex() internal {
-        uint256 t = block.timestamp;
-        if (t <= rateUpdatedAt) return;
-        rateIndex = CarryMath.advanceRateIndex(rateIndex, morphoRateWad, t - rateUpdatedAt, YEAR);
-        rateUpdatedAt = uint64(t);
-        emit RateIndexUpdated(rateIndex, rateUpdatedAt);
     }
 
     function _price() internal view returns (uint256 price) {
