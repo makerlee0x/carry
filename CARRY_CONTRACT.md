@@ -12,7 +12,7 @@ v2.5 notes kept in [`docs/ACCOUNTING_V25.md`](./docs/ACCOUNTING_V25.md) (superse
 **Superseded v2.5 PROXY:** [`0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd`](https://explorer.testnet.chain.robinhood.com/address/0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd) — history only; its settle-watch positions are settled.  
 **Site:** [usecarry.io](https://usecarry.io).
 
-This pack describes the vault source on `main`. The live testnet impl predates three merged changes (EIP-170 fit #3, rolling positions #16, `StrategyBoostHook` #23) and picks them up at the next owner-signed upgrade.
+This pack describes the vault source on `main`. The live testnet impl predates four merged changes (EIP-170 fit #3, rolling positions #16, `StrategyBoostHook` #23, `CarryStrategy` idle-USDG wiring #21) and picks them up at the next owner-signed upgrade.
 
 v3 product: Maker waterfall, **lender pool shares**, FIFO withdraw queue, **floating rate index**, uncapped senior pool, junior $25k cap, $25 min, cover orders per Maker v3, gas refund only on match (scaled), auto-compound with under-$25 wallet payout, explicit withdraw unmatched always wallet.
 
@@ -225,11 +225,11 @@ On settle/early exit/claimFees, USDG paid toward seniorFloor + seniorPerf is add
 | --- | --- |
 | DualPool / Uni v4 hook | **NOT IMPLEMENTED** |
 | Real swap fee routing | **NOT IMPLEMENTED** (mock `accrueLpFee`) |
-| Morpho idle sleeve | **NOT IMPLEMENTED** (rate stub only) |
+| Morpho idle sleeve | On `main`: `CarryStrategy` parks idle USDG in a Morpho (ERC-4626) vault, `MockMorphoVault` on testnet (#21). Not on the live impl yet |
 | Live STRATEGY token | Boost tiers live in a separate `StrategyBoostHook` that reads `StrategyStaking`; no STRATEGY yield minted |
 | Partial exits of a single position | Full close on earlyExit / settle |
 | SellShares AMM | Interface live; testnet `sellSharesRouter=0` (MSTR→seniors accounting) |
-| Impl size vs EIP-170 | Live testnet impl ~29.6KB (size limit disabled); `main` ~23.4KB, under 24,576 |
+| Impl size vs EIP-170 | Live testnet impl ~29.6KB (size limit disabled); `main` 24,432 bytes, under 24,576 |
 | Lender rate | Testnet stub; mainnet rework to Morpho yield + fee share, no fixed rate (#20 / PR #21) |
 | Robinhood testnet Uni v4 | **No official Uniswap deploy on 46630** — mocks required |
 

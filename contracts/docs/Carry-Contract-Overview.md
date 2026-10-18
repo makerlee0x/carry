@@ -15,7 +15,7 @@ Grant and audit reference for `LeveredLpVault` on **Robinhood Chain Testnet (cha
 
 Full pack: [`../../CARRY_CONTRACT.md`](../../CARRY_CONTRACT.md). Accounting: [`../../docs/ACCOUNTING_V3.md`](../../docs/ACCOUNTING_V3.md).
 
-This overview describes the source on `main`. The live implementation predates three merged changes: the EIP-170 fit (#3), rolling positions (#16) and `StrategyBoostHook` (#23). They reach testnet with the next owner-signed upgrade.
+This overview describes the source on `main`. The live implementation predates four merged changes: the EIP-170 fit (#3), rolling positions (#16), `StrategyBoostHook` (#23) and `CarryStrategy` idle-USDG wiring (#21). They reach testnet with the next owner-signed upgrade.
 
 **Lender rate note.** The Morpho rate here is an owner-set testnet stub, not a promised APY. The mainnet lender return is being reworked to Morpho yield (floating) + Carry's share of fees, with no fixed rate or floor (issue #20, PR #21).
 
@@ -45,7 +45,7 @@ Carry pairs a stock-token holder (**junior**) with a USDG lender (**senior**) in
 | Unpaid accrual | Carried on position when fees &lt; accrual |
 | Pause / reentrancy | Owner pause gates deposits; `nonReentrant` on value paths |
 | External LP | No PoolManager approvals; `joinPool` reverts |
-| Runtime size | `main` ~23.4KB (under EIP-170); live impl ~29.6KB (testnet only) |
+| Runtime size | `main` ~24.4KB (under EIP-170); live impl ~29.6KB (testnet only) |
 
 Inventory is held inside the vault. `mark()` reports 2× equity vs an unlevered 50/50 √p comparison without moving inventory.
 

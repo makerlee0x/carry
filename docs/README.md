@@ -11,7 +11,7 @@ Canonical pointers for what is **live** on Robinhood Chain Testnet **46630**.
 | Implementation | [`0x7BeED7F65A9D4aF4E67553d984800F6268a3778E`](https://explorer.testnet.chain.robinhood.com/address/0x7BeED7F65A9D4aF4E67553d984800F6268a3778E) (`version()` = **`v3-lender-pool`**) |
 | Superseded v2.5 PROXY | [`0xc801…72bd`](https://explorer.testnet.chain.robinhood.com/address/0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd) — settle-watch only |
 | v1 grant reference | `0x72A053…36c8` — **not in use** |
-| Code on `main` | Ahead of the live impl: EIP-170 fit (#3), rolling positions (#16), `StrategyBoostHook` (#23). Not yet upgraded on testnet. |
+| Code on `main` | Ahead of the live impl: EIP-170 fit (#3), rolling positions (#16), `StrategyBoostHook` (#23), `CarryStrategy` wiring (#21). Not yet upgraded on testnet. |
 | UI config | [`../public/config.json`](../public/config.json) |
 
 ## Start here

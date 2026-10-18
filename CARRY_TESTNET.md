@@ -75,7 +75,7 @@ Security notes: [`docs/SECURITY_V3.md`](./docs/SECURITY_V3.md). Accounting: [`do
 
 `public/config.json` → `chain.vault` = PROXY, `chain.vaultImplementation` = `0x7BeE…778E`. UI money paths point here.
 
-**Code on `main` is ahead of this implementation.** Merged and not yet upgraded on testnet: EIP-170 fit (#3), rolling positions with a 48h grace settle for underwater ones (#16), and `StrategyBoostHook` (#23). Storage layout stays compatible, so the next step is an owner-signed `upgradeToAndCall` on this PROXY (`contracts/script/UpgradeCarryVault.s.sol`).
+**Code on `main` is ahead of this implementation.** Merged and not yet upgraded on testnet: EIP-170 fit (#3), rolling positions with a 48h grace settle for underwater ones (#16), `StrategyBoostHook` (#23), and `CarryStrategy` wiring for idle USDG in Morpho (#21). Storage layout stays compatible, so the next step is an owner-signed `upgradeToAndCall` on this PROXY (`contracts/script/UpgradeCarryVault.s.sol`).
 
 ### Confirm live bytecode
 
@@ -205,7 +205,7 @@ The live PROXY runs the v3 lender pool: one USDG pool with internal non-transfer
 
 The lender rate on testnet is an owner-set stub (`morphoRateWad`, ≤5%) driving a floating rate index. It is not a promised APY. The mainnet lender return is being reworked to Morpho yield + Carry's share of fees with no fixed rate (issue #20, PR #21). Idle USDG Morpho on testnet is display-only (no ERC-4626 sleeve yet).
 
-Size: the live impl (~29.6KB) was deployed with the size limit disabled; on `main` the vault is ~23.4KB, under EIP-170.
+Size: the live impl (~29.6KB) was deployed with the size limit disabled; on `main` the vault is ~24.4KB, under EIP-170.
 
 ### Wallet early-exit path (E2E)
 

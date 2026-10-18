@@ -15,7 +15,7 @@ Forge project for Carry’s custody + accounting vault on **Robinhood Chain Test
 
 Live accounting: one lender pool with internal shares (instant withdraw or FIFO queue + `claimWithdraw`), floating rate index on a testnet stub rate, Maker waterfall, $25 min, senior pool uncapped, junior market $25k, no per-wallet cap, settle default IdleCarry, auto-compound, gasCredit. See [`../docs/ACCOUNTING_V3.md`](../docs/ACCOUNTING_V3.md).
 
-Source on `main` is ahead of the live impl: EIP-170 fit (#3, runtime ~23.4KB), rolling positions (#16) and `StrategyBoostHook` (#23, `src/StrategyBoostHook.sol`). Not yet upgraded on testnet.
+Source on `main` is ahead of the live impl: EIP-170 fit (#3, runtime ~24.4KB), rolling positions (#16) `StrategyBoostHook` (#23, `src/StrategyBoostHook.sol`) and `CarryStrategy` idle-USDG wiring (#21). Not yet upgraded on testnet.
 
 ## Setup
 

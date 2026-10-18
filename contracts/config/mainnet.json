@@ -111,7 +111,7 @@
     "proxy": "0x24B799026AA7baa6856bCFD00c1Be1f583A83e35",
     "version": "v3-lender-pool",
     "implementation": "0x7BeED7F65A9D4aF4E67553d984800F6268a3778E",
-    "_note": "Live testnet implementation predates main: EIP-170 fit (#3), rolling positions (#16) and the boost hook (#23) are in code but not yet upgraded on the proxy.",
+    "_note": "Live testnet implementation predates main: EIP-170 fit (#3), rolling positions (#16), the boost hook (#23) and CarryStrategy wiring (#21) are in code but not yet upgraded on the proxy.",
     "termDays": 7,
     "morphoRateWad": "owner-set testnet stub (0.039e18), cap 5%",
     "floatingRateIndex": true,

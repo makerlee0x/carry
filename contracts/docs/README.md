@@ -18,7 +18,7 @@ Canonical grant / audit pack (repo root) and live product pointers:
 | PROXY | `0x24B799026AA7baa6856bCFD00c1Be1f583A83e35` |
 | Implementation | `0x7BeED7F65A9D4aF4E67553d984800F6268a3778E` |
 | `version()` | **`v3-lender-pool`** |
-| Source on `main` | Ahead of the live impl (#3, #16, #23); not yet upgraded |
+| Source on `main` | Ahead of the live impl (#3, #16, #23, #21); not yet upgraded |
 | Superseded v2.5 PROXY | `0xc801…72bd` — history only |
 | Site | [usecarry.io](https://usecarry.io) |
 | v1 grant reference | `0x72A053…36c8` — **not in use** |

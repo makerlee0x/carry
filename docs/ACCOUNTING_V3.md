@@ -13,7 +13,7 @@
 
 v2.5 was **not** UUPS-upgraded in place; v3 is a **fresh UUPS PROXY**. v2.5 settle-watch positions #5/#6/#7 have since been settled on the superseded PROXY.
 
-**Live vs `main`.** The testnet proxy still runs the original v3 implementation. `main` adds the EIP-170 fit (#3), rolling positions (#16) and the boost hook (#23); those sections below are marked *main*. They reach testnet with the next owner-signed upgrade.
+**Live vs `main`.** The testnet proxy still runs the original v3 implementation. `main` adds the EIP-170 fit (#3), rolling positions (#16), the boost hook (#23) and `CarryStrategy` idle-USDG wiring (#21); those sections below are marked *main*. They reach testnet with the next owner-signed upgrade.
 
 ## Lender pool
 
@@ -71,4 +71,4 @@ $25 min deposit/match, senior pool uncapped, junior market $25k, **no per-wallet
 
 ## Size
 
-Runtime impl measured in Forge (`test_runtimeSize_measured`). Live impl ~29.6k (deployed with the size limit disabled). On `main` the vault is ~23.4k, under EIP-170 (24,576).
+Runtime impl measured in Forge (`test_runtimeSize_measured`). Live impl ~29.6k (deployed with the size limit disabled). On `main` the vault is ~24.4k, under EIP-170 (24,576).

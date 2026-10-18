@@ -27,7 +27,7 @@ This repo is the **working Carry app + contracts**:
 
 Upgradeability: **UUPS**. v3 is a fresh PROXY (v2.5 was not upgraded in place). UI money paths use `public/config.json` → `chain.vault` (PROXY).
 
-**`main` is ahead of the live implementation.** The proxy still runs the original v3 impl. Merged since and not yet upgraded on testnet: the EIP-170 fit (#3, runtime now ~23.4 KB), rolling positions with a 48h grace settle for underwater ones (#16), and the STRATEGY boost read from a separate `StrategyBoostHook` (#23). See [`docs/ACCOUNTING_V3.md`](./docs/ACCOUNTING_V3.md).
+**`main` is ahead of the live implementation.** The proxy still runs the original v3 impl. Merged since and not yet upgraded on testnet: the EIP-170 fit (#3, runtime now ~24.4 KB), rolling positions with a 48h grace settle for underwater ones (#16), and the STRATEGY boost read from a separate `StrategyBoostHook` (#23). See [`docs/ACCOUNTING_V3.md`](./docs/ACCOUNTING_V3.md).
 
 ### Live accounting (v3)
 

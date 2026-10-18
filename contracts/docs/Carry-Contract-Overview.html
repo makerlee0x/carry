@@ -174,9 +174,10 @@ href="../../CARRY_CONTRACT.md"><code>../../CARRY_CONTRACT.md</code></a>.
 Accounting: <a
 href="../../docs/ACCOUNTING_V3.md"><code>../../docs/ACCOUNTING_V3.md</code></a>.</p>
 <p>This overview describes the source on <code>main</code>. The live
-implementation predates three merged changes: the EIP-170 fit (#3),
-rolling positions (#16) and <code>StrategyBoostHook</code> (#23). They
-reach testnet with the next owner-signed upgrade.</p>
+implementation predates four merged changes: the EIP-170 fit (#3),
+rolling positions (#16), <code>StrategyBoostHook</code> (#23) and
+<code>CarryStrategy</code> idle-USDG wiring (#21). They reach testnet
+with the next owner-signed upgrade.</p>
 <p><strong>Lender rate note.</strong> The Morpho rate here is an
 owner-set testnet stub, not a promised APY. The mainnet lender return is
 being reworked to Morpho yield (floating) + Carry’s share of fees, with
@@ -267,7 +268,7 @@ paths</td>
 </tr>
 <tr class="even">
 <td>Runtime size</td>
-<td><code>main</code> ~23.4KB (under EIP-170); live impl ~29.6KB
+<td><code>main</code> ~24.4KB (under EIP-170); live impl ~29.6KB
 (testnet only)</td>
 </tr>
 </tbody>
