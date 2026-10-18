@@ -84,7 +84,8 @@
   const withTimeout = (p, ms, msg) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error(msg || 'timeout')), ms))]);
   let readyResolve; const readyP = new Promise((r) => { readyResolve = r; });   // resolves once the library and config have loaded
 
-  const num = (v, d = 18) => Number(viem.formatUnits(v, d));
+  // Missing fields (an event or struct from another vault version) read as 0 instead of throwing.
+  const num = (v, d = 18) => (v == null ? 0 : Number(viem.formatUnits(v, d)));
   const round = (n, dp) => Number(n.toFixed(dp));
 
   // Maker fee waterfall preview (product truth). Live UUPS vault applies this on-chain
@@ -161,10 +162,12 @@
     const rd = (functionName, args = []) => pub.readContract({ address: cfg.vault, abi: vaultAbi, functionName, args });
     // v2 UUPS vault uses morphoRateWad; fall back to borrowAprWad for legacy 0x72A0… reads if ever pointed there.
     const rateP = rd('morphoRateWad').catch(() => rd('borrowAprWad'));
+    // v3: totalSeniorAssets. v2.5 totalSeniorPrincipal is absent on live ABI — fall back so refresh does not throw.
+    const seniorP = rd('totalSeniorAssets').catch(() => rd('totalSeniorPrincipal'));
     const [paused, term, apr, price, next, senior, reserved, free, backstop] = await Promise.all([
       rd('paused'), rd('term'), rateP,
       pub.readContract({ address: cfg.oracle, abi: viem.parseAbi(['function mstrPriceWad() view returns (uint256)']), functionName: 'mstrPriceWad' }),
-      rd('nextPositionId'), rd('totalSeniorPrincipal'), rd('reservedSenior'), rd('freeSenior'), rd('backstop'),
+      rd('nextPositionId'), seniorP, rd('reservedSenior'), rd('freeSenior'), rd('backstop'),
     ]);
     const tvl = num(senior), res = num(reserved);
     S.vault = {
@@ -186,7 +189,8 @@
       pub.readContract({ address: cfg.mstr, abi: erc, functionName: 'balanceOf', args: [a] }),
       pub.readContract({ address: cfg.usdg, abi: erc, functionName: 'balanceOf', args: [a] }),
       rd('seniorPrincipal', [a]), rd('freePrincipal', [a]),
-      rd('seniorClaimableYield', [a]), rd('seniorClaimableMstr', [a]),
+      // v2.5 claimables removed on v3 — yield compounds into pool share price.
+      rd('seniorClaimableYield', [a]).catch(() => 0n), rd('seniorClaimableMstr', [a]).catch(() => 0n),
       rd('autoCompound', [a]).catch(() => false),
       rd('gasCreditWei', [a]).catch(() => 0n),
       vaultEvents({ eventName: 'JuniorDeposit', args: { junior: a } }),
@@ -219,6 +223,9 @@
     const live = raw.filter((r) => !r.settled);
     // Per-leg numbers straight from the vault: in-term legs via previewEarlyExit (wallet cover), past-term legs via
     // previewSettle (default IdleCarry, backstop first). mine = depositor fee share, cover = USDG you would pay.
+    // If a preview reverts, past-term legs mirror _settleQuote: the shared backstop covers the gap first, then you pay
+    // the rest plus the cut. bsLeft is drawn down across legs so two fallbacks don't both count the full backstop.
+    let bsLeft = S.vault.backstop || 0;
     await Promise.all(live.map(async (r) => {
       if (!r.matched) return;
       const inTerm = r.openedAt + term > now;
@@ -228,7 +235,9 @@
       } catch (e) {
         const w = waterfallPreview({ seniorPrincipal: r.senior, morphoRate: S.vault.aprPct / 100, elapsedSec: Math.min(now, r.openedAt + term) - r.openedAt, gross: r.fee, boosted: r.boosted, cut: r.cut });
         const short = Math.max(w.accrual - w.seniorFloor, 0);
-        r.pv = { accrual: w.accrual + r.unpaid, mine: w.junior, cover: inTerm ? short * (1 + w.treasuryCut) : 0, fromBackstop: 0, estimate: true };
+        const fromBackstop = inTerm ? 0 : Math.min(bsLeft, short);
+        bsLeft -= fromBackstop;
+        r.pv = { accrual: w.accrual + r.unpaid, mine: w.junior, cover: (short - fromBackstop) * (1 + w.treasuryCut), fromBackstop, estimate: true };
       }
     }));
     S.raw = live;
@@ -301,7 +310,13 @@
       positions.push({
         sym: 'USDG', shares: round(seniorN, 4), matched: round(matchedN, 4),
         fees: round(num(yld) + num(mstrClaim) * price, 4), days: 0, earned: 0, auto: autoCompoundOn, real: true,
-        statusTxt: matchedN > 0 ? 'Active' : 'Idle', leftTxt: matchedN > 0 ? 'Unlocks on close' : 'Earning on Morpho · withdrawable', free: matchedN === 0, count: 1,
+        statusTxt: matchedN > 0 ? 'Active' : 'Idle',
+        leftTxt: matchedN > 0
+          ? 'Unlocks on close'
+          : ((productCfg && productCfg.idleSleeveLive)
+            ? 'Earning on Morpho · withdrawable'
+            : 'Idle in lender pool · withdrawable'),
+        free: matchedN === 0, count: 1,
       });
     }
 
@@ -361,10 +376,10 @@
     await Promise.all(closedRecs.map(([, r]) => Promise.all([timeOf(r.close.blockNumber), timeOf(r.dep.blockNumber)])));
     const rows = await Promise.all(closedRecs.map(async ([id, r]) => {
       const a = r.close.args, kind = r.close.eventName, p = await pub.readContract({ address: cfg.vault, abi: vaultAbi, functionName: 'positions', args: [BigInt(id)] });
-      const entry = num(p[3]), sharesIn = num(r.dep.args.mstrAmount), closedAt = blockTime.get(r.close.blockNumber);
+      const entry = num(p.length >= 10 ? p[4] : p[3]), sharesIn = num(r.dep.args.mstrAmount), closedAt = blockTime.get(r.close.blockNumber);
       const matchedAt = r.match ? Number(r.match.args.openedAt) * 1000 : 0, startAt = matchedAt || blockTime.get(r.dep.blockNumber);
       let out, sold = 0, net = 0, paid = 0, label;
-      if (kind === 'EarlyExit') { out = num(a.mstrReturned); sold = num(a.mstrSold); net = num(a.juniorLeftoverFees); paid = num(a.couponOwed); label = 'Early exit'; }
+      if (kind === 'EarlyExit') { out = num(a.mstrReturned); sold = num(a.mstrSold); net = num(a.juniorLeftoverFees); paid = num(a.accrual ?? a.couponOwed); label = 'Early exit'; }
       else if (kind === 'Settled') { out = num(a.mstrKept); sold = num(a.mstrSold); net = num(a.juniorYield); paid = Math.max(r.fees - net, 0); label = 'Term complete'; }
       else { out = num(a.mstrAmount); label = 'Idle withdrawal'; }
       const days = Math.max((closedAt - startAt) / 864e5, 0), paired = !!r.match && entry > 0;
@@ -402,8 +417,8 @@
       if (i > lastDay) { snap(i - 1); lastDay = i; }
       switch (l.eventName) {
         case 'JuniorDeposit': { const v = num(a.mstrAmount) * price; add(arr.dep, i, v); allDep += v; runStock += num(a.mstrAmount); touch(i, a.junior); break; }
-        case 'SeniorDeposit': { const v = num(a.amount); add(arr.dep, i, v); allDep += v; runTot += v; touch(i, a.senior); break; }
-        case 'SeniorWithdraw': { const v = num(a.principal); add(arr.wd, i, v); runTot -= v; touch(i, a.senior); break; }
+        case 'SeniorDeposit': { const v = num(a.assets ?? a.amount); add(arr.dep, i, v); allDep += v; runTot += v; touch(i, a.senior); break; }
+        case 'SeniorWithdraw': case 'SeniorWithdrawClaimed': { const v = num(a.assets ?? a.principal); add(arr.wd, i, v); runTot -= v; touch(i, a.senior); break; }
         case 'UnmatchedWithdraw': add(arr.wd, i, num(a.mstrAmount) * price); runStock -= num(a.mstrAmount); touch(i, a.junior); break;
         case 'PositionMatched': { const v = num(a.seniorPrincipal); matchedOf.set(a.positionId, v); runAct += v; touch(i, a.junior); break; }
         case 'EarlyExit': add(arr.wd, i, (num(a.mstrReturned) + num(a.mstrSold)) * price); runStock -= num(a.mstrReturned) + num(a.mstrSold); runAct -= matchedOf.get(a.positionId) || 0; touch(i, a.junior); break;
@@ -417,11 +432,12 @@
     // Newest-first transaction list for the Analytics table. Every row keeps its transaction hash.
     const EV = {
       JuniorDeposit: (a) => ({ k: 'dep', t: 'Deposit', n: num(a.mstrAmount), u: 'MSTR', who: a.junior, pid: a.positionId, note: a.matched ? 'Active · paired with USDG' : 'Idle · waiting for USDG' }),
-      SeniorDeposit: (a) => ({ k: 'dep', t: 'Deposit', n: num(a.amount), u: 'USDG', who: a.senior }),
+      SeniorDeposit: (a) => ({ k: 'dep', t: 'Deposit', n: num(a.assets ?? a.amount), u: 'USDG', who: a.senior }),
       PositionMatched: (a) => ({ k: 'match', t: 'Matched', n: num(a.seniorPrincipal), u: 'USDG', who: a.junior, pid: a.positionId }),
-      SeniorWithdraw: (a) => ({ k: 'wd', t: 'Withdraw', n: num(a.principal), u: 'USDG', who: a.senior }),
+      SeniorWithdraw: (a) => ({ k: 'wd', t: 'Withdraw', n: num(a.assets ?? a.principal), u: 'USDG', who: a.senior }),
+      SeniorWithdrawClaimed: (a) => ({ k: 'wd', t: 'Withdraw', n: num(a.assets), u: 'USDG', who: a.senior, note: 'Queued withdrawal paid' }),
       UnmatchedWithdraw: (a) => ({ k: 'wd', t: 'Withdraw', n: num(a.mstrAmount), u: 'MSTR', who: a.junior, pid: a.positionId }),
-      EarlyExit: (a) => ({ k: 'wd', t: 'Early exit', n: num(a.mstrReturned) + num(a.mstrSold), u: 'MSTR', who: a.junior, pid: a.positionId, note: 'Coupon ' + round(num(a.couponOwed), 2) + ' USDG' }),
+      EarlyExit: (a) => ({ k: 'wd', t: 'Early exit', n: num(a.mstrReturned) + num(a.mstrSold), u: 'MSTR', who: a.junior, pid: a.positionId, note: 'Interest ' + round(num(a.accrual ?? a.couponOwed), 2) + ' USDG' }),
       Settled: (a) => ({ k: 'wd', t: 'Settled', n: num(a.mstrKept) + num(a.mstrSold), u: 'MSTR', who: a.junior, pid: a.positionId, note: num(a.fromBackstop) > 0 ? 'Backstop paid ' + round(num(a.fromBackstop), 2) + ' USDG' : '' }),
       LpFeeAccrued: (a) => ({ k: 'fee', t: 'Fees', n: num(a.gross), u: 'USDG', pid: a.positionId, note: 'To position ' + round(num(a.toPosition), 2) + ' · backstop ' + round(num(a.toBackstop), 2) }),
       BackstopFunded: (a) => ({ k: 'bs', t: 'Backstop', n: num(a.amount), u: 'USDG', who: a.from }),
@@ -636,7 +652,7 @@
         const anyBoosted = act.some((r) => r.boosted);
         const w = waterfallPreview({ seniorPrincipal: seniorBook, morphoRate: morphoRateFromCfg(), elapsedSec: Math.max(now - first, 0), gross: grossFees, boosted: anyBoosted, cut: blendedCut(act) });
         const liveNote = coverOn
-          ? 'Live UUPS vault — Maker waterfall + v2.5 funder-idle. Early exit: junior USDG cover (Idle/Wallet) or SellShares if enabled. Base treasury 20% of fees; Boosted STRATEGY tiers reduce fee cut. Wallet/Idle without cover reverts.'
+          ? 'Live UUPS vault — Maker waterfall + v3 lender pool. Early exit: junior USDG cover (fees → idle pool shares → wallet) or SellShares if enabled. Base treasury 20% of fees; Boosted STRATEGY tiers reduce fee cut. Wallet/Idle without cover reverts.'
           : 'Product preview — enable product.onChain.earlyCoverPaths against the UUPS proxy to send cover-mode earlyExit.';
         const intro = `Fee split runs at early exit (not on fee-in). Applies to ${fx(tot(act))} MSTR still inside its 7-day term.` + (freeTotal > 0 ? ` The other ${fx(freeTotal)} MSTR leaves with no fee.` : '') +
           ' Choose how to cover senior accrual if fees are short (junior pays; backstop is not used on early exit). Wallet/Idle without enough USDG reverts and leaves the position open — use Sell from position to force close. If auto-compound is on, capital+fees reopen as Idle instead of wallet.';
@@ -679,7 +695,7 @@
         const grossFees = ready.reduce((x, r) => x + r.fee, 0);
         const w = waterfallPreview({ seniorPrincipal: seniorBook, morphoRate: morphoRateFromCfg(), elapsedSec: Math.max(now - first, 0), gross: grossFees, cut: blendedCut(ready) });
         const intro = 'Fee split runs at settle (not on fee-in). Maker waterfall below.';
-        const rows = waterfallRows(w, { liveNote: onChainFlag('makerWaterfall') ? 'Live UUPS vault settle: Maker Morpho-rate waterfall; default IdleCarry (USDG). Backstop first, then junior Wallet / Idle. SellShares only if junior enabled it. Treasury cut is % of fees (base 20%; boost tiers).' : 'Product preview — enable product.onChain.makerWaterfall for live settle waterfall copy.' });
+        const rows = waterfallRows(w, { liveNote: onChainFlag('makerWaterfall') ? 'Live UUPS vault settle: Maker Morpho-rate waterfall; v3 pool. Backstop first, then junior idle shares / wallet / SellShares (if enabled); pool idle last resort. Permissionless when residual cover is zero. Treasury cut is % of fees (base 20%; boost tiers).' : 'Product preview — enable product.onChain.makerWaterfall for live settle waterfall copy.' });
         const answer = confirm ? await confirm({ title: 'Confirm settle', intro, rows, confirmLabel: 'Confirm settle' }) : { ok: true };
         if (!answer || answer.ok === false) throw user('Settle cancelled. No funds were moved.');
       }

@@ -734,7 +734,7 @@ async function capRoom(side) {
   const junior = side === 'junior';
   const [capTotal, capWallet, total, mine, price] = await Promise.all([
     v(junior ? 'maxTotalJuniorUsdg' : 'maxTotalSeniorUsdg'), v('maxPerWalletUsdg'),
-    v(junior ? 'totalJuniorUsdg' : 'totalSeniorPrincipal'), v(junior ? 'walletJuniorUsdg' : 'walletSeniorUsdg', [account]),
+    v(junior ? 'totalJuniorUsdg' : 'totalSeniorAssets'), v(junior ? 'walletJuniorUsdg' : 'walletSeniorUsdg', [account]),
     pub.readContract({ address: cfg.contracts.oracle, abi: oracleAbi, functionName: 'mstrPriceWad' }),
   ]);
   const left = (cap, used) => (cap === 0n ? null : cap > used ? cap - used : 0n);
