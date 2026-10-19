@@ -86,6 +86,18 @@
 
   // Missing fields (an event or struct from another vault version) read as 0 instead of throwing.
   const num = (v, d = 18) => (v == null ? 0 : Number(viem.formatUnits(v, d)));
+  // Token amounts use each token's own decimals (real USDG has 6, the testnet mocks 18). Prices, rates and
+  // cuts are WAD (18) whatever the tokens are, so they keep plain num().
+  const D = { usdg: 18, stock: 18 };
+  const usd = (v) => num(v, D.usdg), stock = (v) => num(v, D.stock);
+  let decP = null, decFor = null;
+  function readDecimals() {
+    if (decP && decFor === cfg.vault) return decP;
+    decFor = cfg.vault;
+    const dec = (address) => pub.readContract({ address, abi: viem.parseAbi(['function decimals() view returns (uint8)']), functionName: 'decimals' }).then(Number);
+    decP = Promise.all([dec(cfg.usdg), dec(cfg.mstr)]).then(([u, s]) => { D.usdg = u; D.stock = s; }).catch((e) => { decP = null; throw e; });
+    return decP;
+  }
   const round = (n, dp) => Number(n.toFixed(dp));
 
   // Maker fee waterfall preview (product truth). Live UUPS vault applies this on-chain
@@ -159,6 +171,7 @@
 
   // ---- Public vault data ---------------------------------------------------
   async function readVault() {
+    await readDecimals();
     const rd = (functionName, args = []) => pub.readContract({ address: cfg.vault, abi: vaultAbi, functionName, args });
     // v2 UUPS vault uses morphoRateWad; fall back to borrowAprWad for legacy 0x72A0… reads if ever pointed there.
     const rateP = rd('morphoRateWad').catch(() => rd('borrowAprWad'));
@@ -168,14 +181,14 @@
       rd('paused'), rd('term'), rateP,
       pub.readContract({ address: cfg.oracle, abi: viem.parseAbi(['function mstrPriceWad() view returns (uint256)']), functionName: 'mstrPriceWad' }),
       rd('nextPositionId'), seniorP, rd('reservedSenior'), rd('freeSenior'), rd('backstop'),
-      // v3 lender pool: 1 USDG mints 1e6 shares at launch, so convertToAssets(1e24) is USDG per launch dollar.
-      rd('convertToAssets', [10n ** 24n]).catch(() => null), rd('wqCumulativeRequested').catch(() => 0n), rd('wqCumulativeFulfilled').catch(() => 0n),
+      // v3 lender pool: 1 USDG mints 1e6 shares at launch, so convertToAssets(10^(decimals+6)) is USDG per launch dollar.
+      rd('convertToAssets', [10n ** BigInt(D.usdg + 6)]).catch(() => null), rd('wqCumulativeRequested').catch(() => 0n), rd('wqCumulativeFulfilled').catch(() => 0n),
     ]);
-    const tvl = num(senior), res = num(reserved);
+    const tvl = usd(senior), res = usd(reserved);
     S.vault = {
       paused, termSec: Number(term), aprPct: num(apr) * 100, price: num(price),
-      tvl, matched: res, idle: num(free), backstop: num(backstop),
-      sharePrice: sharePx == null ? null : num(sharePx), queuePending: Math.max(num(wqReq) - num(wqFul), 0),
+      tvl, matched: res, idle: usd(free), backstop: usd(backstop),
+      sharePrice: sharePx == null ? null : usd(sharePx), queuePending: Math.max(usd(wqReq) - usd(wqFul), 0),
       util: tvl > 0 ? round((res / tvl) * 100, 1) : 0,
       positions: Number(next) - 1,
     };
@@ -211,16 +224,16 @@
       const v2 = p.length >= 10;
       return {
         id,
-        mstr: num(p[1]),
-        senior: num(p[2]),
+        mstr: stock(p[1]),
+        senior: usd(p[2]),
         entry: num(v2 ? p[4] : p[3]),
-        fee: num(v2 ? p[5] : p[4]),
+        fee: usd(v2 ? p[5] : p[4]),
         openedAt: Number(v2 ? p[6] : p[5]),
         settled: !!(v2 ? p[8] : p[6]),
         boosted: v2 ? !!p[9] : false,
         // v2.5 treasuryCutLocked (WAD) at index 12; 0 = not locked, fall back to flat display cut.
         cut: p.length > 12 && p[12] > 0n ? num(p[12]) : null,
-        unpaid: p.length > 10 ? num(p[10]) : 0,
+        unpaid: p.length > 10 ? usd(p[10]) : 0,
         matched,
       };
     }));
@@ -237,7 +250,7 @@
       const inTerm = r.openedAt + term > now;
       try {
         const v = await rd(inTerm ? 'previewEarlyExit' : 'previewSettle', [r.id, inTerm ? 0 : 1]);
-        r.pv = { accrual: num(v.accrual), mine: num(inTerm ? v.juniorLeftoverFees : v.juniorYield), cover: num(v.coverUsdg), fromBackstop: inTerm ? 0 : num(v.fromBackstop) };
+        r.pv = { accrual: usd(v.accrual), mine: usd(inTerm ? v.juniorLeftoverFees : v.juniorYield), cover: usd(v.coverUsdg), fromBackstop: inTerm ? 0 : usd(v.fromBackstop) };
       } catch (e) {
         const w = waterfallPreview({ seniorPrincipal: r.senior, morphoRate: S.vault.aprPct / 100, elapsedSec: Math.min(now, r.openedAt + term) - r.openedAt, gross: r.fee, boosted: r.boosted, cut: r.cut });
         const short = Math.max(w.accrual - w.seniorFloor, 0);
@@ -310,19 +323,19 @@
         gasCreditEth: round(num(gasCredit), 6) });
     }
 
-    const seniorN = num(senior), claimN = num(wqClaimable);
+    const seniorN = usd(senior), claimN = usd(wqClaimable);
     if (seniorN > 0 || claimN > 0) {
       // v3: the lender holds pool shares. freePrincipal is the part not already queued for withdrawal, not "unmatched".
       // A withdrawal is instant while idle pool USDG covers it and nobody is queued; otherwise it joins the queue
       // and keeps earning until idle USDG frees up and it can be claimed.
-      const V = S.vault, freeN = num(free), queuedN = Math.max(seniorN - freeN, 0);
+      const V = S.vault, freeN = usd(free), queuedN = Math.max(seniorN - freeN, 0);
       const instantN = V.queuePending > 1e-9 ? 0 : Math.min(freeN, V.idle);
-      const [dep, wd, cl] = lendLogs, sumA = (l) => l.reduce((x, e) => x + num(e.args.assets), 0);
+      const [dep, wd, cl] = lendLogs, sumA = (l) => l.reduce((x, e) => x + usd(e.args.assets), 0);
       const netIn = sumA(dep) - sumA(wd) - sumA(cl);
       const coupon = V.matched * (V.aprPct / 100) * (V.termSec / (365 * 86400));   // one full term of lender coupon on matched USDG
       positions.push({
         sym: 'USDG', shares: round(seniorN, 4), matched: round(V.tvl > 0 ? seniorN * V.matched / V.tvl : 0, 4),
-        fees: round(Math.max(seniorN - netIn, 0) + num(yld) + num(mstrClaim) * price, 4), days: 0, earned: 0, auto: false, real: true,
+        fees: round(Math.max(seniorN - netIn, 0) + usd(yld) + stock(mstrClaim) * price, 4), days: 0, earned: 0, auto: false, real: true,
         statusTxt: queuedN > 0.005 ? 'Queued' : 'Active',
         leftTxt: claimN > 0.005 ? round(claimN, 4) + ' USDG ready to claim' : queuedN > 0.005 ? 'Withdrawal queued · still earning' : instantN >= freeN - 0.005 ? 'Withdraw any time' : 'Withdrawals queue right now',
         free: freeN, freeV: round(freeN, 4), queued: round(queuedN, 4), claimable: round(claimN, 4), instant: round(instantN, 4),
@@ -331,7 +344,7 @@
       });
     }
 
-    S.ui = { wallet: { ETH: round(num(eth), 5), MSTR: round(num(mstr), 4), USDG: round(num(usdg), 4) }, positions };
+    S.ui = { wallet: { ETH: round(num(eth), 5), MSTR: round(stock(mstr), 4), USDG: round(usd(usdg), 4) }, positions };
   }
 
 
@@ -380,19 +393,19 @@
       const g = l.args || {}, rec = g.positionId != null ? mine.get(String(g.positionId)) : null;
       if (!rec) continue;
       if (l.eventName === 'PositionMatched') rec.match = l;
-      else if (l.eventName === 'LpFeeAccrued') rec.fees += num(g.toPosition);
+      else if (l.eventName === 'LpFeeAccrued') rec.fees += usd(g.toPosition);
       else if (l.eventName === 'EarlyExit' || l.eventName === 'Settled' || l.eventName === 'UnmatchedWithdraw') rec.close = l;
     }
     const closedRecs = [...mine.entries()].filter(([, r]) => r.close);
     await Promise.all(closedRecs.map(([, r]) => Promise.all([timeOf(r.close.blockNumber), timeOf(r.dep.blockNumber)])));
     const rows = await Promise.all(closedRecs.map(async ([id, r]) => {
       const a = r.close.args, kind = r.close.eventName, p = await pub.readContract({ address: cfg.vault, abi: vaultAbi, functionName: 'positions', args: [BigInt(id)] });
-      const entry = num(p.length >= 10 ? p[4] : p[3]), sharesIn = num(r.dep.args.mstrAmount), closedAt = blockTime.get(r.close.blockNumber);
+      const entry = num(p.length >= 10 ? p[4] : p[3]), sharesIn = stock(r.dep.args.mstrAmount), closedAt = blockTime.get(r.close.blockNumber);
       const matchedAt = r.match ? Number(r.match.args.openedAt) * 1000 : 0, startAt = matchedAt || blockTime.get(r.dep.blockNumber);
       let out, sold = 0, net = 0, paid = 0, label;
-      if (kind === 'EarlyExit') { out = num(a.mstrReturned); sold = num(a.mstrSold); net = num(a.juniorLeftoverFees); paid = num(a.accrual ?? a.couponOwed); label = 'Early exit'; }
-      else if (kind === 'Settled') { out = num(a.mstrKept); sold = num(a.mstrSold); net = num(a.juniorYield); paid = Math.max(r.fees - net, 0); label = 'Term complete'; }
-      else { out = num(a.mstrAmount); label = 'Idle withdrawal'; }
+      if (kind === 'EarlyExit') { out = stock(a.mstrReturned); sold = stock(a.mstrSold); net = usd(a.juniorLeftoverFees); paid = usd(a.accrual ?? a.couponOwed); label = 'Early exit'; }
+      else if (kind === 'Settled') { out = stock(a.mstrKept); sold = stock(a.mstrSold); net = usd(a.juniorYield); paid = Math.max(r.fees - net, 0); label = 'Term complete'; }
+      else { out = stock(a.mstrAmount); label = 'Idle withdrawal'; }
       const days = Math.max((closedAt - startAt) / 864e5, 0), paired = !!r.match && entry > 0;
       return { id, label, matched: paired, hash: r.close.transactionHash, closedAt, startAt, days: round(days, 2),
         sharesIn: round(sharesIn, 4), sharesOut: round(out, 4), sold: round(sold, 4),
@@ -427,31 +440,31 @@
       const i = dayOf(blockTime.get(l.blockNumber)), a = l.args || {};
       if (i > lastDay) { snap(i - 1); lastDay = i; }
       switch (l.eventName) {
-        case 'JuniorDeposit': { const v = num(a.mstrAmount) * price; add(arr.dep, i, v); allDep += v; runStock += num(a.mstrAmount); touch(i, a.junior); break; }
-        case 'SeniorDeposit': { const v = num(a.assets ?? a.amount); add(arr.dep, i, v); allDep += v; runTot += v; touch(i, a.senior); break; }
-        case 'SeniorWithdraw': case 'SeniorWithdrawClaimed': { const v = num(a.assets ?? a.principal); add(arr.wd, i, v); runTot -= v; touch(i, a.senior); break; }
-        case 'UnmatchedWithdraw': add(arr.wd, i, num(a.mstrAmount) * price); runStock -= num(a.mstrAmount); touch(i, a.junior); break;
-        case 'PositionMatched': { const v = num(a.seniorPrincipal); matchedOf.set(a.positionId, v); runAct += v; touch(i, a.junior); break; }
-        case 'EarlyExit': add(arr.wd, i, (num(a.mstrReturned) + num(a.mstrSold)) * price); runStock -= num(a.mstrReturned) + num(a.mstrSold); runAct -= matchedOf.get(a.positionId) || 0; touch(i, a.junior); break;
-        case 'Settled': add(arr.wd, i, (num(a.mstrKept) + num(a.mstrSold)) * price); runStock -= num(a.mstrKept) + num(a.mstrSold); { const o = num(a.fromBackstop); add(bsOut, i, o); runBs -= o; } runAct -= matchedOf.get(a.positionId) || 0; touch(i, a.junior); break;
-        case 'BackstopFunded': { const v = num(a.amount); add(bsIn, i, v); runBs += v; break; }
-        case 'LpFeeAccrued': { const g = num(a.gross); runBs += num(a.toBackstop); add(bsIn, i, num(a.toBackstop)); add(arr.fees, i, g); add(arr.rev, i, num(a.toBackstop)); add(arr.earned, i, num(a.toPosition)); allFees += num(a.toPosition); break; }
+        case 'JuniorDeposit': { const v = stock(a.mstrAmount) * price; add(arr.dep, i, v); allDep += v; runStock += stock(a.mstrAmount); touch(i, a.junior); break; }
+        case 'SeniorDeposit': { const v = usd(a.assets ?? a.amount); add(arr.dep, i, v); allDep += v; runTot += v; touch(i, a.senior); break; }
+        case 'SeniorWithdraw': case 'SeniorWithdrawClaimed': { const v = usd(a.assets ?? a.principal); add(arr.wd, i, v); runTot -= v; touch(i, a.senior); break; }
+        case 'UnmatchedWithdraw': add(arr.wd, i, stock(a.mstrAmount) * price); runStock -= stock(a.mstrAmount); touch(i, a.junior); break;
+        case 'PositionMatched': { const v = usd(a.seniorPrincipal); matchedOf.set(a.positionId, v); runAct += v; touch(i, a.junior); break; }
+        case 'EarlyExit': add(arr.wd, i, (stock(a.mstrReturned) + stock(a.mstrSold)) * price); runStock -= stock(a.mstrReturned) + stock(a.mstrSold); runAct -= matchedOf.get(a.positionId) || 0; touch(i, a.junior); break;
+        case 'Settled': add(arr.wd, i, (stock(a.mstrKept) + stock(a.mstrSold)) * price); runStock -= stock(a.mstrKept) + stock(a.mstrSold); { const o = usd(a.fromBackstop); add(bsOut, i, o); runBs -= o; } runAct -= matchedOf.get(a.positionId) || 0; touch(i, a.junior); break;
+        case 'BackstopFunded': { const v = usd(a.amount); add(bsIn, i, v); runBs += v; break; }
+        case 'LpFeeAccrued': { const g = usd(a.gross); runBs += usd(a.toBackstop); add(bsIn, i, usd(a.toBackstop)); add(arr.fees, i, g); add(arr.rev, i, usd(a.toBackstop)); add(arr.earned, i, usd(a.toPosition)); allFees += usd(a.toPosition); break; }
         default: break;
       }
     }
     snap(N - 1);
     // Newest-first transaction list for the Analytics table. Every row keeps its transaction hash.
     const EV = {
-      JuniorDeposit: (a) => ({ k: 'dep', t: 'Deposit', n: num(a.mstrAmount), u: 'MSTR', who: a.junior, pid: a.positionId, note: a.matched ? 'Active · paired with USDG' : 'Idle · waiting for USDG' }),
-      SeniorDeposit: (a) => ({ k: 'dep', t: 'Deposit', n: num(a.assets ?? a.amount), u: 'USDG', who: a.senior }),
-      PositionMatched: (a) => ({ k: 'match', t: 'Matched', n: num(a.seniorPrincipal), u: 'USDG', who: a.junior, pid: a.positionId }),
-      SeniorWithdraw: (a) => ({ k: 'wd', t: 'Withdraw', n: num(a.assets ?? a.principal), u: 'USDG', who: a.senior }),
-      SeniorWithdrawClaimed: (a) => ({ k: 'wd', t: 'Withdraw', n: num(a.assets), u: 'USDG', who: a.senior, note: 'Queued withdrawal paid' }),
-      UnmatchedWithdraw: (a) => ({ k: 'wd', t: 'Withdraw', n: num(a.mstrAmount), u: 'MSTR', who: a.junior, pid: a.positionId }),
-      EarlyExit: (a) => ({ k: 'wd', t: 'Early exit', n: num(a.mstrReturned) + num(a.mstrSold), u: 'MSTR', who: a.junior, pid: a.positionId, note: 'Interest ' + round(num(a.accrual ?? a.couponOwed), 2) + ' USDG' }),
-      Settled: (a) => ({ k: 'wd', t: 'Settled', n: num(a.mstrKept) + num(a.mstrSold), u: 'MSTR', who: a.junior, pid: a.positionId, note: num(a.fromBackstop) > 0 ? 'Backstop paid ' + round(num(a.fromBackstop), 2) + ' USDG' : '' }),
-      LpFeeAccrued: (a) => ({ k: 'fee', t: 'Fees', n: num(a.gross), u: 'USDG', pid: a.positionId, note: 'To position ' + round(num(a.toPosition), 2) + ' · backstop ' + round(num(a.toBackstop), 2) }),
-      BackstopFunded: (a) => ({ k: 'bs', t: 'Backstop', n: num(a.amount), u: 'USDG', who: a.from }),
+      JuniorDeposit: (a) => ({ k: 'dep', t: 'Deposit', n: stock(a.mstrAmount), u: 'MSTR', who: a.junior, pid: a.positionId, note: a.matched ? 'Active · paired with USDG' : 'Idle · waiting for USDG' }),
+      SeniorDeposit: (a) => ({ k: 'dep', t: 'Deposit', n: usd(a.assets ?? a.amount), u: 'USDG', who: a.senior }),
+      PositionMatched: (a) => ({ k: 'match', t: 'Matched', n: usd(a.seniorPrincipal), u: 'USDG', who: a.junior, pid: a.positionId }),
+      SeniorWithdraw: (a) => ({ k: 'wd', t: 'Withdraw', n: usd(a.assets ?? a.principal), u: 'USDG', who: a.senior }),
+      SeniorWithdrawClaimed: (a) => ({ k: 'wd', t: 'Withdraw', n: usd(a.assets), u: 'USDG', who: a.senior, note: 'Queued withdrawal paid' }),
+      UnmatchedWithdraw: (a) => ({ k: 'wd', t: 'Withdraw', n: stock(a.mstrAmount), u: 'MSTR', who: a.junior, pid: a.positionId }),
+      EarlyExit: (a) => ({ k: 'wd', t: 'Early exit', n: stock(a.mstrReturned) + stock(a.mstrSold), u: 'MSTR', who: a.junior, pid: a.positionId, note: 'Interest ' + round(usd(a.accrual ?? a.couponOwed), 2) + ' USDG' }),
+      Settled: (a) => ({ k: 'wd', t: 'Settled', n: stock(a.mstrKept) + stock(a.mstrSold), u: 'MSTR', who: a.junior, pid: a.positionId, note: usd(a.fromBackstop) > 0 ? 'Backstop paid ' + round(usd(a.fromBackstop), 2) + ' USDG' : '' }),
+      LpFeeAccrued: (a) => ({ k: 'fee', t: 'Fees', n: usd(a.gross), u: 'USDG', pid: a.positionId, note: 'To position ' + round(usd(a.toPosition), 2) + ' · backstop ' + round(usd(a.toBackstop), 2) }),
+      BackstopFunded: (a) => ({ k: 'bs', t: 'Backstop', n: usd(a.amount), u: 'USDG', who: a.from }),
       PausedDeposits: (a) => ({ k: 'admin', t: a.paused ? 'Deposits paused' : 'Deposits resumed' }),
     };
     const events = [];
@@ -473,9 +486,9 @@
         for (const l of sorted) {
           const t = evT(l), a = l.args || {};
           if (t > start) { ms += cur * (t - prevT); prevT = t; }
-          if (l.eventName === 'PositionMatched') { const v = num(a.seniorPrincipal); m2.set(String(a.positionId), v); cur += v; }
+          if (l.eventName === 'PositionMatched') { const v = usd(a.seniorPrincipal); m2.set(String(a.positionId), v); cur += v; }
           else if (l.eventName === 'EarlyExit' || l.eventName === 'Settled') { cur -= m2.get(String(a.positionId)) || 0; m2.delete(String(a.positionId)); }
-          else if (l.eventName === 'LpFeeAccrued' && t >= start) { fee += num(a.toPosition); nFee++; }
+          else if (l.eventName === 'LpFeeAccrued' && t >= start) { fee += usd(a.toPosition); nFee++; }
         }
         ms += cur * (nowMs - prevT);
         const stockDays = ms / 864e5, winDays = (nowMs - start) / 864e5;
@@ -573,10 +586,10 @@
     'function balanceOf(address) view returns (uint256)',
     'function mint(address,uint256)',
   ]);
-  const toWei = (amount) => {
+  const toWei = (amount, dec = D.usdg) => {
     const raw = String(amount).trim();
     if (!/^\d*\.?\d+$/.test(raw)) throw user('Enter a valid amount.');
-    const w = viem.parseUnits(raw, 18);
+    const w = viem.parseUnits(raw, dec);
     if (w <= 0n) throw user('Amount must be greater than zero.');
     return w;
   };
@@ -595,9 +608,10 @@
   async function deposit({ sym, amount, onStep, autoCompound }) {
     try {
       guard();
-      const wei = toWei(amount), token = sym === 'USDG' ? cfg.usdg : cfg.mstr, name = sym === 'USDG' ? 'mUSDG' : 'mMSTR';
+      await readDecimals();
+      const dec = sym === 'USDG' ? D.usdg : D.stock, wei = toWei(amount, dec), token = sym === 'USDG' ? cfg.usdg : cfg.mstr, name = sym === 'USDG' ? 'mUSDG' : 'mMSTR';
       const bal = await pub.readContract({ address: token, abi: ERC20(), functionName: 'balanceOf', args: [S.account] });
-      if (bal < wei) throw user(`Not enough ${name}. You have ${num(bal)}.`);
+      if (bal < wei) throw user(`Not enough ${name}. You have ${num(bal, dec)}.`);
       const have = await pub.readContract({ address: token, abi: ERC20(), functionName: 'allowance', args: [S.account, cfg.vault] });
       if (have < wei) await send({ address: token, abi: ERC20(), functionName: 'approve', args: [cfg.vault, wei] }, onStep, 'Approve ' + name + ' in MetaMask…');
       // Auto-compound is a per-wallet vault setting (default off on-chain). The deposit form defaults it on;
@@ -622,8 +636,8 @@
       if (sym === 'USDG') {
         let wei = toWei(amount);
         const free = await pub.readContract({ address: cfg.vault, abi: vaultAbi, functionName: 'freePrincipal', args: [S.account] });
-        if (wei > free && wei - free < 10n ** 15n) wei = free;   // display rounding
-        if (wei > free) throw user(`You can withdraw up to ${num(free).toLocaleString('en-US', { maximumFractionDigits: 4 })} USDG. The rest is already queued for withdrawal.`);
+        if (wei > free && wei - free < 10n ** BigInt(Math.max(D.usdg - 3, 0))) wei = free;   // display rounding
+        if (wei > free) throw user(`You can withdraw up to ${usd(free).toLocaleString('en-US', { maximumFractionDigits: 4 })} USDG. The rest is already queued for withdrawal.`);
         // Same rule as withdrawSenior: instant only if idle pool USDG covers it and the queue is empty.
         const [idle, req, ful] = await Promise.all(['freeSenior', 'wqCumulativeRequested', 'wqCumulativeFulfilled'].map((f) => pub.readContract({ address: cfg.vault, abi: vaultAbi, functionName: f })));
         const instant = idle >= wei && req === ful;
@@ -663,7 +677,7 @@
         }));
         // Dialog defaults to Wallet cover; preview that mode (not always SellShares).
         let prev = await previewMode(coverOn ? 0 : 2);
-        const sum = (list, k) => list.reduce((x, p) => x + num(p[k] != null ? p[k] : 0), 0);
+        const sum = (list, k) => list.reduce((x, p) => x + num(p[k] != null ? p[k] : 0, /^mstr/.test(k) ? D.stock : D.usdg), 0);
         const fs = (n) => (n === 0 ? '0' : n < 0.0001 ? n.toFixed(9).replace(/0+$/, '') : fx(n));
         const first = Math.min(...act.map((r) => r.openedAt));
         const seniorBook = act.reduce((x, r) => x + r.senior, 0);
@@ -698,10 +712,10 @@
         if (coverOn && coverMode === 0) {
           const need = prev.reduce((x, p) => x + (p.coverUsdg != null ? BigInt(p.coverUsdg) : 0n), 0n);
           if (need > 0n) {
-            // Headroom for accrual drift between preview and confirm (~1% + 1e12 wei dust).
-            const approveAmt = need + need / 100n + 10n ** 12n;
+            // Headroom for accrual drift between preview and confirm (~1% + a millionth of a USDG).
+            const approveAmt = need + need / 100n + 10n ** BigInt(Math.max(D.usdg - 6, 0));
             const bal = await pub.readContract({ address: cfg.usdg, abi: ERC20(), functionName: 'balanceOf', args: [S.account] });
-            if (bal < need) throw user(`Not enough mUSDG in your wallet to cover early-exit shortfall. Need ~${num(need)} USDG.`);
+            if (bal < need) throw user(`Not enough mUSDG in your wallet to cover early-exit shortfall. Need ~${usd(need)} USDG.`);
             const have = await pub.readContract({ address: cfg.usdg, abi: ERC20(), functionName: 'allowance', args: [S.account, cfg.vault] });
             if (have < need) {
               await send({ address: cfg.usdg, abi: ERC20(), functionName: 'approve', args: [cfg.vault, approveAmt] }, onStep, 'Approve mUSDG cover in MetaMask…');
@@ -739,8 +753,9 @@
   async function mint({ sym, amount, onStep }) {
     try {
       guard();
+      await readDecimals();
       const token = sym === 'USDG' ? cfg.usdg : cfg.mstr, before = sig();
-      const hash = await send({ address: token, abi: ERC20(), functionName: 'mint', args: [S.account, toWei(amount)] }, onStep, 'Confirm in MetaMask…');
+      const hash = await send({ address: token, abi: ERC20(), functionName: 'mint', args: [S.account, toWei(amount, sym === 'USDG' ? D.usdg : D.stock)] }, onStep, 'Confirm in MetaMask…');
       await settleAfterTx(before);
       return { ok: true, hash, msg: 'Test tokens added to your wallet.' };
     } catch (e) { return fail(e); }
@@ -785,7 +800,7 @@
     try {
       guard();
       if (!onChainFlag('gasCredit')) throw user('Gas credit is not enabled for this vault yet.');
-      const wei = toWei(valueEth);
+      const wei = toWei(valueEth, 18);
       if (wei <= 0n) throw user('Enter an ETH amount greater than zero.');
       const before = sig();
       const hash = await send(
@@ -860,7 +875,7 @@
             prev = await pub.readContract({ address: cfg.vault, abi: vaultAbi, functionName: 'previewClaimFees', args: [r.id] });
           }
           hash = await send({ address: cfg.vault, abi: vaultAbi, functionName: 'claimFees', args: [r.id] }, onStep, 'Confirm fee claim in MetaMask…');
-          if (prev) claimed += num(prev.toJunior != null ? prev.toJunior : prev[4]);
+          if (prev) claimed += usd(prev.toJunior != null ? prev.toJunior : prev[4]);
         } catch (e) {
           const msg = e.shortMessage || e.message || String(e);
           if (/ClaimThreshold|ZeroAmount|function|selector|returned no data|execution reverted/i.test(msg)) {
