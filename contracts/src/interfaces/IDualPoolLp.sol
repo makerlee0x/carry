@@ -30,4 +30,9 @@ interface IDualPoolLp {
     ) external returns (uint256 amount0, uint256 amount1);
 
     function sharesOf(DualPoolKey calldata key, address user) external view returns (uint256);
+
+    function previewDeposit(DualPoolKey calldata key, uint256 shares)
+        external
+        view
+        returns (uint256 amount0, uint256 amount1);
 }
