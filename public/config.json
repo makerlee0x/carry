@@ -68,7 +68,7 @@
       "termDays": 7,
       "oracleDriftFromCenterPct": 80
     },
-    "marketRequestUrl": "",
+    "marketRequestUrl": "https://script.google.com/macros/s/AKfycbwWqyo24s_-8v4twRREWBqulkG6fXC8o8ogXuQpgP_Ydho1vGa15gqbQhAxhxT6Dfzr/exec",
     "_marketRequestNote": "Apps Script web app URL for the markets page request form (docs/market-requests/README.md). Empty = the form opens a prefilled GitHub issue.",
     "caps": {
       "totalUsd": 25000,
