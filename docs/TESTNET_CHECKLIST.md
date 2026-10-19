@@ -74,6 +74,6 @@ Positions **#1 / #3 / #5** on `0x24B7…3e35`. Full commands: [`V3_MATURITY_SETT
 
 | Position | Mature (CDT) | Status | Notes |
 | --- | --- | --- | --- |
-| #1 | 2026-10-18 **9:35:14 PM CDT** | ⬜ | Do not settle before; `previewSettle` → `TermNotElapsed` until then |
-| #3 | 2026-10-18 **9:37:32 PM CDT** | ⬜ | |
-| #5 | 2026-10-18 **9:38:58 PM CDT** | ⬜ | Partial match (56.32 mUSDG senior) |
+| #1 | 2026-10-18 **9:35:14 PM CDT** | ✅ | Settled 10:18:18 PM CDT — [`0x14e1…430d`](https://explorer.testnet.chain.robinhood.com/tx/0x14e1264004b1e9f958c21fb954f405c0b77a64bbe08c3ee90ebc36e44d3e430d) |
+| #3 | 2026-10-18 **9:37:32 PM CDT** | ✅ | Settled 10:18:22 PM CDT — [`0x6166…2ed2`](https://explorer.testnet.chain.robinhood.com/tx/0x6166e5614b37b3dfcab9e9d2036b38133fcd60e5228e800ec38eb8fca6dc2ed2) |
+| #5 | 2026-10-18 **9:38:58 PM CDT** | ✅ | Settled 10:18:25 PM CDT — [`0x5a9d…3ac2`](https://explorer.testnet.chain.robinhood.com/tx/0x5a9d5367a8421ced8fb01cd172daca75388b26add00b4c62013b56a5e2783ac2). Auto-compound reopened #9/#10/#11 |

@@ -90,12 +90,17 @@ Full settle pack (cast one-liners, caveats, checklist): [`V3_MATURITY_SETTLE.md`
 | Field | **#1** | **#3** | **#5** |
 | --- | --- | --- | --- |
 | Junior | `0x76339f8D6640D6dF94037D87c2c9503C98391803` | same | same |
-| Senior principal | 154.34 mUSDG | 154.34 mUSDG | 56.32 mUSDG (partial) |
+| Senior principal | 154.34 mUSDG | 154.34 mUSDG | 154.34 mUSDG (fully matched at settle) |
 | `openedAt` (unix) | 1791772514 | 1791772652 | 1791772738 |
 | **Settle after (UTC)** | **2026-10-19 02:35:14 UTC** | **2026-10-19 02:37:32 UTC** | **2026-10-19 02:38:58 UTC** |
 | **Settle after (CDT)** | **2026-10-18 9:35:14 PM CDT** | **2026-10-18 9:37:32 PM CDT** | **2026-10-18 9:38:58 PM CDT** |
-| State (as of prep) | Active — not mature | Active — not mature | Active — not mature |
-| Settle tx | _pending_ | _pending_ | _pending_ |
+| State | **Settled** | **Settled** | **Settled** |
+| Settled at (CDT) | 2026-10-18 10:18:18 PM | 2026-10-18 10:18:22 PM | 2026-10-18 10:18:25 PM |
+| Settle tx | [`0x14e1…430d`](https://explorer.testnet.chain.robinhood.com/tx/0x14e1264004b1e9f958c21fb954f405c0b77a64bbe08c3ee90ebc36e44d3e430d) | [`0x6166…2ed2`](https://explorer.testnet.chain.robinhood.com/tx/0x6166e5614b37b3dfcab9e9d2036b38133fcd60e5228e800ec38eb8fca6dc2ed2) | [`0x5a9d…3ac2`](https://explorer.testnet.chain.robinhood.com/tx/0x5a9d5367a8421ced8fb01cd172daca75388b26add00b4c62013b56a5e2783ac2) |
+
+**Maturity settle (2026-10-18 ~10:18pm CDT):** deployer `0xcA44…3c57` permissionless `settle(id)` IdleCarry. `previewSettle` showed `coverUsdg=0` with accrual paid from vault `backstop` (`fromBackstop` ≈ 0.115 / 0.115 / 0.046 USDG). `Settled` events emitted; `settled=true` on #1/#3/#5.
+
+**Auto-compound note:** junior had `autoCompound=true`, so settle reopened new matched positions **#9 / #10 / #11** (same junior, `openedAt` = settle timestamps). Original proof IDs #1/#3/#5 are closed; the rollovers are a separate 7d watch if desired.
 
 ### Quick cast (after each clock; no keys in repo)
 

@@ -91,10 +91,10 @@ These are **known on live impl** until Maker [PR #3](https://github.com/makerlee
 
 ## Tonight checklist
 
-- [ ] Wait until **9:35:14 PM CDT** (or later) for #1
-- [ ] `previewSettle(1,1)` succeeds; note `coverUsdg` / `fromBackstop` / `fromPool`
-- [ ] `cast send … settle(1)` (or junior mode if cover needed)
-- [ ] Confirm `settled=true` for #1; record tx
-- [ ] Repeat for #3 at **9:37:32 PM CDT**, then #5 at **9:38:58 PM CDT**
-- [ ] Append outcomes to [`SETTLE_WATCH.md`](./SETTLE_WATCH.md)
-- [ ] Sleep. Upgrade / PR #3 / EIP-170 size work is **later**
+- [x] Wait until **9:35:14 PM CDT** (or later) for #1
+- [x] `previewSettle(1,1)` succeeds; note `coverUsdg` / `fromBackstop` / `fromPool`
+- [x] `cast send … settle(1)` (or junior mode if cover needed)
+- [x] Confirm `settled=true` for #1; record tx
+- [x] Repeat for #3 at **9:37:32 PM CDT**, then #5 at **9:38:58 PM CDT**
+- [x] Append outcomes to [`SETTLE_WATCH.md`](./SETTLE_WATCH.md)
+- [x] Done **2026-10-18 ~10:18pm CDT** — txs in SETTLE_WATCH. Auto-compound reopened #9/#10/#11. Upgrade / EIP-170 is **later**
