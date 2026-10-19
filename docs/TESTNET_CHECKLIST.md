@@ -57,7 +57,7 @@ Browser pass 2026-10-18 (no wallet connected — deposit/match/early-exit still 
 | Early exit dialog | One-arg preview / exit (no CoverMode); shows amounts | ⬜ | Needs wallet; CoverMode gone from `testnet.html` / config |
 | Positions / config against v3 PROXY | Live `config.json` = `v3.2-dualpool` impl `0x1473…` | ✅ | `www.usecarry.io/config.json` matches `main`; View contract → PROXY `0x24B7…3e35` |
 | Light and dark mode, phone width | No broken layout | ✅ | Light toggle works; markets/dashboard OK at ~390px |
-| Market request form | Posts to Apps Script or falls back | ❌ | Deployed `/exec` returns **403**; needs Google **Manage deployments → New version** (see `docs/market-requests/README.md`) |
+| Market request form | Posts to Apps Script or falls back | ✅ | Redeployed 2026-10-18 (Dylan); POST smoke `{"ok":true}` — push `public/config.json` so usecarry.io picks up new `/exec` |
 
 ## 4. Superseded v2.5 vault (wind-down)
 

@@ -24,11 +24,10 @@ If you already deployed a broken standalone script, paste the new `.gs`, run **`
 
 ### Status (2026-10-18)
 
-Live `product.marketRequestUrl` in `public/config.json` still points at the `/exec` web app, but
-direct GET/POST to that URL returns **HTTP 403**. The markets form will look like it “sends”
-(`mode: 'no-cors'`) without writing a sheet row. **Maker/owner:** open the Apps Script project →
-paste current [`market-request-script.gs`](./market-request-script.gs) if drifted → **Deploy →
-Manage deployments → Edit → New version** (Execute as Me, Anyone) → confirm a test POST returns JSON.
+Redeployed under Dylan (`fast@slowsnailmail.com`) as a new standalone project (**Carry market
+requests**). Web app: Execute as Me / Anyone. Live `product.marketRequestUrl` in
+`public/config.json` points at the new `/exec` URL. Form-urlencoded POST smoke returned
+`{"ok":true}` (Apps Script 302 → echo). Old Maker `/exec` URL that 403’d is retired.
 
 ### Bound-to-sheet alternative
 

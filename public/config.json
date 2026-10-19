@@ -178,8 +178,8 @@
       "termDays": 7,
       "oracleDriftFromCenterPct": 80
     },
-    "marketRequestUrl": "https://script.google.com/macros/s/AKfycbwWqyo24s_-8v4twRREWBqulkG6fXC8o8ogXuQpgP_Ydho1vGa15gqbQhAxhxT6Dfzr/exec",
-    "_marketRequestNote": "Apps Script web app URL for the markets page request form (docs/market-requests/README.md). Empty = the form opens a prefilled GitHub issue.",
+    "marketRequestUrl": "https://script.google.com/macros/s/AKfycbw6oAn4D6C50lpGfjyh0t2ZlexVcxyGieEPa-roXkQgwjrwBW3bRqM5Bofm2wTBN4IG/exec",
+    "_marketRequestNote": "Apps Script web app URL for the markets page request form (docs/market-requests/README.md). Empty = the form opens a prefilled GitHub issue. Redeployed 2026-10-18 under Dylan (fast@slowsnailmail.com); Execute as Me / Anyone.",
     "caps": {
       "totalUsd": 25000,
       "seniorTotalUsd": 0,
