@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "npx serve public -l 3000 -c ../serve.json",
     "build": "echo \"Static site, nothing to build\"",
-    "check": "node scripts/check-index.js",
+    "check": "node scripts/check-index.js && node scripts/check-decimals.js",
     "prepare": "git config core.hooksPath .githooks || true",
     "test:contracts": "scripts/forge-gate.sh"
   }

@@ -64,6 +64,109 @@
       }
     },
     "researchRangesNote": "Research uses session-vol bands (\u00b11\u00d7 five-session); UI follows Maker until he picks.",
+    "launchMarkets": [
+      {
+        "sym": "MSTR",
+        "name": "Strategy",
+        "class": "Crypto-linked",
+        "rangeDropPct": 32,
+        "juniorCapUsdg": 25000,
+        "opens": "Nov 2",
+        "testnetLive": true,
+        "mainnetToken": "0xec262a75e413fAfD0dF80480274532C79D42da09"
+      },
+      {
+        "sym": "NVDA",
+        "name": "NVIDIA",
+        "class": "Large cap",
+        "rangeDropPct": 8,
+        "juniorCapUsdg": 25000,
+        "opens": "Nov 2",
+        "testnetLive": false,
+        "mainnetToken": "0xd0601CE157Db5bdC3162BbaC2a2C8aF5320D9EEC"
+      },
+      {
+        "sym": "HIMS",
+        "name": "Hims & Hers Health",
+        "class": "High vol",
+        "rangeDropPct": 32,
+        "juniorCapUsdg": 25000,
+        "opens": "Nov 2",
+        "testnetLive": false,
+        "mainnetToken": "0xCceE82fE024c36fA15E1005edE3E9e4787e23D09"
+      },
+      {
+        "sym": "AMC",
+        "name": "AMC Entertainment",
+        "class": "Meme",
+        "rangeDropPct": 32,
+        "juniorCapUsdg": 25000,
+        "opens": "Nov 2",
+        "testnetLive": false,
+        "mainnetToken": "0x05a3d1Cd21d0C88145E82600E62e7E496e0F222B"
+      },
+      {
+        "sym": "QQQ",
+        "name": "Invesco QQQ",
+        "class": "ETF",
+        "rangeDropPct": 6,
+        "juniorCapUsdg": 25000,
+        "opens": "Nov 2",
+        "testnetLive": false,
+        "mainnetToken": "0xD5f3879160bc7c32ebb4dC785F8a4F505888de68"
+      },
+      {
+        "sym": "TSLA",
+        "name": "Tesla",
+        "class": "High vol",
+        "rangeDropPct": 18,
+        "juniorCapUsdg": 25000,
+        "opens": "Nov 2",
+        "testnetLive": false,
+        "mainnetToken": "0x322F0929c4625eD5bAd873c95208D54E1c003b2d"
+      },
+      {
+        "sym": "MU",
+        "name": "Micron Technology",
+        "class": "High vol",
+        "rangeDropPct": 18,
+        "juniorCapUsdg": 25000,
+        "opens": "Nov 2",
+        "testnetLive": false,
+        "mainnetToken": "0xfF080c8ce2E5feadaCa0Da81314Ae59D232d4afD"
+      },
+      {
+        "sym": "AAPL",
+        "name": "Apple",
+        "class": "Large cap",
+        "rangeDropPct": 10,
+        "juniorCapUsdg": 25000,
+        "opens": "Nov 2",
+        "testnetLive": false,
+        "mainnetToken": "0xaF3D76f1834A1d425780943C99Ea8A608f8a93f9"
+      },
+      {
+        "sym": "PLTR",
+        "name": "Palantir Technologies",
+        "class": "High vol",
+        "rangeDropPct": 18,
+        "juniorCapUsdg": 25000,
+        "opens": "Nov 2",
+        "testnetLive": false,
+        "mainnetToken": "0x894E1EC2D74FFE5AEF8Dc8A9e84686acCB964F2A"
+      },
+      {
+        "sym": "SPCX",
+        "name": "SpaceX",
+        "class": "High vol, new IPO",
+        "rangeDropPct": 18,
+        "juniorCapUsdg": 25000,
+        "opens": "Nov 2",
+        "testnetLive": false,
+        "mainnetToken": "0x4a0E65A3EcceC6dBe60AE065F2e7bb85Fae35eEa"
+      }
+    ],
+    "_launchMarketsNote": "Markets the site lists for the Nov 2 mainnet launch (maker, 2026-10-19), from /mnt/project-files/launch/mainnet-markets.tsv. Site data only: on-chain market ids are assigned at deploy. testnetLive = has a vault market on testnet today (only MSTR). One shared USDG lender pool with no limit; no per-wallet cap.",
     "recenter": {
       "termDays": 7,
       "oracleDriftFromCenterPct": 80

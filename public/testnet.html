@@ -272,6 +272,9 @@ const IMPL_SLOT = '0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d3
 const WAD = 10n ** 18n, YEAR = 365n * 86400n;
 const COVER = { Wallet: 0, IdleCarry: 1, SellShares: 2 };   // LeveredLpVault.CoverMode
 
+// Token amounts use each token's own decimals (DU for USDG, DS for the stock token), read at load; real USDG has 6,
+// the testnet mocks 18. Prices, rates and cuts are WAD (18) whatever the tokens are.
+let DU = 18, DS = 18;
 const fmt = (v, d = 18, dp = 4) => {
   const n = Number(formatUnits(v, d));
   return n.toLocaleString('en-US', { maximumFractionDigits: dp });
@@ -370,13 +373,13 @@ async function refreshAccount() {
     set('myGas', fmt(gas, 18, 6) + ' ETH');
     set('myAuto', auto ? 'On' : 'Off');
     set('balEth', fmt(eth, 18, 5) + ' ETH');
-    set('balMstr', fmt(mstr) + ' mMSTR');
-    set('balUsdg', fmt(usdg) + ' mUSDG');
-    set('mySenior', fmt(senior) + ' USDG');
-    set('myFree', fmt(free) + ' USDG free');
-    set('myYield', fmt(sh, 18, 6) + ' shares');
-    set('myMstr', fmt(qClaim) + ' USDG queued claim');
-    set('myIdleCover', fmt(free < freeAll ? free : freeAll) + ' USDG');
+    set('balMstr', fmt(mstr, DS) + ' mMSTR');
+    set('balUsdg', fmt(usdg, DU) + ' mUSDG');
+    set('mySenior', fmt(senior, DU) + ' USDG');
+    set('myFree', fmt(free, DU) + ' USDG free');
+    set('myYield', fmt(sh, DU, 6) + ' shares');
+    set('myMstr', fmt(qClaim, DU) + ' USDG queued claim');
+    set('myIdleCover', fmt(free < freeAll ? free : freeAll, DU) + ' USDG');
     set('myBoost', boost ? 'Yes' : 'No');
     show('ownerCard', !!vaultOwner && account.toLowerCase() === vaultOwner.toLowerCase());
   } catch (e) {
@@ -411,13 +414,13 @@ async function refreshVault() {
     set('vPerf', pct(perf));
     set('vPrice', '$' + fmt(price, 18, 2));
     set('vPositions', (Number(next) - 1).toString());   // ids start at 1
-    set('vSenior', fmt(senior) + ' USDG');
-    set('vReserved', fmt(reserved) + ' USDG');
-    set('vFree', fmt(free) + ' USDG');
-    set('vJunior', fmt(junior) + ' USDG');
-    const cap = (x) => (x === 0n ? 'none' : fmt(x, 18, 0));
+    set('vSenior', fmt(senior, DU) + ' USDG');
+    set('vReserved', fmt(reserved, DU) + ' USDG');
+    set('vFree', fmt(free, DU) + ' USDG');
+    set('vJunior', fmt(junior, DU) + ' USDG');
+    const cap = (x) => (x === 0n ? 'none' : fmt(x, DU, 0));
     set('vCaps', `${cap(capS)} / ${cap(capJ)} / ${cap(capW)}`);
-    set('vBackstop', fmt(backstop) + ' USDG');
+    set('vBackstop', fmt(backstop, DU) + ' USDG');
     set('vaultPill', paused ? 'paused' : 'live');
     $('vaultPill').className = 'pill ' + (paused ? 'warn' : 'ok');
     show('pausedNote', paused);
@@ -475,10 +478,10 @@ async function refreshPositions() {
       const row = document.createElement('div'); row.className = 'tx';
       const left = document.createElement('span');
       const partial = r.matched && r.senior < r.target;
-      left.textContent = `#${r.id}${mine ? ' (yours)' : ''} · ${short(r.owner)} · ${fmt(r.mstr)} MSTR` +
-        (r.matched ? ` · ${fmt(r.senior)} / ${fmt(r.target)} USDG matched${partial ? ' (partial)' : ''} · ${fmtSmall(r.fee)} USDG fees · ${fmtSmall(accrualNow(r))} USDG senior accrual` +
+      left.textContent = `#${r.id}${mine ? ' (yours)' : ''} · ${short(r.owner)} · ${fmt(r.mstr, DS)} MSTR` +
+        (r.matched ? ` · ${fmt(r.senior, DU)} / ${fmt(r.target, DU)} USDG matched${partial ? ' (partial)' : ''} · ${fmtSmall(r.fee)} USDG fees · ${fmtSmall(accrualNow(r))} USDG senior accrual` +
           (r.unpaid > 0n ? ` (incl. ${fmtSmall(r.unpaid)} carried)` : '') + (r.rateIndexSnapshot > 0n ? ` · rateIndex ${r.rateIndexSnapshot.toString()}` : '') : '') +
-        (!r.matched && !r.settled ? ` · needs ${fmt(r.target)} USDG` : '');
+        (!r.matched && !r.settled ? ` · needs ${fmt(r.target, DU)} USDG` : '');
       const right = document.createElement('span');
       let when = '';
       const ended = r.matched && r.openedAt + term <= Math.floor(Date.now() / 1000);
@@ -623,10 +626,9 @@ $('dlg').addEventListener('click', (e) => { if (e.target === $('dlg')) closeDlg(
 window.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeDlg(false); });
 
 // Tiny amounts (a few millionths of a token) need more decimals than the usual 4 to show up at all.
-const fmtSmall = (v) => { const n = Number(formatUnits(v, 18)); return n === 0 ? '0' : n < 0.0001 ? n.toFixed(9).replace(/0+$/, '') : n.toLocaleString('en-US', { maximumFractionDigits: 4 }); };
+const fmtSmall = (v, d = DU) => { const n = Number(formatUnits(v, d)); return n === 0 ? '0' : n < 0.0001 ? n.toFixed(9).replace(/0+$/, '') : n.toLocaleString('en-US', { maximumFractionDigits: 4 }); };
 
 // ---- Transactions (steps 3-5) -------------------------------------------
-const DEC = 18; // both mock tokens and the vault report 18 decimals
 const ERRORS = {
   Paused: 'The vault is paused by its owner. Deposits are blocked until it is unpaused.',
   ZeroAmount: 'Amount must be greater than zero.',
@@ -651,10 +653,10 @@ const ERRORS = {
 };
 let busy = false;
 
-function readAmount(id) {
+function readAmount(id, dec = DU) {
   const raw = $(id).value.trim();
   if (!/^\d*\.?\d+$|^\d+\.$/.test(raw)) throw new Error('Enter a valid amount.');
-  const v = parseUnits(raw, DEC);
+  const v = parseUnits(raw, dec);
   if (v <= 0n) throw new Error('Amount must be greater than zero.');
   return v;
 }
@@ -740,8 +742,8 @@ async function capRoom(side) {
   const left = (cap, used) => (cap === 0n ? null : cap > used ? cap - used : 0n);
   const t = left(capTotal, total), w = left(capWallet, mine);
   if (t === null && w === null) return { usdg: null, price };
-  if (w !== null && (t === null || w <= t)) return { usdg: w, price, why: `${fmt(capWallet, 18, 0)} USDG per-wallet cap` };
-  return { usdg: t, price, why: `${fmt(capTotal, 18, 0)} USDG total ${side} cap` };
+  if (w !== null && (t === null || w <= t)) return { usdg: w, price, why: `${fmt(capWallet, DU, 0)} USDG per-wallet cap` };
+  return { usdg: t, price, why: `${fmt(capTotal, DU, 0)} USDG total ${side} cap` };
 }
 
 async function setBoost(on) {
@@ -756,31 +758,31 @@ async function balanceOf(token) {
 
 const actions = {
   'mint-mstr': (b) => run(b, async () => {
-    const a = readAmount('mintMstr');
-    await sendTx(`Mint ${fmt(a)} mMSTR`, { address: cfg.contracts.mstr, abi: erc20Abi, functionName: 'mint', args: [account, a] });
+    const a = readAmount('mintMstr', DS);
+    await sendTx(`Mint ${fmt(a, DS)} mMSTR`, { address: cfg.contracts.mstr, abi: erc20Abi, functionName: 'mint', args: [account, a] });
   }),
   'mint-usdg': (b) => run(b, async () => {
     const a = readAmount('mintUsdg');
-    await sendTx(`Mint ${fmt(a)} mUSDG`, { address: cfg.contracts.usdg, abi: erc20Abi, functionName: 'mint', args: [account, a] });
+    await sendTx(`Mint ${fmt(a, DU)} mUSDG`, { address: cfg.contracts.usdg, abi: erc20Abi, functionName: 'mint', args: [account, a] });
   }),
   'fund-backstop': (b) => run(b, async () => {
     const a = readAmount('fundAmt');
     if ((await balanceOf(cfg.contracts.usdg)) < a) throw new Error('Not enough mUSDG. Mint some in step 3.');
     await approveIfNeeded(cfg.contracts.usdg, 'mUSDG', a);
-    await sendTx(`Fund backstop ${fmt(a)} mUSDG`, { address: cfg.contracts.vault, abi: vaultAbi, functionName: 'fundBackstop', args: [a] });
+    await sendTx(`Fund backstop ${fmt(a, DU)} mUSDG`, { address: cfg.contracts.vault, abi: vaultAbi, functionName: 'fundBackstop', args: [a] });
   }),
   'set-price': (b) => run(b, async () => {
-    const a = readAmount('oraclePrice');
+    const a = readAmount('oraclePrice', 18);
     await sendTx(`Set oracle price to $${fmt(a, 18, 2)}`, { address: cfg.contracts.oracle, abi: oracleAbi, functionName: 'setPrice', args: [a] });
   }),
   'max-withdraw': async () => {
-    if (account) $('wdSenior').value = formatUnits(await pub.readContract({ address: cfg.contracts.vault, abi: vaultAbi, functionName: 'freePrincipal', args: [account] }), DEC);
+    if (account) $('wdSenior').value = formatUnits(await pub.readContract({ address: cfg.contracts.vault, abi: vaultAbi, functionName: 'freePrincipal', args: [account] }), DU);
   },
   'withdraw-senior': (b) => run(b, async () => {
     const a = readAmount('wdSenior');
     const free = await pub.readContract({ address: cfg.contracts.vault, abi: vaultAbi, functionName: 'freePrincipal', args: [account] });
-    if (a > free) throw new Error(`Only ${fmt(free)} USDG is free (non-queued) right now. Queue a withdraw or wait for liquidity.`);
-    await sendTx(`Withdraw ${fmt(a)} USDG`, { address: cfg.contracts.vault, abi: vaultAbi, functionName: 'withdrawSenior', args: [a] });
+    if (a > free) throw new Error(`Only ${fmt(free, DU)} USDG is free (non-queued) right now. Queue a withdraw or wait for liquidity.`);
+    await sendTx(`Withdraw ${fmt(a, DU)} USDG`, { address: cfg.contracts.vault, abi: vaultAbi, functionName: 'withdrawSenior', args: [a] });
   }),
   'claim-withdraw': (b) => run(b, async () => {
     await sendTx('Claim queued withdraw', { address: cfg.contracts.vault, abi: vaultAbi, functionName: 'claimWithdraw' });
@@ -819,7 +821,7 @@ const actions = {
       const notes = {
         Wallet: `Your fees go to cover first, then the rest of ${fmtSmall(p.coverUsdg)} USDG comes from your wallet (an approval comes first). All your MSTR comes back. If your wallet is short, the tx reverts and the position stays open.`,
         IdleCarry: `Your fees go to cover first, then the rest of ${fmtSmall(p.coverUsdg)} USDG comes from your idle lender deposit on Carry. All your MSTR comes back. If it is short, the tx reverts and the position stays open.`,
-        SellShares: `${fmtSmall(p.mstrSold)} MSTR is taken from the position and credited to lenders (testnet has no AMM). Treasury's share comes out of your leftover fees first.`,
+        SellShares: `${fmtSmall(p.mstrSold, DS)} MSTR is taken from the position and credited to lenders (testnet has no AMM). Treasury's share comes out of your leftover fees first.`,
       };
       return {
         note: short_ === 0n ? 'Fees cover senior accrual, so no cover is needed whichever option you pick. Early exit never draws on the backstop.' : notes[mode],
@@ -828,8 +830,8 @@ const actions = {
           { k: 'Senior floor from fees', v: `${fmtSmall(p.seniorFloor)} USDG` },
           { k: 'Treasury · senior perf', v: `${fmtSmall(p.treasury)} · ${fmtSmall(p.seniorPerf)} USDG` },
           { k: 'Cover (shortfall + treasury on it)', v: `${fmtSmall(p.coverUsdg)} USDG` },
-          { k: 'MSTR sold', v: `${fmtSmall(p.mstrSold)} MSTR` },
-          { k: 'MSTR returned to you', v: `${fmtSmall(p.mstrReturned)} MSTR` },
+          { k: 'MSTR sold', v: `${fmtSmall(p.mstrSold, DS)} MSTR` },
+          { k: 'MSTR returned to you', v: `${fmtSmall(p.mstrReturned, DS)} MSTR` },
           { k: 'Fees returned to you', v: `${fmtSmall(p.juniorLeftoverFees)} USDG` },
         ].concat(p.feeShortfallUsdg > 0n ? [{ k: 'Unrecovered shortfall', v: `${fmtSmall(p.feeShortfallUsdg)} USDG` }] : []),
       };
@@ -868,7 +870,7 @@ const actions = {
       const notes = {
         Wallet: `Backstop pays first. The remaining ${fmtSmall(p.coverUsdg)} USDG (shortfall plus treasury's cut on it) comes from your fees, then your wallet.`,
         IdleCarry: `Backstop pays first. The remaining ${fmtSmall(p.coverUsdg)} USDG comes from your fees, then your idle lender deposit on Carry.`,
-        SellShares: `Backstop pays first. The remaining ${fmtSmall(p.coverUsdg)} USDG is covered by taking ${fmtSmall(p.mstrSold)} MSTR from the junior.` + (mine ? '' : ' Anyone can settle this way.'),
+        SellShares: `Backstop pays first. The remaining ${fmtSmall(p.coverUsdg)} USDG is covered by taking ${fmtSmall(p.mstrSold, DS)} MSTR from the junior.` + (mine ? '' : ' Anyone can settle this way.'),
       };
       return {
         note: residual ? notes[mode] : 'Fees and the backstop cover senior accrual. No junior cover is needed. Proceeds go to the junior and lenders, not the caller.',
@@ -878,8 +880,8 @@ const actions = {
           { k: 'Treasury', v: `${fmtSmall(p.treasury)} USDG` },
           { k: 'From backstop', v: `${fmtSmall(p.fromBackstop)} USDG` },
           { k: 'Junior cover (incl. treasury on cover)', v: `${fmtSmall(p.coverUsdg)} USDG` },
-          { k: 'Junior MSTR sold', v: `${fmtSmall(p.mstrSold)} MSTR` },
-          { k: 'Junior MSTR kept', v: `${fmtSmall(p.mstrKept)} MSTR` },
+          { k: 'Junior MSTR sold', v: `${fmtSmall(p.mstrSold, DS)} MSTR` },
+          { k: 'Junior MSTR kept', v: `${fmtSmall(p.mstrKept, DS)} MSTR` },
           { k: 'Junior fees (before cover)', v: `${fmtSmall(p.juniorYield)} USDG` },
         ],
       };
@@ -911,7 +913,7 @@ const actions = {
   'auto-on': (b) => run(b, () => sendTx('Turn auto-compound on', { address: cfg.contracts.vault, abi: vaultAbi, functionName: 'setAutoCompound', args: [true] })),
   'auto-off': (b) => run(b, () => sendTx('Turn auto-compound off', { address: cfg.contracts.vault, abi: vaultAbi, functionName: 'setAutoCompound', args: [false] })),
   'gas-fund': (b) => run(b, async () => {
-    const a = readAmount('gasAmt');
+    const a = readAmount('gasAmt', 18);
     await sendTx(`Fund gas credit ${fmt(a, 18, 6)} ETH`, { address: cfg.contracts.vault, abi: vaultAbi, functionName: 'fundGasCredit', value: a });
   }),
   'gas-withdraw': (b) => run(b, async () => {
@@ -921,7 +923,7 @@ const actions = {
   }),
   'backstop-out': (b) => run(b, async () => {
     const a = readAmount('backstopOut');
-    await sendTx(`Withdraw ${fmt(a)} USDG from backstop`, { address: cfg.contracts.vault, abi: vaultAbi, functionName: 'withdrawFromBackstop', args: [account, a] });
+    await sendTx(`Withdraw ${fmt(a, DU)} USDG from backstop`, { address: cfg.contracts.vault, abi: vaultAbi, functionName: 'withdrawFromBackstop', args: [account, a] });
   }),
   'set-matchcap': (b) => run(b, async () => {
     const raw = $('matchCapIn').value.trim();
@@ -930,7 +932,7 @@ const actions = {
   }),
   'set-gasrefund': (b) => run(b, async () => {
     const raw = $('gasRefundIn').value.trim();
-    const a = raw === '0' ? 0n : readAmount('gasRefundIn');
+    const a = raw === '0' ? 0n : readAmount('gasRefundIn', 18);
     await sendTx(`Set gas refund to ${fmt(a, 18, 6)} ETH`, { address: cfg.contracts.vault, abi: vaultAbi, functionName: 'setGasRefundWei', args: [a] });
   }),
   'boost-on': (b) => run(b, () => setBoost(true)),
@@ -938,10 +940,10 @@ const actions = {
   'set-caps': (b) => run(b, async () => {
     const amt = (id) => { const raw = $(id).value.trim(); return raw === '' || raw === '0' ? 0n : readAmount(id); };
     const [s, j, w] = [amt('capSenior'), amt('capJunior'), amt('capWallet')];
-    await sendTx(`Set caps ${fmt(s, 18, 0)} / ${fmt(j, 18, 0)} / ${fmt(w, 18, 0)}`, { address: cfg.contracts.vault, abi: vaultAbi, functionName: 'setDepositCaps', args: [s, j, w] });
+    await sendTx(`Set caps ${fmt(s, DU, 0)} / ${fmt(j, DU, 0)} / ${fmt(w, DU, 0)}`, { address: cfg.contracts.vault, abi: vaultAbi, functionName: 'setDepositCaps', args: [s, j, w] });
   }),
   'set-morpho': (b) => run(b, async () => {
-    const a = readAmount('morphoPct') / 100n;   // percent → WAD
+    const a = readAmount('morphoPct', 18) / 100n;   // percent → WAD
     await sendTx(`Set Morpho rate to ${pct(a)}`, { address: cfg.contracts.vault, abi: vaultAbi, functionName: 'setMorphoRate', args: [a] });
   }),
   'pause': (b) => run(b, () => sendTx('Pause vault', { address: cfg.contracts.vault, abi: vaultAbi, functionName: 'pause' })),
@@ -953,36 +955,36 @@ const actions = {
     if (!(await pub.readContract({ address: cfg.contracts.vault, abi: vaultAbi, functionName: 'isMatched', args: [id] }))) throw new Error(`Position #${id} is not Active, so it can't earn fees.`);
     if ((await balanceOf(cfg.contracts.usdg)) < a) throw new Error('Not enough mUSDG. Mint some in step 3.');
     await approveIfNeeded(cfg.contracts.usdg, 'mUSDG', a, cfg.contracts.feePool);
-    await sendTx(`Push ${fmt(a)} mUSDG fees to #${id}`, { address: cfg.contracts.feePool, abi: feePoolAbi, functionName: 'payFee', args: [cfg.contracts.vault, id, a] });
+    await sendTx(`Push ${fmt(a, DU)} mUSDG fees to #${id}`, { address: cfg.contracts.feePool, abi: feePoolAbi, functionName: 'payFee', args: [cfg.contracts.vault, id, a] });
   }),
   'max-mstr': async () => {
     if (!account) return;
     const [bal, room] = await Promise.all([balanceOf(cfg.contracts.mstr), capRoom('junior')]);
-    const fit = room.usdg === null ? bal : (room.usdg * WAD) / room.price;   // USDG room → MSTR at the oracle price
-    $('depMstr').value = formatUnits(bal < fit ? bal : fit, DEC);
+    const fit = room.usdg === null ? bal : (room.usdg * WAD * 10n ** BigInt(DS)) / (room.price * 10n ** BigInt(DU));   // USDG room → MSTR at the oracle price
+    $('depMstr').value = formatUnits(bal < fit ? bal : fit, DS);
   },
   'max-usdg': async () => {
     if (!account) return;
     const [bal, room] = await Promise.all([balanceOf(cfg.contracts.usdg), capRoom('senior')]);
-    $('depUsdg').value = formatUnits(room.usdg !== null && room.usdg < bal ? room.usdg : bal, DEC);
+    $('depUsdg').value = formatUnits(room.usdg !== null && room.usdg < bal ? room.usdg : bal, DU);
   },
   'deposit-mstr': (b) => run(b, async () => {
-    const a = readAmount('depMstr');
+    const a = readAmount('depMstr', DS);
     if ((await balanceOf(cfg.contracts.mstr)) < a) throw new Error('Not enough mMSTR. Mint some in step 3.');
     // Check caps before the approval, so a deposit that will revert never gets an approval prompt.
     const room = await capRoom('junior');
-    const notional = (a * room.price) / WAD;
-    if (room.usdg !== null && notional > room.usdg) throw new Error(`Over the vault cap: ${fmt(a)} mMSTR is about ${fmt(notional, 18, 0)} USDG at $${fmt(room.price, 18, 2)}, and you have ${fmt(room.usdg, 18, 0)} USDG of room left (${room.why}). Use Max.`);
+    const notional = (a * room.price * 10n ** BigInt(DU)) / (WAD * 10n ** BigInt(DS));
+    if (room.usdg !== null && notional > room.usdg) throw new Error(`Over the vault cap: ${fmt(a, DS)} mMSTR is about ${fmt(notional, DU, 0)} USDG at $${fmt(room.price, 18, 2)}, and you have ${fmt(room.usdg, DU, 0)} USDG of room left (${room.why}). Use Max.`);
     await approveIfNeeded(cfg.contracts.mstr, 'mMSTR', a);
-    await sendTx(`Deposit ${fmt(a)} mMSTR`, { address: cfg.contracts.vault, abi: vaultAbi, functionName: 'depositJunior', args: [a] });
+    await sendTx(`Deposit ${fmt(a, DS)} mMSTR`, { address: cfg.contracts.vault, abi: vaultAbi, functionName: 'depositJunior', args: [a] });
   }),
   'deposit-usdg': (b) => run(b, async () => {
     const a = readAmount('depUsdg');
     if ((await balanceOf(cfg.contracts.usdg)) < a) throw new Error('Not enough mUSDG. Mint some in step 3.');
     const room = await capRoom('senior');
-    if (room.usdg !== null && a > room.usdg) throw new Error(`Over the vault cap: you have ${fmt(room.usdg, 18, 0)} USDG of room left (${room.why}). Use Max.`);
+    if (room.usdg !== null && a > room.usdg) throw new Error(`Over the vault cap: you have ${fmt(room.usdg, DU, 0)} USDG of room left (${room.why}). Use Max.`);
     await approveIfNeeded(cfg.contracts.usdg, 'mUSDG', a);
-    await sendTx(`Lend ${fmt(a)} mUSDG`, { address: cfg.contracts.vault, abi: vaultAbi, functionName: 'depositSenior', args: [a] });
+    await sendTx(`Lend ${fmt(a, DU)} mUSDG`, { address: cfg.contracts.vault, abi: vaultAbi, functionName: 'depositSenior', args: [a] });
   }),
 };
 document.addEventListener('click', (ev) => {
@@ -993,11 +995,11 @@ document.addEventListener('click', (ev) => {
 // Live hint: the USDG needed to match a stock deposit, at the oracle price.
 $('depMstr').addEventListener('input', async () => {
   try {
-    const a = readAmount('depMstr');
+    const a = readAmount('depMstr', DS);
     const price = await pub.readContract({ address: cfg.contracts.oracle, abi: oracleAbi, functionName: 'mstrPriceWad' });
     const room = account ? await capRoom('junior') : { usdg: null };
-    set('depMstrHint', `Needs about ${fmt((a * price) / 10n ** 18n)} USDG from lenders to start earning (at the oracle price of $${fmt(price, 18, 2)}).` +
-      (room.usdg !== null ? ` Cap room left: ${fmt(room.usdg, 18, 0)} USDG.` : ''));
+    set('depMstrHint', `Needs about ${fmt((a * price * 10n ** BigInt(DU)) / (WAD * 10n ** BigInt(DS)), DU)} USDG from lenders to start earning (at the oracle price of $${fmt(price, 18, 2)}).` +
+      (room.usdg !== null ? ` Cap room left: ${fmt(room.usdg, DU, 0)} USDG.` : ''));
   } catch (e) { set('depMstrHint', ''); }
 });
 
@@ -1028,6 +1030,10 @@ async function init() {
     rpcUrls: { default: { http: [cfg.chain.rpc] } },
   });
   pub = createPublicClient({ chain, transport: http() });
+  try {
+    const dec = (address) => pub.readContract({ address, abi: erc20Abi, functionName: 'decimals' }).then(Number);
+    [DU, DS] = await Promise.all([dec(cfg.contracts.usdg), dec(cfg.contracts.mstr)]);
+  } catch (e) { err('Could not read token decimals: ' + (e.shortMessage || e.message)); return; }
   $('faucetLink').href = cfg.chain.faucet;
   renderContracts();
   renderWallet();
