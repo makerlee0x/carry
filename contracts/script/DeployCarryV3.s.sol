@@ -5,6 +5,7 @@ import {Script, console2} from "forge-std/Script.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {LeveredLpVault} from "../src/LeveredLpVault.sol";
 import {LeveredLpVaultV2} from "../src/LeveredLpVaultV2.sol";
+import {IERC20Minimal} from "../src/interfaces/IERC20Minimal.sol";
 
 /// @title DeployCarryV3
 /// @notice Fresh UUPS PROXY for Carry v3 lender-pool on Robinhood Chain Testnet 46630.
@@ -24,9 +25,10 @@ contract DeployCarryV3 is Script {
     address public constant DEFAULT_ORACLE = 0xc74Af7E23A2B4b46B5Fe05E5c7c5ec0BB5dbc5B7;
 
     uint256 public constant CAP_SENIOR = 0;
-    uint256 public constant CAP_JUNIOR = 25_000 ether;
+    /// @dev Dollar amounts, scaled by the USDG token's own decimals (real USDG has 6).
+    uint256 public constant CAP_JUNIOR_DOLLARS = 25_000;
     uint256 public constant CAP_PER_WALLET = 0;
-    uint256 public constant MIN_DEPOSIT = 25 ether;
+    uint256 public constant MIN_DEPOSIT_DOLLARS = 25;
     uint256 public constant MORPHO = 0.039e18;
     uint64 public constant TERM = 7 days;
 
@@ -57,8 +59,9 @@ contract DeployCarryV3 is Script {
         LeveredLpVault vault = LeveredLpVault(address(proxy));
 
         if (live) {
-            vault.setDepositCaps(CAP_SENIOR, CAP_JUNIOR, CAP_PER_WALLET);
-            vault.setMinDepositUsdg(MIN_DEPOSIT);
+            uint256 unit = 10 ** IERC20Minimal(usdg).decimals();
+            vault.setDepositCaps(CAP_SENIOR, CAP_JUNIOR_DOLLARS * unit, CAP_PER_WALLET);
+            vault.setMinDepositUsdg(MIN_DEPOSIT_DOLLARS * unit);
             vault.setGasRefundWei(0.0001 ether);
             vault.unpause();
             vm.stopBroadcast();

@@ -38,7 +38,8 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
     uint256 internal constant BOOSTED_TREASURY_CUT_WAD = 0.1e18;
     uint256 internal constant DEFAULT_MATCH_CAP = 25;
     uint256 internal constant DEFAULT_GAS_REFUND_WEI = 0.0001 ether;
-    uint256 internal constant DEFAULT_MIN_DEPOSIT_USDG = 25 ether;
+    /// @dev $25, scaled by USDG decimals at use (real USDG has 6, the testnet mock 18).
+    uint256 internal constant DEFAULT_MIN_DEPOSIT_DOLLARS = 25;
     uint64 internal constant MAX_TERM = 7 days;
     /// @dev Positions roll at term. One priced more than its market's range below entry stops rolling, and
     ///      after this grace from the last term boundary anyone may settle it. This is market 0's (MSTR) range.
@@ -370,12 +371,12 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         boostedTreasuryCutWad = BOOSTED_TREASURY_CUT_WAD;
         treasuryCutIsSet = true;
         gasRefundWei = DEFAULT_GAS_REFUND_WEI;
-        minDepositUsdg = DEFAULT_MIN_DEPOSIT_USDG;
         maxPriceStale = DEFAULT_MAX_PRICE_STALE;
         // Senior uncapped by default (0). Junior market cap set by owner after deploy.
         maxTotalSeniorUsdg = 0;
         mstrDecimals = mstr.decimals();
         usdgDecimals = usdg.decimals();
+        minDepositUsdg = DEFAULT_MIN_DEPOSIT_DOLLARS * 10 ** usdgDecimals;
         nextPositionId = 1;
         _initMarket0();
         paused = true;
@@ -1235,7 +1236,7 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
     }
 
     function _minDeposit() internal view returns (uint256) {
-        return minDepositUsdg == 0 ? DEFAULT_MIN_DEPOSIT_USDG : minDepositUsdg;
+        return minDepositUsdg == 0 ? DEFAULT_MIN_DEPOSIT_DOLLARS * 10 ** usdgDecimals : minDepositUsdg;
     }
 
     function _refundAllGasCredit(address junior) internal {

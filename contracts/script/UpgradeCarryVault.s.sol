@@ -4,6 +4,7 @@ pragma solidity ^0.8.24;
 import {Script, console2} from "forge-std/Script.sol";
 import {LeveredLpVault} from "../src/LeveredLpVault.sol";
 import {LeveredLpVaultV2} from "../src/LeveredLpVaultV2.sol";
+import {IERC20Minimal} from "../src/interfaces/IERC20Minimal.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
 /// @title UpgradeCarryVault / DeployCarryV3
@@ -17,10 +18,11 @@ import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.s
 contract UpgradeCarryVault is Script {
     uint256 public constant RH_TESTNET_CHAIN_ID = 46630;
     address public constant SUPERSEDED_V25_PROXY = 0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd;
-    uint256 public constant CAP_JUNIOR = 25_000 ether;
+    /// @dev Dollar amounts, scaled by the USDG token's own decimals (real USDG has 6).
+    uint256 public constant CAP_JUNIOR_DOLLARS = 25_000;
     uint256 public constant CAP_SENIOR = 0; // uncapped pool
     uint256 public constant CAP_PER_WALLET = 0;
-    uint256 public constant MIN_DEPOSIT = 25 ether;
+    uint256 public constant MIN_DEPOSIT_DOLLARS = 25;
     uint256 public constant MORPHO = 0.039e18;
     uint64 public constant TERM = 7 days;
 
@@ -57,8 +59,9 @@ contract UpgradeCarryVault is Script {
         LeveredLpVault vault = LeveredLpVault(address(proxy));
 
         if (live) {
-            vault.setDepositCaps(CAP_SENIOR, CAP_JUNIOR, CAP_PER_WALLET);
-            vault.setMinDepositUsdg(MIN_DEPOSIT);
+            uint256 unit = 10 ** IERC20Minimal(usdg).decimals();
+            vault.setDepositCaps(CAP_SENIOR, CAP_JUNIOR_DOLLARS * unit, CAP_PER_WALLET);
+            vault.setMinDepositUsdg(MIN_DEPOSIT_DOLLARS * unit);
             vault.setGasRefundWei(0.0001 ether);
             vault.unpause();
             vm.stopBroadcast();
