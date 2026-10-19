@@ -6,12 +6,14 @@ Canonical pointers for what is **live** on Robinhood Chain Testnet **46630**.
 
 | Item | Value |
 | --- | --- |
-| Site | [usecarry.io](https://usecarry.io) (sync Vercel to latest main for v3 CA) |
+| Site | [usecarry.io](https://usecarry.io) |
 | Product CA (UUPS PROXY) | [`0x24B799026AA7baa6856bCFD00c1Be1f583A83e35`](https://explorer.testnet.chain.robinhood.com/address/0x24B799026AA7baa6856bCFD00c1Be1f583A83e35) |
-| Implementation | [`0x7BeED7F65A9D4aF4E67553d984800F6268a3778E`](https://explorer.testnet.chain.robinhood.com/address/0x7BeED7F65A9D4aF4E67553d984800F6268a3778E) (`version()` = **`v3-lender-pool`**) |
-| Superseded v2.5 PROXY | [`0xc801…72bd`](https://explorer.testnet.chain.robinhood.com/address/0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd) — settle-watch only |
+| Implementation | [`0x14732623B077C656527ee5C87812AC23e98c58A5`](https://explorer.testnet.chain.robinhood.com/address/0x14732623B077C656527ee5C87812AC23e98c58A5) (`version()` = **`v3.2-dualpool`**) |
+| CarryStrategy | `0x43ec7Ba95FecEBE51B6414f6E300B109E245E6AE` |
+| DualPoolHook | `0xaf4a9225b27e48c9989726082014095474756ac0` |
+| Superseded v2.5 PROXY | [`0xc801…72bd`](https://explorer.testnet.chain.robinhood.com/address/0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd) — wind-down (settled) |
 | v1 grant reference | `0x72A053…36c8` — **not in use** |
-| Code on `main` | Ahead of the live impl: EIP-170 fit (#3), rolling positions (#16), `StrategyBoostHook` (#23), `CarryStrategy` wiring (#21). Not yet upgraded on testnet. |
+| Upgrade record | [`testnet-runs/2026-10-18-v32-upgrade.md`](./testnet-runs/2026-10-18-v32-upgrade.md) |
 | UI config | [`../public/config.json`](../public/config.json) |
 
 ## Start here

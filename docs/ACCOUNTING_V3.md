@@ -7,13 +7,15 @@
 | Role | Address |
 | --- | --- |
 | **v3 product PROXY** | `0x24B799026AA7baa6856bCFD00c1Be1f583A83e35` (`public/config.json` → `chain.vault`) |
-| Live implementation | `0x7BeED7F65A9D4aF4E67553d984800F6268a3778E` |
+| Live implementation | `0x14732623B077C656527ee5C87812AC23e98c58A5` |
+| CarryStrategy | `0x43ec7Ba95FecEBE51B6414f6E300B109E245E6AE` |
+| DualPoolHook | `0xaf4a9225b27e48c9989726082014095474756ac0` |
 | Superseded v2.5 PROXY | `0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd` |
-| Version string | `v3-lender-pool` |
+| Version string | `v3.2-dualpool` |
 
 v2.5 was **not** UUPS-upgraded in place; v3 is a **fresh UUPS PROXY**. v2.5 settle-watch positions #5/#6/#7 have since been settled on the superseded PROXY.
 
-**Live vs `main`.** The testnet proxy still runs the original v3 implementation. `main` adds the EIP-170 fit (#3), rolling positions (#16), the boost hook (#23) and `CarryStrategy` idle-USDG wiring (#21); those sections below are marked *main*. They reach testnet with the next owner-signed upgrade.
+**Live = `main` path** after the 2026-10-18 UUPS upgrade (`docs/testnet-runs/2026-10-18-v32-upgrade.md`). No fixed Morpho coupon; matched inventory can sit in DualPool; idle can go through CarryStrategy → MockMorpho via `deployIdle`.
 
 ## Lender pool
 
@@ -24,7 +26,7 @@ v2.5 was **not** UUPS-upgraded in place; v3 is a **fresh UUPS PROXY**. v2.5 sett
 - `maxTotalSeniorUsdg = 0` (uncapped). Per-market junior cap kept.
 - Senior yield from waterfall **compounds into the pool** (share price rises).
 - Lenders paid only USDG (testnet sell-shares credits USDG notionally to pool; treasury cut → backstop).
-- Idle Morpho yield: **display-only on testnet** (no on-chain credit until real Morpho sleeve).
+- Idle Morpho yield on testnet: MockMorpho via CarryStrategy after `deployIdle` (owner). Real Steakhouse Morpho is issue **#20**.
 
 ## Withdrawals
 
@@ -36,8 +38,8 @@ v2.5 was **not** UUPS-upgraded in place; v3 is a **fresh UUPS PROXY**. v2.5 sett
 
 ## Rate
 
-- Global floating `rateIndex` advanced by owner-set `morphoRateWad` (testnet stub, ≤5%). Not a promised rate.
-- Positions store `rateIndexSnapshot`; accrual = index delta × principal.
+- **v3.2:** no owner-set Morpho coupon. Lenders earn strategy/Morpho yield (when idle is deployed) plus Carry fee share at claim/exit/settle.
+- Pre-v3.2 docs that mention `morphoRateWad` / fixed floor apply only to superseded `v3-lender-pool` history.
 - Live impl: interest stops at maturity (`min(now, openedAt+term)`).
 - *main*: positions roll at term; interest accrues until the position closes and only the junior settles a healthy one. Early exit stays inside the first term. A position more than 32% below entry stops rolling; 48h after the last term boundary anyone can settle it (a non-junior caller covers from fees and junior idle only, the rest is forgiven).
 - *main*: a filled queued withdrawal pays what the locked shares are worth at claim time.

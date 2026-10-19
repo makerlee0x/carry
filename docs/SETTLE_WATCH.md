@@ -3,8 +3,8 @@
 > **Carry v3 note:** Positions **#5 / #6 / #7** below live on the **superseded v2.5** PROXY `0xc801…72bd`.
 > Under v3 lender-pool they are **stale for the new product CA**. Do not treat them as v3 pool accounting.
 >
-> **Tonight (v3):** matched positions **#1 / #3 / #5** on live PROXY `0x24B7…3e35` mature **Oct 18 9:35–9:39 PM CDT**.
-> See **[V3 maturity watch](#v3-maturity-watch-live-proxy)** below and [`V3_MATURITY_SETTLE.md`](./V3_MATURITY_SETTLE.md).
+> **v3 maturity (done):** matched positions **#1 / #3 / #5** on live PROXY `0x24B7…3e35` settled **Oct 18 ~10:18 PM CDT**.
+> Live impl is now **`v3.2-dualpool`**. See **[V3 maturity watch](#v3-maturity-watch-live-proxy)** and [`V3_MATURITY_SETTLE.md`](./V3_MATURITY_SETTLE.md).
 
 ## v2.5 (superseded — settled)
 
@@ -84,8 +84,8 @@ Included in v2.5 `migrateAccountingV25`.
 
 ## v3 maturity watch (live PROXY)
 
-Product CA: [`0x24B799026AA7baa6856bCFD00c1Be1f583A83e35`](https://explorer.testnet.chain.robinhood.com/address/0x24B799026AA7baa6856bCFD00c1Be1f583A83e35) · impl `0x7BeED7…778E` · `v3-lender-pool`.  
-Full settle pack (cast one-liners, caveats, checklist): [`V3_MATURITY_SETTLE.md`](./V3_MATURITY_SETTLE.md).
+Product CA: [`0x24B799026AA7baa6856bCFD00c1Be1f583A83e35`](https://explorer.testnet.chain.robinhood.com/address/0x24B799026AA7baa6856bCFD00c1Be1f583A83e35) · live impl `0x1473…58A5` · `v3.2-dualpool` (settled while still on prior `v3-lender-pool` impl `0x7BeE…778E`).  
+Full settle pack: [`V3_MATURITY_SETTLE.md`](./V3_MATURITY_SETTLE.md). Upgrade: [`testnet-runs/2026-10-18-v32-upgrade.md`](./testnet-runs/2026-10-18-v32-upgrade.md).
 
 | Field | **#1** | **#3** | **#5** |
 | --- | --- | --- | --- |
@@ -108,10 +108,9 @@ Full settle pack (cast one-liners, caveats, checklist): [`V3_MATURITY_SETTLE.md`
 export PATH="$PATH:$HOME/.foundry/bin"
 RPC=https://rpc.testnet.chain.robinhood.com
 PROXY=0x24B799026AA7baa6856bCFD00c1Be1f583A83e35
-# dry-run (expect TermNotElapsed before maturity):
-cast call $PROXY "previewSettle(uint256,uint8)((uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint8))" 1 1 --rpc-url $RPC
-# broadcast only after CDT time + coverUsdg==0 (load DEPLOYER_PRIVATE_KEY in local shell):
-# cast send $PROXY "settle(uint256)" 1 --rpc-url $RPC --private-key "$DEPLOYER_PRIVATE_KEY"
+# v3.2 one-arg preview (post-upgrade):
+cast call $PROXY "previewSettle(uint256)((uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256))" 9 --rpc-url $RPC
+# cast send $PROXY "settle(uint256)" 9 --rpc-url $RPC --private-key "$DEPLOYER_PRIVATE_KEY"
 ```
 
-Pre-maturity check (2026-10-18 prep): `previewSettle(1,1)` → **`TermNotElapsed`** (expected).
+Historical note: #1/#3/#5 settled with two-arg `previewSettle(id,1)` on the pre-upgrade ABI.

@@ -1,19 +1,19 @@
 # v3 maturity settle pack — positions #1 / #3 / #5
 
-Sleep-friendly checklist for **tonight (Sun Oct 18, 2026 CDT)**.  
-Do **not** broadcast `settle` before maturity. Do **not** upgrade/redeploy the PROXY.
+**Done 2026-10-18 ~10:18pm CDT.** Kept as the settle record + commands used that night.  
+PROXY later upgraded to `v3.2-dualpool` — see [`testnet-runs/2026-10-18-v32-upgrade.md`](./testnet-runs/2026-10-18-v32-upgrade.md).
 
 | Field | Value |
 | --- | --- |
 | Network | Robinhood Chain Testnet **46630** |
 | Product PROXY | `0x24B799026AA7baa6856bCFD00c1Be1f583A83e35` |
-| Live impl | `0x7BeED7F65A9D4aF4E67553d984800F6268a3778E` (`version() = v3-lender-pool`) |
+| Impl at settle | `0x7BeED7F65A9D4aF4E67553d984800F6268a3778E` (`v3-lender-pool`) |
 | Junior (all three) | `0x76339f8D6640D6dF94037D87c2c9503C98391803` |
 | Term | 7d (`604800`) |
-| CoverMode | `0=Wallet`, `1=IdleCarry` (junior idle shares), `2=SellShares` |
-| Default settle | `settle(id)` ≡ IdleCarry mode |
+| CoverMode (at settle) | `0=Wallet`, `1=IdleCarry`, `2=SellShares` — removed on v3.2 (one-arg settle) |
+| Default settle | `settle(id)` |
 
-Verified on-chain 2026-10-18 ~05:10 UTC: `previewSettle(1,1)` reverts **`TermNotElapsed`** (wiring OK; too early).
+Outcomes: [`SETTLE_WATCH.md`](./SETTLE_WATCH.md).
 
 ## Maturity times (exact)
 
@@ -77,19 +77,11 @@ cast call $PROXY "positions(uint256)(address,uint256,uint256,uint256,uint256,uin
 
 Paste tx hashes into [`SETTLE_WATCH.md`](./SETTLE_WATCH.md) v3 section when done.
 
-## Live-impl caveats (do not panic)
+## Post-settle
 
-These are **known on live impl** until Maker [PR #3](https://github.com/makerlee0x/carry/pull/3) is reviewed/merged **and** the PROXY is upgraded (not tonight):
+Auto-compound reopened **#9 / #10 / #11**. PROXY since upgraded to **`v3.2-dualpool`** (impl `0x1473…58A5`); sell router + DualPool wired. Remaining product work for real Morpho: issue **#20**.
 
-1. **Junior-paid settle cover may not credit the lender pool** (fees/wallet/idle paths can strand or burn without pool credit). Settling still closes the position; lender NAV accounting can look wrong until upgrade.
-2. **Unpayable interest can hit pool NAV** on live (PR #3 switches to sell-enough-MSTR / forgive-with-no-router). With testnet `sellSharesRouter=0`, expect odd `fromPool` / shortfall fields — prefer preview first.
-3. **SellShares with no router** can credit phantom USDG on live; prefer default IdleCarry / Wallet unless you intentionally opt into SellShares.
-4. **Accrual past maturity** can keep moving if the global rate index advances (PR #3 stops accrual exactly at maturity). Settle soon after the clock — do not wait days.
-5. App TVL reads: main now falls back to `totalSeniorAssets`; full PR #3 app/analytics polish still lands with that PR.
-
-**Do not** merge/upgrade PR #3 tonight just to settle. Settle on the live CA as-is.
-
-## Tonight checklist
+## Tonight checklist (completed)
 
 - [x] Wait until **9:35:14 PM CDT** (or later) for #1
 - [x] `previewSettle(1,1)` succeeds; note `coverUsdg` / `fromBackstop` / `fromPool`
@@ -97,4 +89,4 @@ These are **known on live impl** until Maker [PR #3](https://github.com/makerlee
 - [x] Confirm `settled=true` for #1; record tx
 - [x] Repeat for #3 at **9:37:32 PM CDT**, then #5 at **9:38:58 PM CDT**
 - [x] Append outcomes to [`SETTLE_WATCH.md`](./SETTLE_WATCH.md)
-- [x] Done **2026-10-18 ~10:18pm CDT** — txs in SETTLE_WATCH. Auto-compound reopened #9/#10/#11. Upgrade / EIP-170 is **later**
+- [x] Done **2026-10-18 ~10:18pm CDT** — txs in SETTLE_WATCH

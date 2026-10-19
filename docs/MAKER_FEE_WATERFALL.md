@@ -11,8 +11,7 @@ On-chain today: [`CARRY_CONTRACT.md`](../CARRY_CONTRACT.md) + [`CARRY_TESTNET.md
 
 ## Waterfall (on gross LP fees)
 
-> **Stage 1 (in code from Oct 18, 2026; live after the next proxy upgrade, `version()` = `v3.1-morpho-yield`).**
-> The live proxy (`v3-lender-pool`) still runs the old fixed-rate floor and cover until it is upgraded.
+> **Live on testnet (`version()` = `v3.2-dualpool`).** No fixed coupon; lenders earn Morpho + Carry fee share. One-arg `settle` / `earlyExit` (no CoverMode).
 
 Lenders earn **Morpho + Carry**: whatever the Steakhouse USDG Morpho vault pays on lender USDG
 (through `CarryStrategy`, booked into the share price by `harvest`), plus a share of LP fees.
@@ -109,21 +108,16 @@ Legacy global TW indices are frozen (no new credits). See [`ACCOUNTING_V25.md`](
 
 ## On-chain status
 
-**Live on testnet PROXY** `0x24B799026AA7baa6856bCFD00c1Be1f583A83e35` (UUPS, **`v3-lender-pool`**). In v3, senior yield compounds into one lender pool instead of per-position funders (see [`ACCOUNTING_V3.md`](./ACCOUNTING_V3.md)); the waterfall itself is unchanged.  
-Implementation: `0x7BeED7F65A9D4aF4E67553d984800F6268a3778E` (also in `public/config.json` → `chain.vaultImplementation`).  
-Superseded v2.5 PROXY/impl (`0xc801…72bd` / `0xe498…d0e8`) is settle-watch history only.
+**Live on testnet PROXY** `0x24B799026AA7baa6856bCFD00c1Be1f583A83e35` (UUPS, **`v3.2-dualpool`**).  
+Implementation: `0x14732623B077C656527ee5C87812AC23e98c58A5` · CarryStrategy `0x43ec…E6AE` · DualPoolHook `0xaf4a…6ac0`.  
+See [`testnet-runs/2026-10-18-v32-upgrade.md`](./testnet-runs/2026-10-18-v32-upgrade.md).
 
-Live (`main`; the testnet impl picks up rolling positions and `boostHook` at its next upgrade): Maker waterfall, Boosted STRATEGY **tiers** via `boostHook` (Level I-V), gasCredit + auto-refund,
-early-exit cover revert, SellShares router interface (testnet router=0), auto-compound,
-**v3 lender pool** (internal shares + FIFO withdraw queue + floating `rateIndex`),
-settle cover path: backstop → junior idle/wallet/SellShares → pool idle last resort,
-$25 min, junior market $25k, senior pool uncapped, no per-wallet cap, matchCap.
-Idle Morpho sleeve is **not live** on testnet (`product.idleSleeveLive: false`).
+Live surface: Maker waterfall, Morpho yield + Carry fee share (no fixed coupon), Boosted STRATEGY tiers via `boostHook`, gasCredit + auto-refund, one-arg earlyExit / settle, SellShares mock router, DualPool idle sleeve (MockMorpho), auto-compound, v3 lender pool, $25 min, junior market $25k, senior uncapped, matchCap.  
+Real Steakhouse Morpho / idle productization: issue **#20**.
 
 ## Explicitly later
 
-- Real Morpho sleeve on Robinhood
+- Real Morpho sleeve on Robinhood (#20)
 - LONG / creator fee share into Boosted (separate from treasury cut)
-- Live STRATEGY token address and a deployed `StrategyStaking` + `StrategyBoostHook`
-- Mainnet Uniswap router deployment (interface + mock covered in Forge)
+- Mainnet Uniswap router (testnet mock is live)
 - Mainnet 4663

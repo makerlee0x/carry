@@ -37,7 +37,7 @@ Layers:
 | Per-wallet cap | **None, on any market** (maker, 2026-10-18) | product decision |
 | Treasury seed | ≥10% of cap | product-target |
 | DualPool / Morpho sleeve | not on 46630; Idle USDG Morpho = config stub rate | on-chain / ui-display |
-| Product CA | Fresh UUPS PROXY for **v3-lender-pool** (see `public/config.json`). v2.5 `0xc801…72bd` superseded | on-chain |
+| Product CA | UUPS PROXY **`v3.2-dualpool`** (see `public/config.json`). v2.5 `0xc801…72bd` superseded | on-chain |
 
 ### Stale figures (do not use)
 

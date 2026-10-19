@@ -35,6 +35,7 @@ record is a local `/tmp` file.
 | `claimFees` | Maker waterfall: senior floor → treasury → senior perf → junior | ✅ | [`0x6828…36ee`](https://explorer.testnet.chain.robinhood.com/tx/0x682897a4275f608274aece5a59ad4c3fed8e1ec9fd065be704f10c88467736ee) on 20 USDG: floor 0.0000422 (221 s of accrual), treasury 4.0, senior perf 4.0, junior 11.99996. Treasury 20% and perf 20% of gross, as documented. Treasury landed in `backstop` (0 → 4.0002), see finding C6 |
 | Early exit (v3.2 one-arg) | `previewEarlyExit(id)` → `earlyExit(id)` | ✅ | Pre-v3.2 cover-mode txs still valid history; post-upgrade smoke [`0x1b45…23c7`](https://explorer.testnet.chain.robinhood.com/tx/0x1b45dee292918418a02a02c5b52bdfe8ae1721dfbc01bb9fc4145bdea56323c7) on pooled #12 |
 | SellShares router set | Router non-zero after DualPool wire | ✅ | `sellSharesRouter` = `0x687f…424C` (MockMstrSellRouter) |
+| `deployIdle` (owner) | Moves free USDG into CarryStrategy / MockMorpho | ✅ | [`0xc6ff…dd1f`](https://explorer.testnet.chain.robinhood.com/tx/0xc6ff34f1238cb4d291e16973127112c7f77f3b4a4e8ba0f055509c06d3b2dd1f) 50 USDG; `strategyDeployed=50e18` |
 | Settle after term | Backstop first, then junior; default IdleCarry; permissionless when no cover | ✅ | v3 #1/#3/#5 settled 2026-10-18 ~10:18pm CDT; see section 5 |
 | Settle before term | Reverts `TermNotElapsed` | ✅ | Simulated `settle(1)` from the junior: `TermNotElapsed`. No tx on chain. |
 | Senior instant withdraw | Works when idle covers it and queue is empty | ✅ | `0x3cf3…396b` (25 USDG) |
@@ -42,7 +43,7 @@ record is a local `/tmp` file.
 | Auto-compound on | Reopens position; payout under $25 goes to wallet | ✅ | Settle #1/#3/#5 reopened #9/#10/#11; earlyExit #12 reopened #13 into DualPool |
 | `withdrawUnmatched` | Always to wallet, ignores auto-compound | ✅ | `0x0958…e563` with auto-compound on: MSTR left, no new position |
 | Pause | Blocks new deposits; exits and withdrawals still work | ⬜ | Pause/unpause work (deploy + `0x6a23…7c`); blocking not tested. `paused()` = false now. |
-| Source verified on explorer | Proxy and impl show verified source | ❌ | Both unverified as of 2026-10-18 |
+| Source verified on explorer | Impl shows verified source on Blockscout | ✅ | Live impl `0x1473…58A5` verified 2026-10-18 (`forge verify-contract` → Blockscout). Proxy itself is ERC-1967. |
 | Two lenders, one junior | Each lender's idle and share NAV stay correct | ✅ | #3 funded by both lenders; shares read 215 + 150 = 365 = `totalSeniorAssets`. Re-check NAV after fees. |
 
 ## 3. Site against testnet
@@ -53,7 +54,7 @@ Not run: needs a browser wallet. From the cloud env, `usecarry.io` redirects to 
 | --- | --- | --- | --- |
 | Connect MetaMask on 46630 | Wrong-network prompt if on another chain | ⬜ | |
 | Deposit and match from the UI | Card shows Idle → Active | ⬜ | |
-| Early exit dialog | Shows cover options and preview amounts | ⬜ | |
+| Early exit dialog | One-arg preview / exit (no CoverMode); shows amounts | ⬜ | v3.2 UI — CoverMode chooser removed |
 | Positions show after reload | Reads from the v3 PROXY, not the old v2.5 one | ⬜ | |
 | Light and dark mode, phone width | No broken layout | ⬜ | |
 

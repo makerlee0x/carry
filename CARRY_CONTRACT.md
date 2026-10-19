@@ -8,19 +8,18 @@ Maker-locked product rules + research sync: [`docs/MAKER_V1_NOTES.md`](./docs/MA
 **Accounting (v3 source of truth):** [`docs/ACCOUNTING_V3.md`](./docs/ACCOUNTING_V3.md).  
 v2.5 notes kept in [`docs/ACCOUNTING_V25.md`](./docs/ACCOUNTING_V25.md) (superseded).
 
-**Live product CA (PROXY):** [`0x24B799026AA7baa6856bCFD00c1Be1f583A83e35`](https://explorer.testnet.chain.robinhood.com/address/0x24B799026AA7baa6856bCFD00c1Be1f583A83e35) (`version() = v3-lender-pool`, impl `0x7BeE…778E`; also `public/config.json` → `chain.vault`).  
-**Superseded v2.5 PROXY:** [`0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd`](https://explorer.testnet.chain.robinhood.com/address/0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd) — history only; its settle-watch positions are settled.  
+**Live product CA (PROXY):** [`0x24B799026AA7baa6856bCFD00c1Be1f583A83e35`](https://explorer.testnet.chain.robinhood.com/address/0x24B799026AA7baa6856bCFD00c1Be1f583A83e35) (`version() = v3.2-dualpool`, impl `0x1473…58A5`; also `public/config.json` → `chain.vault`).  
+**CarryStrategy / DualPoolHook:** `0x43ec…E6AE` / `0xaf4a…6ac0` — see [`docs/testnet-runs/2026-10-18-v32-upgrade.md`](./docs/testnet-runs/2026-10-18-v32-upgrade.md).  
+**Superseded v2.5 PROXY:** [`0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd`](https://explorer.testnet.chain.robinhood.com/address/0xc80108649B3ba2e5B040c79DDE3af0cB979b72bd) — history only; settle-watch positions settled.  
 **Site:** [usecarry.io](https://usecarry.io).
 
-This pack describes the vault source on `main`. The live testnet impl predates four merged changes (EIP-170 fit #3, rolling positions #16, `StrategyBoostHook` #23, `CarryStrategy` idle-USDG wiring #21) and picks them up at the next owner-signed upgrade.
+This pack matches live testnet after the 2026-10-18 UUPS upgrade to `v3.2-dualpool`.
 
-v3 product: Maker waterfall, **lender pool shares**, FIFO withdraw queue, **floating rate index**, uncapped senior pool, junior $25k cap, $25 min, cover orders per Maker v3, gas refund only on match (scaled), auto-compound with under-$25 wallet payout, explicit withdraw unmatched always wallet.
+v3.2 product: Maker waterfall, **lender pool shares**, FIFO withdraw queue, **Morpho + Carry fee share** (no fixed coupon), DualPool for matched inventory, CarryStrategy/MockMorpho for optional idle deploy, uncapped senior pool, junior $25k cap, $25 min, one-arg `earlyExit` / `settle`, gas refund on match, auto-compound.
 
 **v1 grant reference (not in use):** `0x72A0…36c8` (immutable; old 4%/5%/fee-in cut story applies only there).
 
-**Status:** EVM testnet. DualPool hook is **NOT IMPLEMENTED** (`dualPoolAdapter() == address(0)`). LP fees on testnet are pushed via `accrueLpFee` / `MockFeePool` (fee-donor path for demos). No Yieldz or Morpho ERC-4626 sleeve. Morpho rate / Idle USDG display rates are config stubs. Boosted reads a separate `boostHook` (none set on testnet yet; no STRATEGY yield minted).
-
-**Lender rate is changing.** The owner-set Morpho rate below is a testnet stub, not a promised APY. The mainnet lender return is being reworked to Morpho yield (floating) + Carry's share of fees with no fixed rate or floor (issue #20, PR #21). Sections that describe `seniorFloor`, `morphoRateWad` and cover for an accrual shortfall will change with that rework.
+**Status:** EVM testnet. DualPool is wired (MockMorpho under the hook). Idle USDG can be owner-`deployIdle`'d into CarryStrategy → MockMorpho. Real Steakhouse Morpho / mainnet sleeve remains issue **#20**. LP fees on testnet still use `accrueLpFee` / `MockFeePool` where needed. Boosted reads a separate `boostHook` (STRATEGY wire later).
 
 ---
 
@@ -34,8 +33,8 @@ This vault is the **custody + accounting layer** for that product on testnet:
 
 - Junior deposits MSTR → **Idle** (unmatched) until USDG is available, then **Active**. Product states: **Idle / Active / Boosted / Closed**.
 - Active window is **7 days** (product copy: “active”, not “locked”; positions roll over, never auto-close).
-- **Live UUPS product:** senior accrual = floating rate index driven by an owner-set testnet stub (`morphoRateWad`, cap **≤5%**) × principal; fee waterfall at claim/exit/settle only (see [`docs/MAKER_FEE_WATERFALL.md`](./docs/MAKER_FEE_WATERFALL.md)).
-- **Early exit cover:** junior chooses Wallet / IdleCarry / SellShares (**NO backstop**). **Settle:** backstop first, then junior Wallet / IdleCarry / SellShares; **default settle mode = IdleCarry**. SellShares sells MSTR through the sell router; with no router it reverts.
+- **Live UUPS product (v3.2):** lenders earn Morpho/strategy yield (when idle is deployed) plus Carry fee share; fee waterfall at claim/exit/settle only (see [`docs/MAKER_FEE_WATERFALL.md`](./docs/MAKER_FEE_WATERFALL.md)). No fixed Morpho coupon.
+- **Early exit / settle:** one-arg `earlyExit(id)` / `settle(id)` (no CoverMode). Settle uses backstop first for residual principal loss; early exit does not. SellShares uses the mock router when configured.
 - Lenders hold shares in **one USDG pool**. `withdrawSenior` is instant when idle USDG covers it and the queue is empty; otherwise it joins a FIFO queue and the lender calls `claimWithdraw()` once filled.
 
 ### For auditors
@@ -46,7 +45,7 @@ This vault is the **custody + accounting layer** for that product on testnet:
 | Tokens | Immutable `mstr`, `usdg` ERC-20s |
 | Oracle | Immutable `IPriceOracle` (`mstrPriceWad()`) |
 | Term | Immutable `term` ≤ 7 days |
-| Morpho rate | Owner-set `morphoRateWad` ≤ `MAX_MORPHO_RATE_WAD` (5%) driving a global floating `rateIndex`; positions snapshot the index at match (testnet stub; see rate note above) |
+| Lender yield | Morpho/strategy harvest into pool share price + Carry fee share at claim/exit/settle (no `morphoRateWad` coupon on v3.2) |
 | Fee split | Maker waterfall at claim/exit/settle; treasury base 20% (Boosted cut from `boostHook`, capped at base) + seniorPerf 20% |
 | Accounting | One lender pool (`totalSeniorAssets`) with non-transferable internal shares; senior yield compounds into the share price |
 | Caps | `minDepositUsdg` $25; `maxTotalSeniorUsdg` 0 (uncapped); `maxTotalJuniorUsdg` $25k; **no per-wallet cap** on any market |
@@ -155,10 +154,10 @@ Numbered happy path:
 | `previewEarlyExit` / `previewClaimFees` | view | — | Mode-aware accrual + waterfall preview |
 | `previewSeniorAssets` | view | — | Quoting helper |
 | `freePrincipal` / `convertToAssets` / `claimableWithdraw` / `currentRateIndex` / `isMatched` | view | — | Lender free value / share math / queue / rate / match state |
-| `dualPoolAdapter()` | view | — | Always `address(0)` |
+| `markets(i).pool` / DualPoolHook | view | — | Live hook `0xaf4a…6ac0` after v3.2 wire |
 | `joinPool(bytes)` | anyone | — | Always reverts `ExternalLpForbidden` |
 
-Initializer config: `mstr`, `usdg`, `oracle`, `term`, `morphoRateWad` (≤5%), owner.
+Initializer config: `mstr`, `usdg`, `oracle`, `term`, owner. (`morphoRateWad` removed on v3.2.)
 
 ---
 
@@ -217,7 +216,7 @@ On settle/early exit/claimFees, USDG paid toward seniorFloor + seniorPerf is add
 2. Settled positions never pay twice (`settled` latch)
 3. Owner rescue cannot touch `mstr` / `usdg`
 4. Matched MSTR leaves only via junior payout or senior MSTR claims after sale-to-cover
-5. `dualPoolAdapter() == 0` and no PoolManager approvals
+5. Matched inventory uses DualPoolHook when `setMarketPool` is wired; otherwise inventory stays in vault
 
 ### Known limitations (NOT bugs for grant bar — be explicit)
 
