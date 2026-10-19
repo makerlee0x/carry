@@ -6,136 +6,6 @@
   },
   {
     "type": "function",
-    "name": "BOOSTED_TREASURY_CUT_WAD",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "DEFAULT_GAS_REFUND_WEI",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "DEFAULT_MATCH_CAP",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "DEFAULT_MIN_DEPOSIT_USDG",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "DEFAULT_TREASURY_CUT_WAD",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "MAX_BOOST_TIERS",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "MAX_MORPHO_RATE_WAD",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "MAX_TERM",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint64",
-        "internalType": "uint64"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "MAX_TREASURY_CUT_WAD",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "ROBINHOOD_POOL_MANAGER",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "address",
-        "internalType": "address"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
     "name": "SENIOR_PERF_CUT_WAD",
     "inputs": [],
     "outputs": [
@@ -162,123 +32,6 @@
   },
   {
     "type": "function",
-    "name": "WAD",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "YEAR",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "accMstrPerPrincipal",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "accMstrWeight",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "accMstrWeightT",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "accYieldPerPrincipal",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "accYieldWeight",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "accYieldWeightT",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "accountingMigrated",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "bool",
-        "internalType": "bool"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
     "name": "accrueLpFee",
     "inputs": [
       {
@@ -293,6 +46,40 @@
       }
     ],
     "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "addMarket",
+    "inputs": [
+      {
+        "name": "token",
+        "type": "address",
+        "internalType": "contract IERC20Minimal"
+      },
+      {
+        "name": "oracle_",
+        "type": "address",
+        "internalType": "contract IPriceOracle"
+      },
+      {
+        "name": "rangeDropWad",
+        "type": "uint64",
+        "internalType": "uint64"
+      },
+      {
+        "name": "juniorCapUsdg",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "marketId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
     "stateMutability": "nonpayable"
   },
   {
@@ -329,89 +116,13 @@
   },
   {
     "type": "function",
-    "name": "boostStakeAmount",
-    "inputs": [
-      {
-        "name": "",
-        "type": "address",
-        "internalType": "address"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "boostStaked",
-    "inputs": [
-      {
-        "name": "",
-        "type": "address",
-        "internalType": "address"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "bool",
-        "internalType": "bool"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "boostTierCount",
+    "name": "boostHook",
     "inputs": [],
     "outputs": [
       {
         "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "boostTierCutWad",
-    "inputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "boostTierMinStake",
-    "inputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
+        "type": "address",
+        "internalType": "contract IBoostHook"
       }
     ],
     "stateMutability": "view"
@@ -487,6 +198,114 @@
   },
   {
     "type": "function",
+    "name": "claimWithdraw",
+    "inputs": [],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "claimableWithdraw",
+    "inputs": [
+      {
+        "name": "user",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "clearTreasuryCuts",
+    "inputs": [],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "convertToAssets",
+    "inputs": [
+      {
+        "name": "shares_",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "convertToShares",
+    "inputs": [
+      {
+        "name": "assets",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "deployIdle",
+    "inputs": [
+      {
+        "name": "amount",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "depositJunior",
+    "inputs": [
+      {
+        "name": "marketId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "amount",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "positionId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "depositJunior",
     "inputs": [
       {
@@ -515,92 +334,6 @@
       }
     ],
     "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "earlyExit",
-    "inputs": [
-      {
-        "name": "positionId",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "mode",
-        "type": "uint8",
-        "internalType": "enum LeveredLpVault.CoverMode"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "tuple",
-        "internalType": "struct LeveredLpVault.EarlyExitResult",
-        "components": [
-          {
-            "name": "elapsed",
-            "type": "uint256",
-            "internalType": "uint256"
-          },
-          {
-            "name": "accrual",
-            "type": "uint256",
-            "internalType": "uint256"
-          },
-          {
-            "name": "seniorFloor",
-            "type": "uint256",
-            "internalType": "uint256"
-          },
-          {
-            "name": "treasury",
-            "type": "uint256",
-            "internalType": "uint256"
-          },
-          {
-            "name": "seniorPerf",
-            "type": "uint256",
-            "internalType": "uint256"
-          },
-          {
-            "name": "juniorLeftoverFees",
-            "type": "uint256",
-            "internalType": "uint256"
-          },
-          {
-            "name": "coverUsdg",
-            "type": "uint256",
-            "internalType": "uint256"
-          },
-          {
-            "name": "treasuryOnCover",
-            "type": "uint256",
-            "internalType": "uint256"
-          },
-          {
-            "name": "mstrSold",
-            "type": "uint256",
-            "internalType": "uint256"
-          },
-          {
-            "name": "mstrReturned",
-            "type": "uint256",
-            "internalType": "uint256"
-          },
-          {
-            "name": "feeShortfallUsdg",
-            "type": "uint256",
-            "internalType": "uint256"
-          },
-          {
-            "name": "coverMode",
-            "type": "uint8",
-            "internalType": "enum LeveredLpVault.CoverMode"
-          }
-        ]
-      }
-    ],
     "stateMutability": "nonpayable"
   },
   {
@@ -770,67 +503,10 @@
   },
   {
     "type": "function",
-    "name": "idleHead",
+    "name": "harvest",
     "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "address",
-        "internalType": "address"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "idleNext",
-    "inputs": [
-      {
-        "name": "",
-        "type": "address",
-        "internalType": "address"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "address",
-        "internalType": "address"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "idleTail",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "address",
-        "internalType": "address"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "inIdleQueue",
-    "inputs": [
-      {
-        "name": "",
-        "type": "address",
-        "internalType": "address"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "bool",
-        "internalType": "bool"
-      }
-    ],
-    "stateMutability": "view"
+    "outputs": [],
+    "stateMutability": "nonpayable"
   },
   {
     "type": "function",
@@ -857,7 +533,7 @@
         "internalType": "uint64"
       },
       {
-        "name": "morphoRateWad_",
+        "name": "",
         "type": "uint256",
         "internalType": "uint256"
       },
@@ -872,12 +548,38 @@
   },
   {
     "type": "function",
+    "name": "initializeMarkets",
+    "inputs": [],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "isFullyMatched",
     "inputs": [
       {
         "name": "positionId",
         "type": "uint256",
         "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "isMarketToken",
+    "inputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
       }
     ],
     "outputs": [
@@ -910,6 +612,107 @@
   },
   {
     "type": "function",
+    "name": "marketCount",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "marketPool",
+    "inputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "currency0",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "currency1",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "fee",
+        "type": "uint24",
+        "internalType": "uint24"
+      },
+      {
+        "name": "tickSpacing",
+        "type": "int24",
+        "internalType": "int24"
+      },
+      {
+        "name": "hooks",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "markets",
+    "inputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "token",
+        "type": "address",
+        "internalType": "contract IERC20Minimal"
+      },
+      {
+        "name": "decimals",
+        "type": "uint8",
+        "internalType": "uint8"
+      },
+      {
+        "name": "active",
+        "type": "bool",
+        "internalType": "bool"
+      },
+      {
+        "name": "rangeDropWad",
+        "type": "uint64",
+        "internalType": "uint64"
+      },
+      {
+        "name": "oracle",
+        "type": "address",
+        "internalType": "contract IPriceOracle"
+      },
+      {
+        "name": "juniorCapUsdg",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "juniorUsdg",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "matchCap",
     "inputs": [],
     "outputs": [
@@ -924,6 +727,19 @@
   {
     "type": "function",
     "name": "maxPerWalletUsdg",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "maxPriceStale",
     "inputs": [],
     "outputs": [
       {
@@ -962,58 +778,7 @@
   },
   {
     "type": "function",
-    "name": "migrateAccountingV25",
-    "inputs": [
-      {
-        "name": "seniors",
-        "type": "address[]",
-        "internalType": "address[]"
-      },
-      {
-        "name": "idles",
-        "type": "uint256[]",
-        "internalType": "uint256[]"
-      },
-      {
-        "name": "positionIds",
-        "type": "uint256[]",
-        "internalType": "uint256[]"
-      },
-      {
-        "name": "funders",
-        "type": "address[]",
-        "internalType": "address[]"
-      },
-      {
-        "name": "amounts",
-        "type": "uint256[]",
-        "internalType": "uint256[]"
-      },
-      {
-        "name": "matchedAts",
-        "type": "uint64[]",
-        "internalType": "uint64[]"
-      }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
     "name": "minDepositUsdg",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "morphoFloorAprWad",
     "inputs": [],
     "outputs": [
       {
@@ -1052,65 +817,7 @@
   },
   {
     "type": "function",
-    "name": "mstrDecimals",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint8",
-        "internalType": "uint8"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
     "name": "nextPositionId",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "openHead",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "openNext",
-    "inputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "openTail",
     "inputs": [],
     "outputs": [
       {
@@ -1188,48 +895,8 @@
   },
   {
     "type": "function",
-    "name": "positionFunderAt",
-    "inputs": [
-      {
-        "name": "positionId",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "index",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "lender",
-        "type": "address",
-        "internalType": "address"
-      },
-      {
-        "name": "amount",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "matchedAt",
-        "type": "uint64",
-        "internalType": "uint64"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "positionFunderCount",
-    "inputs": [
-      {
-        "name": "positionId",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
+    "name": "poolDeployed",
+    "inputs": [],
     "outputs": [
       {
         "name": "",
@@ -1241,7 +908,7 @@
   },
   {
     "type": "function",
-    "name": "positionJuniorUsdg",
+    "name": "positionPoolShares",
     "inputs": [
       {
         "name": "",
@@ -1344,12 +1011,17 @@
         "internalType": "uint256"
       },
       {
-        "name": "morphoRateLocked",
+        "name": "rateIndexSnapshot",
         "type": "uint256",
         "internalType": "uint256"
       },
       {
         "name": "treasuryCutLocked",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "marketId",
         "type": "uint256",
         "internalType": "uint256"
       }
@@ -1424,92 +1096,6 @@
     ],
     "outputs": [
       {
-        "name": "",
-        "type": "tuple",
-        "internalType": "struct LeveredLpVault.EarlyExitResult",
-        "components": [
-          {
-            "name": "elapsed",
-            "type": "uint256",
-            "internalType": "uint256"
-          },
-          {
-            "name": "accrual",
-            "type": "uint256",
-            "internalType": "uint256"
-          },
-          {
-            "name": "seniorFloor",
-            "type": "uint256",
-            "internalType": "uint256"
-          },
-          {
-            "name": "treasury",
-            "type": "uint256",
-            "internalType": "uint256"
-          },
-          {
-            "name": "seniorPerf",
-            "type": "uint256",
-            "internalType": "uint256"
-          },
-          {
-            "name": "juniorLeftoverFees",
-            "type": "uint256",
-            "internalType": "uint256"
-          },
-          {
-            "name": "coverUsdg",
-            "type": "uint256",
-            "internalType": "uint256"
-          },
-          {
-            "name": "treasuryOnCover",
-            "type": "uint256",
-            "internalType": "uint256"
-          },
-          {
-            "name": "mstrSold",
-            "type": "uint256",
-            "internalType": "uint256"
-          },
-          {
-            "name": "mstrReturned",
-            "type": "uint256",
-            "internalType": "uint256"
-          },
-          {
-            "name": "feeShortfallUsdg",
-            "type": "uint256",
-            "internalType": "uint256"
-          },
-          {
-            "name": "coverMode",
-            "type": "uint8",
-            "internalType": "enum LeveredLpVault.CoverMode"
-          }
-        ]
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "previewEarlyExit",
-    "inputs": [
-      {
-        "name": "positionId",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "mode",
-        "type": "uint8",
-        "internalType": "enum LeveredLpVault.CoverMode"
-      }
-    ],
-    "outputs": [
-      {
         "name": "result",
         "type": "tuple",
         "internalType": "struct LeveredLpVault.EarlyExitResult",
@@ -1581,111 +1167,15 @@
   },
   {
     "type": "function",
-    "name": "previewMstrToCover",
+    "name": "previewMarketSeniorAssets",
     "inputs": [
       {
-        "name": "usdgShort",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "previewMstrToCover",
-    "inputs": [
-      {
-        "name": "usdgShort",
+        "name": "marketId",
         "type": "uint256",
         "internalType": "uint256"
       },
       {
-        "name": "priceWad",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "previewSeniorAccrual",
-    "inputs": [
-      {
-        "name": "principal",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "elapsed",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "rateWad",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "pure"
-  },
-  {
-    "type": "function",
-    "name": "previewSeniorAccrual",
-    "inputs": [
-      {
-        "name": "principal",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "elapsed",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "previewSeniorAssets",
-    "inputs": [
-      {
-        "name": "mstrAmount",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "priceWad",
+        "name": "amount",
         "type": "uint256",
         "internalType": "uint256"
       }
@@ -1726,92 +1216,6 @@
         "name": "positionId",
         "type": "uint256",
         "internalType": "uint256"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "tuple",
-        "internalType": "struct LeveredLpVault.Settlement",
-        "components": [
-          {
-            "name": "mstrKept",
-            "type": "uint256",
-            "internalType": "uint256"
-          },
-          {
-            "name": "mstrSold",
-            "type": "uint256",
-            "internalType": "uint256"
-          },
-          {
-            "name": "accrual",
-            "type": "uint256",
-            "internalType": "uint256"
-          },
-          {
-            "name": "seniorFloor",
-            "type": "uint256",
-            "internalType": "uint256"
-          },
-          {
-            "name": "treasury",
-            "type": "uint256",
-            "internalType": "uint256"
-          },
-          {
-            "name": "seniorPerf",
-            "type": "uint256",
-            "internalType": "uint256"
-          },
-          {
-            "name": "juniorYield",
-            "type": "uint256",
-            "internalType": "uint256"
-          },
-          {
-            "name": "fromBackstop",
-            "type": "uint256",
-            "internalType": "uint256"
-          },
-          {
-            "name": "coverUsdg",
-            "type": "uint256",
-            "internalType": "uint256"
-          },
-          {
-            "name": "treasuryOnCover",
-            "type": "uint256",
-            "internalType": "uint256"
-          },
-          {
-            "name": "feeShortfallUsdg",
-            "type": "uint256",
-            "internalType": "uint256"
-          },
-          {
-            "name": "coverMode",
-            "type": "uint8",
-            "internalType": "enum LeveredLpVault.CoverMode"
-          }
-        ]
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "previewSettle",
-    "inputs": [
-      {
-        "name": "positionId",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "mode",
-        "type": "uint8",
-        "internalType": "enum LeveredLpVault.CoverMode"
       }
     ],
     "outputs": [
@@ -1876,75 +1280,14 @@
             "internalType": "uint256"
           },
           {
+            "name": "fromPool",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
             "name": "coverMode",
             "type": "uint8",
             "internalType": "enum LeveredLpVault.CoverMode"
-          }
-        ]
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "previewWaterfall",
-    "inputs": [
-      {
-        "name": "gross",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "seniorPrincipal_",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "elapsed",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "boosted",
-        "type": "bool",
-        "internalType": "bool"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "s",
-        "type": "tuple",
-        "internalType": "struct LeveredLpVault.WaterfallSplit",
-        "components": [
-          {
-            "name": "accrual",
-            "type": "uint256",
-            "internalType": "uint256"
-          },
-          {
-            "name": "seniorFloor",
-            "type": "uint256",
-            "internalType": "uint256"
-          },
-          {
-            "name": "treasury",
-            "type": "uint256",
-            "internalType": "uint256"
-          },
-          {
-            "name": "seniorPerf",
-            "type": "uint256",
-            "internalType": "uint256"
-          },
-          {
-            "name": "junior",
-            "type": "uint256",
-            "internalType": "uint256"
-          },
-          {
-            "name": "seniorTotal",
-            "type": "uint256",
-            "internalType": "uint256"
           }
         ]
       }
@@ -1960,6 +1303,32 @@
         "name": "",
         "type": "bytes32",
         "internalType": "bytes32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "queueClaimable",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "rateIndex",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
     "stateMutability": "view"
@@ -2009,25 +1378,6 @@
   },
   {
     "type": "function",
-    "name": "sellSharesEnabled",
-    "inputs": [
-      {
-        "name": "",
-        "type": "address",
-        "internalType": "address"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "bool",
-        "internalType": "bool"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
     "name": "sellSharesRouter",
     "inputs": [],
     "outputs": [
@@ -2041,196 +1391,10 @@
   },
   {
     "type": "function",
-    "name": "seniorClaimableMstr",
-    "inputs": [
-      {
-        "name": "",
-        "type": "address",
-        "internalType": "address"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "seniorClaimableYield",
-    "inputs": [
-      {
-        "name": "",
-        "type": "address",
-        "internalType": "address"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "seniorEarlyExit",
-    "inputs": [
-      {
-        "name": "positionId",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "amount",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "principalOut",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "rematched",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "yieldCredited",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "seniorIdle",
-    "inputs": [
-      {
-        "name": "",
-        "type": "address",
-        "internalType": "address"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "seniorJoinedAt",
-    "inputs": [
-      {
-        "name": "",
-        "type": "address",
-        "internalType": "address"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "seniorMstrDebt",
-    "inputs": [
-      {
-        "name": "",
-        "type": "address",
-        "internalType": "address"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
     "name": "seniorPrincipal",
     "inputs": [
       {
-        "name": "",
-        "type": "address",
-        "internalType": "address"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "seniorTwMstrDebt",
-    "inputs": [
-      {
-        "name": "",
-        "type": "address",
-        "internalType": "address"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "seniorTwYieldDebt",
-    "inputs": [
-      {
-        "name": "",
-        "type": "address",
-        "internalType": "address"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "seniorYieldDebt",
-    "inputs": [
-      {
-        "name": "",
+        "name": "senior",
         "type": "address",
         "internalType": "address"
       }
@@ -2259,53 +1423,12 @@
   },
   {
     "type": "function",
-    "name": "setBoostStakeAmount",
+    "name": "setBoostHook",
     "inputs": [
       {
-        "name": "user",
+        "name": "hook",
         "type": "address",
-        "internalType": "address"
-      },
-      {
-        "name": "amount",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "setBoostStaked",
-    "inputs": [
-      {
-        "name": "user",
-        "type": "address",
-        "internalType": "address"
-      },
-      {
-        "name": "staked",
-        "type": "bool",
-        "internalType": "bool"
-      }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "setBoostTiers",
-    "inputs": [
-      {
-        "name": "minStakes",
-        "type": "uint256[]",
-        "internalType": "uint256[]"
-      },
-      {
-        "name": "cuts",
-        "type": "uint256[]",
-        "internalType": "uint256[]"
+        "internalType": "contract IBoostHook"
       }
     ],
     "outputs": [],
@@ -2349,10 +1472,101 @@
   },
   {
     "type": "function",
+    "name": "setMarket",
+    "inputs": [
+      {
+        "name": "marketId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "oracle_",
+        "type": "address",
+        "internalType": "contract IPriceOracle"
+      },
+      {
+        "name": "rangeDropWad",
+        "type": "uint64",
+        "internalType": "uint64"
+      },
+      {
+        "name": "juniorCapUsdg",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "active",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "setMarketPool",
+    "inputs": [
+      {
+        "name": "marketId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "key",
+        "type": "tuple",
+        "internalType": "struct DualPoolKey",
+        "components": [
+          {
+            "name": "currency0",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "currency1",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "fee",
+            "type": "uint24",
+            "internalType": "uint24"
+          },
+          {
+            "name": "tickSpacing",
+            "type": "int24",
+            "internalType": "int24"
+          },
+          {
+            "name": "hooks",
+            "type": "address",
+            "internalType": "address"
+          }
+        ]
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "setMatchCap",
     "inputs": [
       {
         "name": "matchCap_",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "setMaxPriceStale",
+    "inputs": [
+      {
+        "name": "maxPriceStale_",
         "type": "uint256",
         "internalType": "uint256"
       }
@@ -2375,38 +1589,25 @@
   },
   {
     "type": "function",
-    "name": "setMorphoRate",
-    "inputs": [
-      {
-        "name": "morphoRateWad_",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "setSellSharesEnabled",
-    "inputs": [
-      {
-        "name": "enabled",
-        "type": "bool",
-        "internalType": "bool"
-      }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
     "name": "setSellSharesRouter",
     "inputs": [
       {
         "name": "router",
         "type": "address",
         "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "setStrategy",
+    "inputs": [
+      {
+        "name": "strategy_",
+        "type": "address",
+        "internalType": "contract ICarryStrategy"
       }
     ],
     "outputs": [],
@@ -2502,6 +1703,11 @@
             "internalType": "uint256"
           },
           {
+            "name": "fromPool",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
             "name": "coverMode",
             "type": "uint8",
             "internalType": "enum LeveredLpVault.CoverMode"
@@ -2513,93 +1719,39 @@
   },
   {
     "type": "function",
-    "name": "settle",
+    "name": "shares",
     "inputs": [
       {
-        "name": "positionId",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "mode",
-        "type": "uint8",
-        "internalType": "enum LeveredLpVault.CoverMode"
+        "name": "",
+        "type": "address",
+        "internalType": "address"
       }
     ],
     "outputs": [
       {
         "name": "",
-        "type": "tuple",
-        "internalType": "struct LeveredLpVault.Settlement",
-        "components": [
-          {
-            "name": "mstrKept",
-            "type": "uint256",
-            "internalType": "uint256"
-          },
-          {
-            "name": "mstrSold",
-            "type": "uint256",
-            "internalType": "uint256"
-          },
-          {
-            "name": "accrual",
-            "type": "uint256",
-            "internalType": "uint256"
-          },
-          {
-            "name": "seniorFloor",
-            "type": "uint256",
-            "internalType": "uint256"
-          },
-          {
-            "name": "treasury",
-            "type": "uint256",
-            "internalType": "uint256"
-          },
-          {
-            "name": "seniorPerf",
-            "type": "uint256",
-            "internalType": "uint256"
-          },
-          {
-            "name": "juniorYield",
-            "type": "uint256",
-            "internalType": "uint256"
-          },
-          {
-            "name": "fromBackstop",
-            "type": "uint256",
-            "internalType": "uint256"
-          },
-          {
-            "name": "coverUsdg",
-            "type": "uint256",
-            "internalType": "uint256"
-          },
-          {
-            "name": "treasuryOnCover",
-            "type": "uint256",
-            "internalType": "uint256"
-          },
-          {
-            "name": "feeShortfallUsdg",
-            "type": "uint256",
-            "internalType": "uint256"
-          },
-          {
-            "name": "coverMode",
-            "type": "uint8",
-            "internalType": "enum LeveredLpVault.CoverMode"
-          }
-        ]
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
-    "stateMutability": "nonpayable"
+    "stateMutability": "view"
   },
   {
     "type": "function",
-    "name": "sumPrincipalJoinedAt",
+    "name": "strategy",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "contract ICarryStrategy"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "strategyDeployed",
     "inputs": [],
     "outputs": [
       {
@@ -2638,7 +1790,33 @@
   },
   {
     "type": "function",
-    "name": "totalSeniorPrincipal",
+    "name": "totalSeniorAssets",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "totalShares",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "totalUnsplitFees",
     "inputs": [],
     "outputs": [
       {
@@ -2661,6 +1839,19 @@
     ],
     "outputs": [],
     "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "treasuryCutIsSet",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
   },
   {
     "type": "function",
@@ -2715,16 +1906,16 @@
   },
   {
     "type": "function",
-    "name": "usdgDecimals",
+    "name": "version",
     "inputs": [],
     "outputs": [
       {
         "name": "",
-        "type": "uint8",
-        "internalType": "uint8"
+        "type": "string",
+        "internalType": "string"
       }
     ],
-    "stateMutability": "view"
+    "stateMutability": "pure"
   },
   {
     "type": "function",
@@ -2807,7 +1998,7 @@
     "name": "withdrawSenior",
     "inputs": [
       {
-        "name": "principalAmount",
+        "name": "assets",
         "type": "uint256",
         "internalType": "uint256"
       }
@@ -2847,23 +2038,68 @@
     "stateMutability": "nonpayable"
   },
   {
-    "type": "event",
-    "name": "AccountingMigrated",
-    "inputs": [
+    "type": "function",
+    "name": "wqCumulativeFulfilled",
+    "inputs": [],
+    "outputs": [
       {
-        "name": "seniors",
+        "name": "",
         "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
-      },
-      {
-        "name": "funderSlices",
-        "type": "uint256",
-        "indexed": false,
         "internalType": "uint256"
       }
     ],
-    "anonymous": false
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "wqCumulativeRequested",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "wqRequested",
+    "inputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "wqSharesLocked",
+    "inputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
   },
   {
     "type": "event",
@@ -2918,6 +2154,19 @@
         "type": "uint256",
         "indexed": false,
         "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "BoostHookUpdated",
+    "inputs": [
+      {
+        "name": "hook",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
       }
     ],
     "anonymous": false
@@ -3273,6 +2522,68 @@
   },
   {
     "type": "event",
+    "name": "MarketPoolSet",
+    "inputs": [
+      {
+        "name": "marketId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "hook",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "MarketSet",
+    "inputs": [
+      {
+        "name": "marketId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "token",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "oracle",
+        "type": "address",
+        "indexed": false,
+        "internalType": "address"
+      },
+      {
+        "name": "rangeDropWad",
+        "type": "uint64",
+        "indexed": false,
+        "internalType": "uint64"
+      },
+      {
+        "name": "juniorCapUsdg",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "active",
+        "type": "bool",
+        "indexed": false,
+        "internalType": "bool"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "MatchCapUpdated",
     "inputs": [
       {
@@ -3286,10 +2597,10 @@
   },
   {
     "type": "event",
-    "name": "MinDepositUpdated",
+    "name": "MaxPriceStaleUpdated",
     "inputs": [
       {
-        "name": "minDepositUsdg",
+        "name": "maxPriceStale",
         "type": "uint256",
         "indexed": false,
         "internalType": "uint256"
@@ -3299,10 +2610,10 @@
   },
   {
     "type": "event",
-    "name": "MorphoRateUpdated",
+    "name": "MinDepositUpdated",
     "inputs": [
       {
-        "name": "morphoRateWad",
+        "name": "minDepositUsdg",
         "type": "uint256",
         "indexed": false,
         "internalType": "uint256"
@@ -3388,37 +2699,6 @@
   },
   {
     "type": "event",
-    "name": "PositionFunderAdded",
-    "inputs": [
-      {
-        "name": "positionId",
-        "type": "uint256",
-        "indexed": true,
-        "internalType": "uint256"
-      },
-      {
-        "name": "lender",
-        "type": "address",
-        "indexed": true,
-        "internalType": "address"
-      },
-      {
-        "name": "amount",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
-      },
-      {
-        "name": "matchedAt",
-        "type": "uint64",
-        "indexed": false,
-        "internalType": "uint64"
-      }
-    ],
-    "anonymous": false
-  },
-  {
-    "type": "event",
     "name": "PositionMatched",
     "inputs": [
       {
@@ -3456,25 +2736,6 @@
   },
   {
     "type": "event",
-    "name": "SellSharesEnabledUpdated",
-    "inputs": [
-      {
-        "name": "user",
-        "type": "address",
-        "indexed": true,
-        "internalType": "address"
-      },
-      {
-        "name": "enabled",
-        "type": "bool",
-        "indexed": false,
-        "internalType": "bool"
-      }
-    ],
-    "anonymous": false
-  },
-  {
-    "type": "event",
     "name": "SellSharesRouterUpdated",
     "inputs": [
       {
@@ -3497,44 +2758,13 @@
         "internalType": "address"
       },
       {
-        "name": "amount",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
-      }
-    ],
-    "anonymous": false
-  },
-  {
-    "type": "event",
-    "name": "SeniorEarlyExit",
-    "inputs": [
-      {
-        "name": "positionId",
-        "type": "uint256",
-        "indexed": true,
-        "internalType": "uint256"
-      },
-      {
-        "name": "senior",
-        "type": "address",
-        "indexed": true,
-        "internalType": "address"
-      },
-      {
-        "name": "principalOut",
+        "name": "assets",
         "type": "uint256",
         "indexed": false,
         "internalType": "uint256"
       },
       {
-        "name": "rematched",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
-      },
-      {
-        "name": "yieldUsdg",
+        "name": "sharesMinted",
         "type": "uint256",
         "indexed": false,
         "internalType": "uint256"
@@ -3553,19 +2783,69 @@
         "internalType": "address"
       },
       {
-        "name": "principal",
+        "name": "assets",
         "type": "uint256",
         "indexed": false,
         "internalType": "uint256"
       },
       {
-        "name": "yieldUsdg",
+        "name": "sharesBurned",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "SeniorWithdrawClaimed",
+    "inputs": [
+      {
+        "name": "senior",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "assets",
         "type": "uint256",
         "indexed": false,
         "internalType": "uint256"
       },
       {
-        "name": "mstrAmount",
+        "name": "sharesBurned",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "SeniorWithdrawQueued",
+    "inputs": [
+      {
+        "name": "senior",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "assets",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "sharesLocked",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "cursor",
         "type": "uint256",
         "indexed": false,
         "internalType": "uint256"
@@ -3631,6 +2911,12 @@
         "type": "uint256",
         "indexed": false,
         "internalType": "uint256"
+      },
+      {
+        "name": "isSet",
+        "type": "bool",
+        "indexed": false,
+        "internalType": "bool"
       }
     ],
     "anonymous": false
@@ -3759,11 +3045,6 @@
   },
   {
     "type": "error",
-    "name": "AlreadyMigrated",
-    "inputs": []
-  },
-  {
-    "type": "error",
     "name": "AlreadySettled",
     "inputs": []
   },
@@ -3784,12 +3065,12 @@
   },
   {
     "type": "error",
-    "name": "BadMatchCap",
+    "name": "BadMarket",
     "inputs": []
   },
   {
     "type": "error",
-    "name": "BadMigration",
+    "name": "BadMatchCap",
     "inputs": []
   },
   {
@@ -3865,11 +3146,6 @@
   },
   {
     "type": "error",
-    "name": "InsufficientFunder",
-    "inputs": []
-  },
-  {
-    "type": "error",
     "name": "InsufficientGasCredit",
     "inputs": []
   },
@@ -3890,6 +3166,11 @@
   },
   {
     "type": "error",
+    "name": "NoSellRouter",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "NotInitializing",
     "inputs": []
   },
@@ -3901,6 +3182,11 @@
   {
     "type": "error",
     "name": "NotMatched",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "NothingToClaim",
     "inputs": []
   },
   {
@@ -3937,12 +3223,22 @@
   },
   {
     "type": "error",
+    "name": "QueueOutstanding",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "ReentrancyGuardReentrantCall",
     "inputs": []
   },
   {
     "type": "error",
     "name": "SellSharesDisabled",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "StalePrice",
     "inputs": []
   },
   {

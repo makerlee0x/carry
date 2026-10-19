@@ -228,7 +228,7 @@
       <div class="btnrow"><button class="btn secondary" data-act="boost-on">Set boosted</button><button class="btn tertiary" data-act="boost-off">Clear boost</button></div>
       <div class="field"><input id="capSenior" inputmode="decimal" placeholder="senior cap" aria-label="Senior cap USDG"><input id="capJunior" inputmode="decimal" placeholder="junior cap" aria-label="Junior cap USDG"><input id="capWallet" inputmode="decimal" placeholder="per wallet" aria-label="Per-wallet cap USDG"></div>
       <div class="btnrow"><button class="btn secondary" data-act="set-caps">Set caps (0 = none)</button></div>
-      <div class="field"><input id="morphoPct" inputmode="decimal" placeholder="Morpho rate % (max 5)" aria-label="Morpho rate percent"><button class="btn secondary" data-act="set-morpho">Set rate</button></div>
+      <p class="muted" style="margin:0">Morpho rate admin removed on v3.2-dualpool (no fixed coupon).</p>
       <div class="field"><input id="matchCapIn" inputmode="numeric" placeholder="match cap (0 = 25)" aria-label="Match cap"><button class="btn secondary" data-act="set-matchcap">Set match cap</button></div>
       <div class="field"><input id="gasRefundIn" inputmode="decimal" placeholder="gas refund ETH (0 = off)" aria-label="Gas refund ETH"><button class="btn secondary" data-act="set-gasrefund">Set refund</button></div>
       <div class="field"><input id="backstopOut" inputmode="decimal" placeholder="USDG from backstop" aria-label="USDG to withdraw from backstop"><button class="btn secondary" data-act="backstop-out">Withdraw to me</button></div>
@@ -393,7 +393,7 @@ async function refreshVault() {
   $('vaultCard').classList.add('loading');
   try {
     const [paused, term, rate, cut, boostCut, perf, price, next, senior, reserved, free, backstop, junior, capS, capJ, capW, owner, implSlot] = await Promise.all([
-      v('paused'), v('term'), v('morphoRateWad'), v('treasuryCutWad'), v('boostedTreasuryCutWad'), v('SENIOR_PERF_CUT_WAD'),
+      v('paused'), v('term'), v('morphoRateWad').catch(() => 0n), v('treasuryCutWad'), v('boostedTreasuryCutWad'), v('SENIOR_PERF_CUT_WAD'),
       pub.readContract({ address: c.oracle, abi: oracleAbi, functionName: 'mstrPriceWad' }),
       v('nextPositionId'), v('totalSeniorAssets'), v('reservedSenior'), v('freeSenior'), v('backstop'),
       v('totalJuniorUsdg'), v('maxTotalSeniorUsdg'), v('maxTotalJuniorUsdg'), v('maxPerWalletUsdg'), v('owner'),
@@ -813,102 +813,36 @@ const actions = {
   }),
   'pos-early': (b) => run(b, async () => {
     const id = BigInt(b.dataset.id);
-    const pos = await readPos(id);
-    const preview = (mode) => pub.readContract({ address: cfg.contracts.vault, abi: vaultAbi, functionName: 'previewEarlyExit', args: [id, mode] });
-    const view = async (mode) => {
-      const p = await preview(COVER[mode]);
-      const short_ = p.accrual > p.seniorFloor ? p.accrual - p.seniorFloor : 0n;
-      const notes = {
-        Wallet: `Your fees go to cover first, then the rest of ${fmtSmall(p.coverUsdg)} USDG comes from your wallet (an approval comes first). All your MSTR comes back. If your wallet is short, the tx reverts and the position stays open.`,
-        IdleCarry: `Your fees go to cover first, then the rest of ${fmtSmall(p.coverUsdg)} USDG comes from your idle lender deposit on Carry. All your MSTR comes back. If it is short, the tx reverts and the position stays open.`,
-        SellShares: `${fmtSmall(p.mstrSold, DS)} MSTR is taken from the position and credited to lenders (testnet has no AMM). Treasury's share comes out of your leftover fees first.`,
-      };
-      return {
-        note: short_ === 0n ? 'Fees cover senior accrual, so no cover is needed whichever option you pick. Early exit never draws on the backstop.' : notes[mode],
-        rows: [
-          { k: `Senior accrual (${days(p.elapsed)})`, v: `${fmtSmall(p.accrual)} USDG` },
-          { k: 'Senior floor from fees', v: `${fmtSmall(p.seniorFloor)} USDG` },
-          { k: 'Treasury · senior perf', v: `${fmtSmall(p.treasury)} · ${fmtSmall(p.seniorPerf)} USDG` },
-          { k: 'Cover (shortfall + treasury on it)', v: `${fmtSmall(p.coverUsdg)} USDG` },
-          { k: 'MSTR sold', v: `${fmtSmall(p.mstrSold, DS)} MSTR` },
-          { k: 'MSTR returned to you', v: `${fmtSmall(p.mstrReturned, DS)} MSTR` },
-          { k: 'Fees returned to you', v: `${fmtSmall(p.juniorLeftoverFees)} USDG` },
-        ].concat(p.feeShortfallUsdg > 0n ? [{ k: 'Unrecovered shortfall', v: `${fmtSmall(p.feeShortfallUsdg)} USDG` }] : []),
-      };
-    };
-    const first = await view('Wallet');
-    const mode = await askConfirm({
+    const p = await pub.readContract({ address: cfg.contracts.vault, abi: vaultAbi, functionName: 'previewEarlyExit', args: [id] });
+    const ok = await askConfirm({
       eyebrow: 'EARLY EXIT', title: `Close position #${id} now`, yes: 'Confirm early exit',
-      choices: [
-        { value: 'Wallet', label: 'Wallet USDG', hint: 'Default. Pay the shortfall from USDG in your wallet.' },
-        { value: 'IdleCarry', label: 'Idle USDG on Carry', hint: 'Use unmatched USDG you lent on Carry.' },
-        { value: 'SellShares', label: 'Sell from position', hint: 'Give up some MSTR from this position.' },
+      note: 'v3.2 vault: one-arg earlyExit (no CoverMode). Lender yield is Morpho + Carry — no fixed coupon.',
+      rows: [
+        { k: `Senior accrual (${days(p.elapsed)})`, v: `${fmtSmall(p.accrual)} USDG` },
+        { k: 'Senior floor · treasury · perf', v: `${fmtSmall(p.seniorFloor)} · ${fmtSmall(p.treasury)} · ${fmtSmall(p.seniorPerf)} USDG` },
+        { k: 'MSTR returned', v: `${fmtSmall(p.mstrReturned, DS)} MSTR` },
+        { k: 'Fees returned', v: `${fmtSmall(p.juniorLeftoverFees)} USDG` },
       ],
-      pick: 'Wallet', onPick: view, ...first,
     });
-    if (!mode) throw new Error('Early exit cancelled.');
-    if (mode === 'Wallet') {
-      const p = await preview(COVER.Wallet);
-      if (p.coverUsdg > 0n) {
-        // Accrual keeps growing until the tx lands: allow ~15 minutes of extra accrual plus treasury's cut on it.
-        const extra = (pos.senior * vaultState.rate * 900n * 2n) / (WAD * YEAR);
-        const need = p.coverUsdg + extra;
-        if ((await balanceOf(cfg.contracts.usdg)) < need) throw new Error(`Not enough mUSDG in your wallet (need about ${fmtSmall(need)}). Mint some or pick another option.`);
-        await approveIfNeeded(cfg.contracts.usdg, 'mUSDG', need);
-      }
-    }
-    await sendTx(`Early exit (${mode}), position #${id}`, { address: cfg.contracts.vault, abi: vaultAbi, functionName: 'earlyExit', args: [id, COVER[mode]] });
+    if (!ok) throw new Error('Early exit cancelled.');
+    await sendTx(`Early exit position #${id}`, { address: cfg.contracts.vault, abi: vaultAbi, functionName: 'earlyExit', args: [id] });
   }),
   'pos-settle': (b) => run(b, async () => {
     const id = BigInt(b.dataset.id);
-    const r = await readPos(id);
-    const mine = r.owner.toLowerCase() === account.toLowerCase();
-    const preview = (mode) => pub.readContract({ address: cfg.contracts.vault, abi: vaultAbi, functionName: 'previewSettle', args: [id, mode] });
-    const view = async (mode) => {
-      const p = await preview(COVER[mode]);
-      const residual = p.coverUsdg > 0n;
-      const notes = {
-        Wallet: `Backstop pays first. The remaining ${fmtSmall(p.coverUsdg)} USDG (shortfall plus treasury's cut on it) comes from your fees, then your wallet.`,
-        IdleCarry: `Backstop pays first. The remaining ${fmtSmall(p.coverUsdg)} USDG comes from your fees, then your idle lender deposit on Carry.`,
-        SellShares: `Backstop pays first. The remaining ${fmtSmall(p.coverUsdg)} USDG is covered by taking ${fmtSmall(p.mstrSold, DS)} MSTR from the junior.` + (mine ? '' : ' Anyone can settle this way.'),
-      };
-      return {
-        note: residual ? notes[mode] : 'Fees and the backstop cover senior accrual. No junior cover is needed. Proceeds go to the junior and lenders, not the caller.',
-        rows: [
-          { k: 'Senior accrual (incl. carried)', v: `${fmtSmall(p.accrual)} USDG` },
-          { k: 'Senior floor · perf', v: `${fmtSmall(p.seniorFloor)} · ${fmtSmall(p.seniorPerf)} USDG` },
-          { k: 'Treasury', v: `${fmtSmall(p.treasury)} USDG` },
-          { k: 'From backstop', v: `${fmtSmall(p.fromBackstop)} USDG` },
-          { k: 'Junior cover (incl. treasury on cover)', v: `${fmtSmall(p.coverUsdg)} USDG` },
-          { k: 'Junior MSTR sold', v: `${fmtSmall(p.mstrSold, DS)} MSTR` },
-          { k: 'Junior MSTR kept', v: `${fmtSmall(p.mstrKept, DS)} MSTR` },
-          { k: 'Junior fees (before cover)', v: `${fmtSmall(p.juniorYield)} USDG` },
-        ],
-      };
-    };
-    // Wallet / IdleCarry settle is junior-only; anyone else can only settle with SellShares.
-    const pick = mine ? 'Wallet' : 'SellShares';
-    const first = await view(pick);
-    const mode = await askConfirm({
+    const p = await pub.readContract({ address: cfg.contracts.vault, abi: vaultAbi, functionName: 'previewSettle', args: [id] });
+    const ok = await askConfirm({
       eyebrow: 'SETTLE', title: `Settle position #${id}`, yes: 'Confirm settle',
-      choices: mine ? [
-        { value: 'Wallet', label: 'Wallet USDG', hint: 'Cover any shortfall left after the backstop from your wallet.' },
-        { value: 'IdleCarry', label: 'Idle USDG on Carry', hint: 'Use unmatched USDG you lent on Carry.' },
-        { value: 'SellShares', label: 'Sell from position', hint: 'Give up some MSTR. This is what anyone else settling would use.' },
-      ] : undefined,
-      pick, onPick: view, ...first,
+      note: 'v3.2 vault: one-arg settle. Past-term healthy positions may roll; underwater+48h force-settle applies on the upgraded impl.',
+      rows: [
+        { k: 'Senior accrual', v: `${fmtSmall(p.accrual)} USDG` },
+        { k: 'Senior floor · perf', v: `${fmtSmall(p.seniorFloor)} · ${fmtSmall(p.seniorPerf)} USDG` },
+        { k: 'Treasury', v: `${fmtSmall(p.treasury)} USDG` },
+        { k: 'Junior MSTR kept', v: `${fmtSmall(p.mstrKept, DS)} MSTR` },
+        { k: 'Junior fees', v: `${fmtSmall(p.juniorYield)} USDG` },
+      ],
     });
-    if (!mode) throw new Error('Settle cancelled.');
-    const m = mode === true ? 'SellShares' : mode;
-    if (m === 'Wallet') {
-      const p = await preview(COVER.Wallet);
-      const need = p.coverUsdg > p.juniorYield ? p.coverUsdg - p.juniorYield : 0n;
-      if (need > 0n) {
-        if ((await balanceOf(cfg.contracts.usdg)) < need) throw new Error(`Not enough mUSDG in your wallet (need about ${fmtSmall(need)}). Mint some or pick another option.`);
-        await approveIfNeeded(cfg.contracts.usdg, 'mUSDG', need + need / 50n);   // 2% headroom for accrual drift
-      }
-    }
-    await sendTx(`Settle (${m}), position #${id}`, { address: cfg.contracts.vault, abi: vaultAbi, functionName: 'settle', args: [id, COVER[m]] });
+    if (!ok) throw new Error('Settle cancelled.');
+    await sendTx(`Settle position #${id}`, { address: cfg.contracts.vault, abi: vaultAbi, functionName: 'settle', args: [id] });
   }),
   'auto-on': (b) => run(b, () => sendTx('Turn auto-compound on', { address: cfg.contracts.vault, abi: vaultAbi, functionName: 'setAutoCompound', args: [true] })),
   'auto-off': (b) => run(b, () => sendTx('Turn auto-compound off', { address: cfg.contracts.vault, abi: vaultAbi, functionName: 'setAutoCompound', args: [false] })),
@@ -943,8 +877,7 @@ const actions = {
     await sendTx(`Set caps ${fmt(s, DU, 0)} / ${fmt(j, DU, 0)} / ${fmt(w, DU, 0)}`, { address: cfg.contracts.vault, abi: vaultAbi, functionName: 'setDepositCaps', args: [s, j, w] });
   }),
   'set-morpho': (b) => run(b, async () => {
-    const a = readAmount('morphoPct', 18) / 100n;   // percent → WAD
-    await sendTx(`Set Morpho rate to ${pct(a)}`, { address: cfg.contracts.vault, abi: vaultAbi, functionName: 'setMorphoRate', args: [a] });
+    throw new Error('v3.2-dualpool removed setMorphoRate — no fixed lender coupon. Yield is Morpho + Carry once the strategy is wired.');
   }),
   'pause': (b) => run(b, () => sendTx('Pause vault', { address: cfg.contracts.vault, abi: vaultAbi, functionName: 'pause' })),
   'unpause': (b) => run(b, () => sendTx('Unpause vault', { address: cfg.contracts.vault, abi: vaultAbi, functionName: 'unpause' })),

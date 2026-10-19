@@ -4,13 +4,12 @@ For maker's dev (owner key) and the Testnet thread. Testnet 46630 only. Nothing 
 
 This upgrades the live proxy `0x24B799026AA7baa6856bCFD00c1Be1f583A83e35` once to `main` (Stage 1 #27, multi-market #29, Stage 2 #30), then wires the Morpho strategy, the MSTR DualPool pool and the sell router.
 
+> **DONE 2026-10-18 CDT.** Live `version() = v3.2-dualpool`. Record: [`docs/testnet-runs/2026-10-18-v32-upgrade.md`](./testnet-runs/2026-10-18-v32-upgrade.md). New impl `0x2A6b…A29D`, strategy `0x43ec…E6AE`, router `0x687f…424C`. Keep this runbook for rollback / re-wire.
+
 ## Do not start before
 
-1. **v3 #1, #3 and #5 are settled and recorded.**
-   - They mature 2026-10-19 02:35–02:39 UTC, and the dev settles them under the current code.
-   - The Testnet thread verifies them read-only and records the results in `docs/testnet-runs` and `docs/TESTNET_CHECKLIST.md`.
-   - Upgrade only after that record is merged.
-2. **The site release is ready to go out right after the upgrade** (see "Site changes" below). The current site calls functions this upgrade removes.
+1. **v3 #1, #3 and #5 are settled and recorded.** ✅
+2. **The site release is ready to go out right after the upgrade** (see "Site changes" below). ✅ ABIs + one-arg settle/earlyExit shipped with the upgrade commit.
 
 ## Who signs what
 

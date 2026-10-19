@@ -18,9 +18,7 @@
     "function claimWithdraw()",
     "function withdrawUnmatched(uint256 positionId)",
     "function earlyExit(uint256 positionId)",
-    "function earlyExit(uint256,uint8)",
     "function settle(uint256 positionId)",
-    "function settle(uint256,uint8)",
     "function fundGasCredit()",
     "function withdrawGasCredit(uint256 amount)",
     "function gasCreditWei(address) view returns (uint256)",
@@ -34,13 +32,11 @@
     "function totalSeniorAssets() view returns (uint256)",
     "function claimableWithdraw(address) view returns (uint256)",
     "function minDepositUsdg() view returns (uint256)",
-    "function setSellSharesEnabled(bool)",
     "function setAutoCompound(bool)",
     "function version() view returns (string)",
     "function seniorPrincipal(address) view returns (uint256)",
-    // v3 Position: owner, mstrAmount, seniorPrincipal, targetSenior, entryPriceWad, feeUsdg,
-    // openedAt, lastFeeSplitAt, settled, boosted, unpaidSeniorAccrual, rateIndexSnapshot, treasuryCutLocked
-    "function positions(uint256) view returns (address,uint256,uint256,uint256,uint256,uint256,uint64,uint64,bool,bool,uint256,uint256,uint256)",
+    // v3.2 Position: … + marketId (last)
+    "function positions(uint256) view returns (address,uint256,uint256,uint256,uint256,uint256,uint64,uint64,bool,bool,uint256,uint256,uint256,uint256)",
   ];
 
   // JuniorDeposit(positionId indexed, junior indexed, mstrAmount, matched)

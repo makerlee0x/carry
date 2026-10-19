@@ -14,7 +14,7 @@ Last run: 2026-10-18 (read-only pass, then a transaction pass from the testnet-o
 | --- | --- | --- | --- |
 | Forge suite | `cd contracts && forge test` | ✅ | 27/27 pass (25 vault, 2 deploy-script) |
 | Deploy scripts stay disarmed | `test_broadcastDisarmed`, `test_carryTestnetScriptDisarmed` | ✅ | |
-| Runtime size under EIP-170 (24,576 bytes) | `forge build --sizes` | ✅ | `main` is 24,432 bytes after #3, #23 and the #21 strategy wiring (144 spare). The live testnet impl is still 29,602 until it is upgraded (S1). |
+| Runtime size under EIP-170 (24,576 bytes) | `forge build --sizes` | ✅ | Live impl `0x2A6b…` is **23,719** B after 2026-10-18 v3.2 upgrade (857 spare). |
 | Site index check | `npm run check` | ✅ | |
 
 ## 2. On-chain flows (v3 PROXY)
