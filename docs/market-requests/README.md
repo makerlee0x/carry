@@ -22,6 +22,14 @@ spreadsheet on first run and stores the id in script properties (`SHEET_ID`).
 If you already deployed a broken standalone script, paste the new `.gs`, run **`setup` once**, then
 **Deploy → Manage deployments → Edit → Version: New version** so the same `/exec` URL keeps working.
 
+### Status (2026-10-18)
+
+Live `product.marketRequestUrl` in `public/config.json` still points at the `/exec` web app, but
+direct GET/POST to that URL returns **HTTP 403**. The markets form will look like it “sends”
+(`mode: 'no-cors'`) without writing a sheet row. **Maker/owner:** open the Apps Script project →
+paste current [`market-request-script.gs`](./market-request-script.gs) if drifted → **Deploy →
+Manage deployments → Edit → New version** (Execute as Me, Anyone) → confirm a test POST returns JSON.
+
 ### Bound-to-sheet alternative
 
 If you prefer: create a Google Sheet first, open **Extensions → Apps Script** from that sheet, paste the same

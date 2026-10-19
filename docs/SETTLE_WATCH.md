@@ -100,7 +100,19 @@ Full settle pack: [`V3_MATURITY_SETTLE.md`](./V3_MATURITY_SETTLE.md). Upgrade: [
 
 **Maturity settle (2026-10-18 ~10:18pm CDT):** deployer `0xcA44…3c57` permissionless `settle(id)` IdleCarry. `previewSettle` showed `coverUsdg=0` with accrual paid from vault `backstop` (`fromBackstop` ≈ 0.115 / 0.115 / 0.046 USDG). `Settled` events emitted; `settled=true` on #1/#3/#5.
 
-**Auto-compound note:** junior had `autoCompound=true`, so settle reopened new matched positions **#9 / #10 / #11** (same junior, `openedAt` = settle timestamps). Original proof IDs #1/#3/#5 are closed; the rollovers are a separate 7d watch if desired.
+**Auto-compound note:** junior had `autoCompound=true`, so settle reopened new matched positions **#9 / #10 / #11** (same junior, `openedAt` = settle timestamps). Original proof IDs #1/#3/#5 are closed.
+
+### Rollover / DualPool watch (open)
+
+| Field | **#9** | **#10** | **#11** | **#13** |
+| --- | --- | --- | --- | --- |
+| Origin | auto-compound from settle #1 | from #3 | from #5 | auto-compound after DualPool earlyExit #12 |
+| Junior | `0x76339f8D…1803` | same | same | same |
+| `openedAt` (unix) | 1792379898 | 1792379902 | 1792379905 | 1792381940 |
+| **Settle after (CDT)** | **2026-10-25 10:18:18 PM CDT** | **10:18:22 PM** | **10:18:25 PM** | **10:52:20 PM CDT** |
+| State | matched | matched | matched | matched (DualPool) |
+
+Also open: owner DualPool positions **#15** (mature **2026-10-25 11:15:08 PM CDT**) and later unmatched juniors from FIFO soak tests. Prefer `settle(id)` after term; `earlyExit(id)` anytime for DualPool unwind proofs.
 
 ### Quick cast (after each clock; no keys in repo)
 

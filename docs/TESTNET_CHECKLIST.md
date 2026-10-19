@@ -39,24 +39,25 @@ record is a local `/tmp` file.
 | Settle after term | Backstop first, then junior; default IdleCarry; permissionless when no cover | ✅ | v3 #1/#3/#5 settled 2026-10-18 ~10:18pm CDT; see section 5 |
 | Settle before term | Reverts `TermNotElapsed` | ✅ | Simulated `settle(1)` from the junior: `TermNotElapsed`. No tx on chain. |
 | Senior instant withdraw | Works when idle covers it and queue is empty | ✅ | `0x3cf3…396b` (25 USDG) |
-| Senior withdraw when matched | Enters FIFO queue; claimable after positions close | ⬜ | Queue works (`0x405d…cc10` → `0x9e88…aa57`), but it was filled by a new deposit, not a closing position. Re-check after settle. |
+| Senior withdraw when matched | Enters FIFO queue; claimable after positions close | ✅ | Queue [`0x9149…b902`](https://explorer.testnet.chain.robinhood.com/tx/0x9149f53442ce024e7b8366a2add73cc8a2cb1e966fdda2b41b8bd3a4f58fb902) (25 USDG); filled by `earlyExit(14)` [`0x6b71…716c`](https://explorer.testnet.chain.robinhood.com/tx/0x6b71e8be9052535ed709180c1ebdcd7b3cca50bc299086e1246095204220716c); `claimWithdraw` [`0xb579…ea03`](https://explorer.testnet.chain.robinhood.com/tx/0xb579b2487d5181060f437f961ae9537c3fe7162d17615f90dd54e60d3c9cea03) |
 | Auto-compound on | Reopens position; payout under $25 goes to wallet | ✅ | Settle #1/#3/#5 reopened #9/#10/#11; earlyExit #12 reopened #13 into DualPool |
 | `withdrawUnmatched` | Always to wallet, ignores auto-compound | ✅ | `0x0958…e563` with auto-compound on: MSTR left, no new position |
-| Pause | Blocks new deposits; exits and withdrawals still work | ⬜ | Pause/unpause work (deploy + `0x6a23…7c`); blocking not tested. `paused()` = false now. |
-| Source verified on explorer | Impl shows verified source on Blockscout | ✅ | Live impl `0x1473…58A5` verified 2026-10-18 (`forge verify-contract` → Blockscout). Proxy itself is ERC-1967. |
+| Pause | Blocks new deposits; exits and withdrawals still work | ✅ | Pause [`0xf07f…3abe`](https://explorer.testnet.chain.robinhood.com/tx/0xf07f970ab6ff0affcaf36cea89e4803bdc1a4d09b6506919b9abdfefb5093abe): `depositSenior`/`depositJunior` revert `Paused`; `previewEarlyExit(13)` still works; unpause [`0xa8f4…9b2d`](https://explorer.testnet.chain.robinhood.com/tx/0xa8f407ebc7179ae7e4544c1262aa131604858aa984edffb8b6c1e5bc72969b2d) |
+| Source verified on explorer | Impl shows verified source on Blockscout | ✅ | Live impl `0x1473…58A5` + CarryStrategy verified. MockMorpho + DualHook still unverified (bytecode / vendored hook package). |
 | Two lenders, one junior | Each lender's idle and share NAV stay correct | ✅ | #3 funded by both lenders; shares read 215 + 150 = 365 = `totalSeniorAssets`. Re-check NAV after fees. |
 
 ## 3. Site against testnet
 
-Not run: needs a browser wallet. From the cloud env, `usecarry.io` redirects to `www.usecarry.io`, which is still blocked.
+Browser pass 2026-10-18 (no wallet connected — deposit/match/early-exit still need MetaMask).
 
 | Check | Expected | Status | Notes |
 | --- | --- | --- | --- |
-| Connect MetaMask on 46630 | Wrong-network prompt if on another chain | ⬜ | |
-| Deposit and match from the UI | Card shows Idle → Active | ⬜ | |
-| Early exit dialog | One-arg preview / exit (no CoverMode); shows amounts | ⬜ | v3.2 UI — CoverMode chooser removed |
-| Positions show after reload | Reads from the v3 PROXY, not the old v2.5 one | ⬜ | |
-| Light and dark mode, phone width | No broken layout | ⬜ | |
+| Connect MetaMask on 46630 | Wrong-network prompt if on another chain | ⬜ | Needs wallet; Connect CTA present |
+| Deposit and match from the UI | Card shows Idle → Active | ⬜ | Needs wallet |
+| Early exit dialog | One-arg preview / exit (no CoverMode); shows amounts | ⬜ | Needs wallet; CoverMode gone from `testnet.html` / config |
+| Positions / config against v3 PROXY | Live `config.json` = `v3.2-dualpool` impl `0x1473…` | ✅ | `www.usecarry.io/config.json` matches `main`; View contract → PROXY `0x24B7…3e35` |
+| Light and dark mode, phone width | No broken layout | ✅ | Light toggle works; markets/dashboard OK at ~390px |
+| Market request form | Posts to Apps Script or falls back | ❌ | Deployed `/exec` returns **403**; needs Google **Manage deployments → New version** (see `docs/market-requests/README.md`) |
 
 ## 4. Superseded v2.5 vault (wind-down)
 
