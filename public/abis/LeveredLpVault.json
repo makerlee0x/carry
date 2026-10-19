@@ -1447,11 +1447,6 @@
         "name": "maxTotalJuniorUsdg_",
         "type": "uint256",
         "internalType": "uint256"
-      },
-      {
-        "name": "maxPerWalletUsdg_",
-        "type": "uint256",
-        "internalType": "uint256"
       }
     ],
     "outputs": [],
@@ -2234,12 +2229,6 @@
       },
       {
         "name": "maxTotalJuniorUsdg",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
-      },
-      {
-        "name": "maxPerWalletUsdg",
         "type": "uint256",
         "indexed": false,
         "internalType": "uint256"

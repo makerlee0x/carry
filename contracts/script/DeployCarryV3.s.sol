@@ -27,7 +27,6 @@ contract DeployCarryV3 is Script {
     uint256 public constant CAP_SENIOR = 0;
     /// @dev Dollar amounts, scaled by the USDG token's own decimals (real USDG has 6).
     uint256 public constant CAP_JUNIOR_DOLLARS = 25_000;
-    uint256 public constant CAP_PER_WALLET = 0;
     uint256 public constant MIN_DEPOSIT_DOLLARS = 25;
     uint256 public constant MORPHO = 0.039e18;
     uint64 public constant TERM = 7 days;
@@ -60,7 +59,7 @@ contract DeployCarryV3 is Script {
 
         if (live) {
             uint256 unit = 10 ** IERC20Minimal(usdg).decimals();
-            vault.setDepositCaps(CAP_SENIOR, CAP_JUNIOR_DOLLARS * unit, CAP_PER_WALLET);
+            vault.setDepositCaps(CAP_SENIOR, CAP_JUNIOR_DOLLARS * unit);
             vault.setMinDepositUsdg(MIN_DEPOSIT_DOLLARS * unit);
             vault.setGasRefundWei(0.0001 ether);
             vault.unpause();

@@ -36,7 +36,7 @@ contract VaultStrategyTest is Test {
         );
         vault = LeveredLpVault(address(new ERC1967Proxy(address(impl), init)));
         vault.unpause();
-        vault.setDepositCaps(0, 25_000 ether, 0);
+        vault.setDepositCaps(0, 25_000 ether);
 
         morpho = new MockMorphoVault(IERC20(address(usdg)), 0.05e18);
         strat = new CarryStrategy(address(vault), IERC4626(address(morpho)));

@@ -1,20 +1,20 @@
 # Testnet checklist (v3 lender pool)
 
 What has to pass on Robinhood Chain Testnet **46630** before the security pass and mainnet work.
-Live product CA: `public/config.json` → `chain.vault` (`0x24B7…3e35`, `version() = v3-lender-pool`).
+Live product CA: `public/config.json` → `chain.vault` (`0x24B7…3e35`, `version() = v3.2-dualpool`).
 
 Status key: ✅ passed · ❌ failed (link the issue) · ⬜ not run yet.
 Anything that fails gets a GitHub issue; link it in the Notes column.
 
-Last run: 2026-10-18 (read-only pass, then a transaction pass from the testnet-only wallet `0x090B…0809`). Full readout and tx links: [run 2026-10-18](./testnet-runs/2026-10-18.md).
+Last run: 2026-10-18 — [v2.5/v3 settles](./SETTLE_WATCH.md), [v3.2 upgrade + DualPool wire](./testnet-runs/2026-10-18-v32-upgrade.md), earlier [run 2026-10-18](./testnet-runs/2026-10-18.md).
 
 ## 1. Contracts (local)
 
 | Check | How | Status | Notes |
 | --- | --- | --- | --- |
-| Forge suite | `cd contracts && forge test` | ✅ | 27/27 pass (25 vault, 2 deploy-script) |
+| Forge suite | `cd contracts && forge test` | ✅ | **87/87** pass (incl. SixDecimalUsdg + invariants) |
 | Deploy scripts stay disarmed | `test_broadcastDisarmed`, `test_carryTestnetScriptDisarmed` | ✅ | |
-| Runtime size under EIP-170 (24,576 bytes) | `forge build --sizes` | ✅ | Live impl `0x2A6b…` is **23,719** B after 2026-10-18 v3.2 upgrade (857 spare). |
+| Runtime size under EIP-170 (24,576 bytes) | `forge build --sizes` | ✅ | Live impl `0x1473…` **23,719** B after #22 per-wallet removal upgrade |
 | Site index check | `npm run check` | ✅ | |
 
 ## 2. On-chain flows (v3 PROXY)
@@ -25,7 +25,7 @@ record is a local `/tmp` file.
 
 | Flow | Expected | Status | Notes |
 | --- | --- | --- | --- |
-| `version()` on PROXY | `v3-lender-pool` | ✅ | Read 2026-10-18; impl `0x7BeE…778E` |
+| `version()` on PROXY | `v3.2-dualpool` | ✅ | Live after 2026-10-18 upgrades; impl `0x1473…58A5` |
 | Senior `depositSenior` ≥ $25 | Pool shares minted, idle USDG up | ✅ | `0xb9eb…8450`: 100 USDG → 1e26 shares |
 | Senior deposit < $25 | Reverts | ✅ | Simulated (`eth_call`): `BelowMinDeposit`. No tx on chain. |
 | Junior `depositJunior` with enough idle USDG | Position Active, 7-day timer starts | ✅ | `0xa516…fe82` (#1) |
@@ -33,14 +33,13 @@ record is a local `/tmp` file.
 | Gas refund | Paid only when the deposit matched, scaled to the match | ✅ | `0xed4d…b3e8`: 0.0001 ETH for a 100%-matched deposit. Partial-match scaling not exercised. |
 | Fee in (`MockFeePool.payFee` / `accrueLpFee`) | Fees accrue raw; split only at claim/exit/settle | ✅ | [`0xca00…03c3`](https://explorer.testnet.chain.robinhood.com/tx/0xca008cd5138450ec4bd509bb2d319b257be58bce2f1d085f2d7925757bc003c3): 20 USDG onto #6 raised `totalUnsplitFees` to 20.001 (with [`0xf239…8805`](https://explorer.testnet.chain.robinhood.com/tx/0xf23988684320efd8939590c3eb76c3bb87bcf828c1aaf56713c7998d30ca8805), 0.001 on #7); nothing split until claim |
 | `claimFees` | Maker waterfall: senior floor → treasury → senior perf → junior | ✅ | [`0x6828…36ee`](https://explorer.testnet.chain.robinhood.com/tx/0x682897a4275f608274aece5a59ad4c3fed8e1ec9fd065be704f10c88467736ee) on 20 USDG: floor 0.0000422 (221 s of accrual), treasury 4.0, senior perf 4.0, junior 11.99996. Treasury 20% and perf 20% of gross, as documented. Treasury landed in `backstop` (0 → 4.0002), see finding C6 |
-| Early exit, Wallet USDG cover | `previewEarlyExit` → approve → `earlyExit(id, 0)` succeeds | ✅ | [`0xc098…fe4a`](https://explorer.testnet.chain.robinhood.com/tx/0xc09808ef280856ec9cbe22f570e6ef25681df4c48a31d07a03ccf7988425fe4a) (#8, 97.3 USDG matched, no fees): cover 4.0e-6 USDG pulled from the wallet, 1 MSTR returned |
-| Early exit, Idle Carry cover | No wallet approve needed | ✅ | [`0x2583…01a3`](https://explorer.testnet.chain.robinhood.com/tx/0x258301625e60af1059c3e6ddfee3f93da77c16afdfa0c8b284c99e53663601a3) (#6, fees already claimed): cover 1.6e-5 USDG paid from the junior's own pool shares, 1 MSTR returned. No-cover case: [`0x79e4…a29d`](https://explorer.testnet.chain.robinhood.com/tx/0x79e4f9ac6d7a28d4274ee0a04bb92bf5e7f77463042da6771846c0e16d36a29d) (#7, fees 0.001 covered the accrual) |
-| Early exit, SellShares (mode 2) | Testnet stub path completes | ⬜ | `sellSharesRouter` is `0x0` on v3; the owner `0xcA44…3c57` has to set it first (the testnet wallet is not the owner) |
+| Early exit (v3.2 one-arg) | `previewEarlyExit(id)` → `earlyExit(id)` | ✅ | Pre-v3.2 cover-mode txs still valid history; post-upgrade smoke [`0x1b45…23c7`](https://explorer.testnet.chain.robinhood.com/tx/0x1b45dee292918418a02a02c5b52bdfe8ae1721dfbc01bb9fc4145bdea56323c7) on pooled #12 |
+| SellShares router set | Router non-zero after DualPool wire | ✅ | `sellSharesRouter` = `0x687f…424C` (MockMstrSellRouter) |
 | Settle after term | Backstop first, then junior; default IdleCarry; permissionless when no cover | ✅ | v3 #1/#3/#5 settled 2026-10-18 ~10:18pm CDT; see section 5 |
 | Settle before term | Reverts `TermNotElapsed` | ✅ | Simulated `settle(1)` from the junior: `TermNotElapsed`. No tx on chain. |
 | Senior instant withdraw | Works when idle covers it and queue is empty | ✅ | `0x3cf3…396b` (25 USDG) |
 | Senior withdraw when matched | Enters FIFO queue; claimable after positions close | ⬜ | Queue works (`0x405d…cc10` → `0x9e88…aa57`), but it was filled by a new deposit, not a closing position. Re-check after settle. |
-| Auto-compound on | Reopens position; payout under $25 goes to wallet | ⬜ | Enabled for the v3 junior; needs a settle/exit to test |
+| Auto-compound on | Reopens position; payout under $25 goes to wallet | ✅ | Settle #1/#3/#5 reopened #9/#10/#11; earlyExit #12 reopened #13 into DualPool |
 | `withdrawUnmatched` | Always to wallet, ignores auto-compound | ✅ | `0x0958…e563` with auto-compound on: MSTR left, no new position |
 | Pause | Blocks new deposits; exits and withdrawals still work | ⬜ | Pause/unpause work (deploy + `0x6a23…7c`); blocking not tested. `paused()` = false now. |
 | Source verified on explorer | Proxy and impl show verified source | ❌ | Both unverified as of 2026-10-18 |

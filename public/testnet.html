@@ -226,7 +226,8 @@
       <p class="muted" style="margin:0">Shown only when the connected wallet is the vault owner. Boost is a stake-before-open flag: it applies to positions opened after it is set.</p>
       <div class="field"><input id="boostAddr" placeholder="0x… wallet to boost" aria-label="Wallet to boost"></div>
       <div class="btnrow"><button class="btn secondary" data-act="boost-on">Set boosted</button><button class="btn tertiary" data-act="boost-off">Clear boost</button></div>
-      <div class="field"><input id="capSenior" inputmode="decimal" placeholder="senior cap" aria-label="Senior cap USDG"><input id="capJunior" inputmode="decimal" placeholder="junior cap" aria-label="Junior cap USDG"><input id="capWallet" inputmode="decimal" placeholder="per wallet" aria-label="Per-wallet cap USDG"></div>
+      <div class="field"><input id="capSenior" inputmode="decimal" placeholder="senior cap" aria-label="Senior cap USDG"><input id="capJunior" inputmode="decimal" placeholder="junior cap" aria-label="Junior cap USDG"></div>
+      <p class="muted" style="margin:0">No per-wallet cap (removed).</p>
       <div class="btnrow"><button class="btn secondary" data-act="set-caps">Set caps (0 = none)</button></div>
       <p class="muted" style="margin:0">Morpho rate admin removed on v3.2-dualpool (no fixed coupon).</p>
       <div class="field"><input id="matchCapIn" inputmode="numeric" placeholder="match cap (0 = 25)" aria-label="Match cap"><button class="btn secondary" data-act="set-matchcap">Set match cap</button></div>
@@ -729,21 +730,19 @@ async function approveIfNeeded(token, symbol, amount, spender = cfg.contracts.va
   await sendTx(`Approve ${symbol}`, { address: token, abi: erc20Abi, functionName: 'approve', args: [spender, amount] });
 }
 
-// USDG room left under the vault caps for this wallet (same checks as _enforceJuniorCap / _enforceSeniorCap).
+// USDG room left under market total caps (no per-wallet cap — issue #22).
 // usdg === null means no cap applies.
 async function capRoom(side) {
   const v = (functionName, args = []) => pub.readContract({ address: cfg.contracts.vault, abi: vaultAbi, functionName, args });
   const junior = side === 'junior';
-  const [capTotal, capWallet, total, mine, price] = await Promise.all([
-    v(junior ? 'maxTotalJuniorUsdg' : 'maxTotalSeniorUsdg'), v('maxPerWalletUsdg'),
-    v(junior ? 'totalJuniorUsdg' : 'totalSeniorAssets'), v(junior ? 'walletJuniorUsdg' : 'walletSeniorUsdg', [account]),
+  const [capTotal, total, price] = await Promise.all([
+    v(junior ? 'maxTotalJuniorUsdg' : 'maxTotalSeniorUsdg'),
+    v(junior ? 'totalJuniorUsdg' : 'totalSeniorAssets'),
     pub.readContract({ address: cfg.contracts.oracle, abi: oracleAbi, functionName: 'mstrPriceWad' }),
   ]);
-  const left = (cap, used) => (cap === 0n ? null : cap > used ? cap - used : 0n);
-  const t = left(capTotal, total), w = left(capWallet, mine);
-  if (t === null && w === null) return { usdg: null, price };
-  if (w !== null && (t === null || w <= t)) return { usdg: w, price, why: `${fmt(capWallet, DU, 0)} USDG per-wallet cap` };
-  return { usdg: t, price, why: `${fmt(capTotal, DU, 0)} USDG total ${side} cap` };
+  if (capTotal === 0n) return { usdg: null, price };
+  const room = capTotal > total ? capTotal - total : 0n;
+  return { usdg: room, price, why: `${fmt(capTotal, DU, 0)} USDG total ${side} cap` };
 }
 
 async function setBoost(on) {
@@ -873,8 +872,8 @@ const actions = {
   'boost-off': (b) => run(b, () => setBoost(false)),
   'set-caps': (b) => run(b, async () => {
     const amt = (id) => { const raw = $(id).value.trim(); return raw === '' || raw === '0' ? 0n : readAmount(id); };
-    const [s, j, w] = [amt('capSenior'), amt('capJunior'), amt('capWallet')];
-    await sendTx(`Set caps ${fmt(s, DU, 0)} / ${fmt(j, DU, 0)} / ${fmt(w, DU, 0)}`, { address: cfg.contracts.vault, abi: vaultAbi, functionName: 'setDepositCaps', args: [s, j, w] });
+    const [s, j] = [amt('capSenior'), amt('capJunior')];
+    await sendTx(`Set caps ${fmt(s, DU, 0)} / ${fmt(j, DU, 0)}`, { address: cfg.contracts.vault, abi: vaultAbi, functionName: 'setDepositCaps', args: [s, j] });
   }),
   'set-morpho': (b) => run(b, async () => {
     throw new Error('v3.2-dualpool removed setMorphoRate — no fixed lender coupon. Yield is Morpho + Carry once the strategy is wired.');

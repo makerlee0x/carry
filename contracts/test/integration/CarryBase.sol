@@ -51,7 +51,7 @@ abstract contract CarryBase is Test {
         );
         vault = LeveredLpVault(address(new ERC1967Proxy(address(impl), initData)));
         vault.unpause();
-        vault.setDepositCaps(0, JUNIOR_CAP, 0);
+        vault.setDepositCaps(0, JUNIOR_CAP);
     }
 
     // ─── actions ─────────────────────────────────────────────────────────────

@@ -63,7 +63,7 @@ contract LeveredLpVaultTest is Test {
         oracle = new MockOracle(PRICE);
         vault = _deployVault(1 hours, MORPHO, address(this));
         vault.unpause();
-        vault.setDepositCaps(0, 25_000 ether, 0); // uncapped senior
+        vault.setDepositCaps(0, 25_000 ether); // uncapped senior
     }
 
     function _deployVault(uint64 term_, uint256 morphoRate, address owner_) internal returns (LeveredLpVault v) {
@@ -229,7 +229,7 @@ contract LeveredLpVaultTest is Test {
         // Tiny rate + small fee → junior leftover < $25 → wallet (no compound clog).
         LeveredLpVault v = _deployVault(7 days, 0.0001e18, address(this));
         v.unpause();
-        v.setDepositCaps(0, 0, 0);
+        v.setDepositCaps(0, 0);
         v.setMinDepositUsdg(25 ether);
 
         usdg.mint(senior, 100 ether);

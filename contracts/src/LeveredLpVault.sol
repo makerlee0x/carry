@@ -159,8 +159,10 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
 
     uint256 public maxTotalSeniorUsdg;
     uint256 public maxTotalJuniorUsdg;
+    /// @dev Deprecated UUPS slot (issue #22). Never written or enforced; kept for layout.
     uint256 public maxPerWalletUsdg;
     uint256 public totalJuniorUsdg;
+    /// @dev Deprecated UUPS slots (issue #22). No longer updated.
     mapping(address => uint256) public walletSeniorUsdg;
     mapping(address => uint256) public walletJuniorUsdg;
     mapping(uint256 => uint256) internal positionJuniorUsdg;
@@ -297,7 +299,7 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         uint256 juniorLeftoverFees,
         CoverMode coverMode
     );
-    event CapsUpdated(uint256 maxTotalSeniorUsdg, uint256 maxTotalJuniorUsdg, uint256 maxPerWalletUsdg);
+    event CapsUpdated(uint256 maxTotalSeniorUsdg, uint256 maxTotalJuniorUsdg);
     event TreasuryCutUpdated(uint256 treasuryCutWad, uint256 boostedTreasuryCutWad, bool isSet);
     event BoostStakeUpdated(address indexed user, bool staked);
     event FeesClaimed(
@@ -422,14 +424,11 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         emit PausedDeposits(false);
     }
 
-    function setDepositCaps(uint256 maxTotalSeniorUsdg_, uint256 maxTotalJuniorUsdg_, uint256 maxPerWalletUsdg_)
-        external
-        onlyOwner
-    {
+    /// @notice Set market total caps. `0` = uncapped. No per-wallet cap (issue #22).
+    function setDepositCaps(uint256 maxTotalSeniorUsdg_, uint256 maxTotalJuniorUsdg_) external onlyOwner {
         maxTotalSeniorUsdg = maxTotalSeniorUsdg_;
         maxTotalJuniorUsdg = maxTotalJuniorUsdg_;
-        maxPerWalletUsdg = maxPerWalletUsdg_;
-        emit CapsUpdated(maxTotalSeniorUsdg_, maxTotalJuniorUsdg_, maxPerWalletUsdg_);
+        emit CapsUpdated(maxTotalSeniorUsdg_, maxTotalJuniorUsdg_);
     }
 
     /// @notice Add a stock market to the shared lender pool. No new contract, no upgrade.
@@ -1161,8 +1160,6 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
             totalShares -= burn;
         }
         totalSeniorAssets -= assets;
-        uint256 credited = walletSeniorUsdg[user];
-        walletSeniorUsdg[user] = assets > credited ? 0 : credited - assets;
     }
 
     // ─── helpers ─────────────────────────────────────────────────────────────
@@ -1311,7 +1308,6 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         _enqueueOpen(positionId);
         m.juniorUsdg += notional;
         totalJuniorUsdg += notional;
-        walletJuniorUsdg[junior] += notional;
         positionJuniorUsdg[positionId] = notional;
 
         bool matched = _tryMatch(positionId) > 0;
@@ -1329,7 +1325,6 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         shares[user] += minted;
         totalShares += minted;
         totalSeniorAssets += amount;
-        walletSeniorUsdg[user] += amount;
     }
 
     /// @dev Gas refund only when deposit actually matches; scaled to matched amount.
@@ -1375,17 +1370,15 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         if (price == 0) revert BadPrice();
     }
 
-    function _enforceSeniorCap(address senior, uint256 amount) internal view {
+    function _enforceSeniorCap(address, uint256 amount) internal view {
         if (maxTotalSeniorUsdg != 0 && totalSeniorAssets + amount > maxTotalSeniorUsdg) revert CapExceeded();
-        if (maxPerWalletUsdg != 0 && walletSeniorUsdg[senior] + amount > maxPerWalletUsdg) revert CapExceeded();
     }
 
-    function _enforceJuniorCap(address junior, uint256 notional) internal view {
+    function _enforceJuniorCap(address, uint256 notional) internal view {
         if (maxTotalJuniorUsdg != 0 && totalJuniorUsdg + notional > maxTotalJuniorUsdg) revert CapExceeded();
-        if (maxPerWalletUsdg != 0 && walletJuniorUsdg[junior] + notional > maxPerWalletUsdg) revert CapExceeded();
     }
 
-    function _releaseJuniorCap(address junior, uint256 positionId) internal {
+    function _releaseJuniorCap(address, uint256 positionId) internal {
         uint256 notional = positionJuniorUsdg[positionId];
         if (notional == 0) return;
         positionJuniorUsdg[positionId] = 0;
@@ -1393,8 +1386,6 @@ contract LeveredLpVault is Initializable, OwnableUpgradeable, UUPSUpgradeable, R
         m.juniorUsdg = notional > m.juniorUsdg ? 0 : m.juniorUsdg - notional;
         if (notional > totalJuniorUsdg) totalJuniorUsdg = 0;
         else totalJuniorUsdg -= notional;
-        uint256 credited = walletJuniorUsdg[junior];
-        walletJuniorUsdg[junior] = notional > credited ? 0 : credited - notional;
     }
 
     function _pullExact(IERC20Minimal token, address from, uint256 amount) internal {
