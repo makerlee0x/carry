@@ -43,7 +43,7 @@ record is a local `/tmp` file.
 | Auto-compound on | Reopens position; payout under $25 goes to wallet | ✅ | Settle #1/#3/#5 reopened #9/#10/#11; earlyExit #12 reopened #13 into DualPool |
 | `withdrawUnmatched` | Always to wallet, ignores auto-compound | ✅ | `0x0958…e563` with auto-compound on: MSTR left, no new position |
 | Pause | Blocks new deposits; exits and withdrawals still work | ✅ | Pause [`0xf07f…3abe`](https://explorer.testnet.chain.robinhood.com/tx/0xf07f970ab6ff0affcaf36cea89e4803bdc1a4d09b6506919b9abdfefb5093abe): `depositSenior`/`depositJunior` revert `Paused`; `previewEarlyExit(13)` still works; unpause [`0xa8f4…9b2d`](https://explorer.testnet.chain.robinhood.com/tx/0xa8f407ebc7179ae7e4544c1262aa131604858aa984edffb8b6c1e5bc72969b2d) |
-| Source verified on explorer | Impl shows verified source on Blockscout | ✅ | Live impl `0x1473…58A5` + CarryStrategy verified. MockMorpho + DualHook still unverified (bytecode / vendored hook package). |
+| Source verified on explorer | PROXY, impl, strategy, MockMorpho, DualPoolHook, sell router verified on Blockscout | ✅ | Live impl `0x1473…58A5`, CarryStrategy, MockMorpho, DualPoolHook, MockMstrSellRouter all verified (hook profile `0.8.26`). |
 | Two lenders, one junior | Each lender's idle and share NAV stay correct | ✅ | #3 funded by both lenders; shares read 215 + 150 = 365 = `totalSeniorAssets`. Re-check NAV after fees. |
 
 ## 3. Site against testnet
