@@ -158,27 +158,23 @@
 .hm .stat a { font-size: 13px; color: var(--muted); }
 
 /* FAQ */
-.hm .faq { margin-top: 28px; border-top: 1px solid var(--line); max-width: 860px; }
+.hm .faq { margin-top: 28px; border-top: 1px solid var(--line); }
 .hm .faq details { border-bottom: 1px solid var(--line); }
 .hm .faq details:last-child { border-bottom: 0; }
 .hm .faq summary { cursor: pointer; list-style: none; padding: 18px 0; display: flex; justify-content: space-between; gap: 16px; font-size: 17px; font-weight: 500; }
 .hm .faq summary::-webkit-details-marker { display: none; }
 .hm .faq summary::after { content: "+"; font-family: var(--mono); color: var(--muted); }
 .hm .faq details[open] summary::after { content: "−"; }
-.hm .faq details p { margin: 0 0 18px; color: var(--text); max-width: 68ch; }
+.hm .faq details p { margin: 0 0 18px; color: var(--text); }
 
-/* Desktop: the calculator fits one screen. Toggle and subtitle share a row; the options stack beside the chart. */
+/* Desktop: toggle and subtitle share a row; the chart runs full width with the three options in a row beneath it. */
 @media (min-width: 1101px) {
   .hm .headrow { display: flex; align-items: center; gap: 20px; margin: 20px 0 24px; }
   .hm .headrow .toggle, .hm .headrow .sub { margin: 0; }
-  .hm .panel { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 20px 24px; }
-  .hm .controls, .hm .foot { grid-column: 1 / -1; }
-  .hm .cards { grid-template-columns: 1fr; grid-template-rows: repeat(3, 1fr); gap: 10px; }
-  .hm .card { justify-content: center; padding: 10px 16px; }
+  .hm .card { padding: 14px 16px; }
   .hm .card .big { font-size: 22px; margin: 0 0 4px; }
   .hm .row { padding: 3px 0; }
   .hm .card .note { display: none; }
-  .hm .chart { display: flex; flex-direction: column; }
   .hm .chart-head { padding-bottom: 4px; }
   .hm .chart .total { font-size: 36px; }
 }
@@ -203,7 +199,7 @@
   /* Calculator: the three options stay side by side; each row stacks its label over its value and the notes drop out.
      Subgrid keeps the rows level across all three cards when a title wraps. */
   .hm .cards { gap: 6px; }
-  .hm .card { padding: 10px 8px; display: grid; grid-row: span 4; grid-template-rows: subgrid; row-gap: 0; }
+  .hm .card { padding: 10px 8px; display: grid; grid-row: span 5; grid-template-rows: subgrid; row-gap: 0; }
   .hm .card .name { font-size: 9.5px; letter-spacing: .04em; }
   .hm .card .big { font-size: 15px; margin: 2px 0 6px; line-height: 1.2; }
   .hm .row { flex-direction: column; gap: 1px; padding: 6px 0; font-size: 11px; }

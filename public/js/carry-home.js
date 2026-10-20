@@ -53,15 +53,15 @@
   const earn = (value, r, years) => value * (Math.pow(1 + r / 52, 52 * years) - 1);
   const MODES = {
     mstr: {
-      reg: '', cta: 'Deposit Stocks', btn: 'hm-dep-stock', label: 'Your MSTR', min: 1, max: 5000, step: 1, def: 77, minTick: '1', maxTick: '5,000',
+      reg: '', cta: 'Deposit Stocks', btn: 'hm-dep-stock', label: 'Your MSTR', min: 1, max: 5000, step: 1, def: 70, minTick: '1', maxTick: '5,000',
       toUsd: (a) => a * ((vault() && vault().price > 0) ? vault().price : 136), fmt: (a) => String(a),
       sub: (mo) => '<span class="mo">' + mo + '</span>/mo, without selling a share.',
       options: [
-        { name: 'Hold', priceOnly: true, rates: [0, 0, 0], fill: 'var(--muted)', rows: (a) => [['Shares kept', a + ' MSTR'], ['Liquidation risk', 'None']],
+        { name: 'Hold', priceOnly: true, rates: [0, 0, 0], fill: 'var(--muted)', rows: () => [['Liquidation risk', 'None']],
           note: 'You keep any rise in the stock price, but your shares earn nothing on top.' },
-        { name: 'Borrow against it', rates: [0.005, 0.015, 0.03], fill: 'var(--text)', rows: (a) => [['Shares kept', a + ' MSTR'], ['Liquidation risk', 'Yes', 'down']],
+        { name: 'Borrow against it', rates: [0.005, 0.015, 0.03], fill: 'var(--text)', rows: () => [['Liquidation risk', 'Yes', 'down']],
           note: 'You take a loan against your stock. A price drop can get it liquidated.' },
-        { name: 'Carry', carry: true, rates: [0.07, 0.135, 0.22], rows: (a) => [['Shares kept', a + ' MSTR'], ['Liquidation risk', 'None']],
+        { name: 'Carry', carry: true, rates: [0.07, 0.135, 0.22], rows: () => [['Liquidation risk', 'None']],
           note: 'You keep all your stock. Carry matches it 1:1 with USDG and you earn trading fees on 2x the size.' },
       ],
     },
@@ -70,9 +70,9 @@
       toUsd: (a) => a, fmt: (a) => usd(a),
       sub: (mo) => '<span class="mo">' + mo + '</span>/mo on your dollars.',
       options: [
-        { name: 'Onchain Lending', rates: [0.039, 0.039, 0.039], fill: 'var(--muted)', rows: () => [['Paid in', 'USDG']], note: 'Your dollars are lent to borrowers onchain.' },
-        { name: 'Neobank', rates: [0.06, 0.06, 0.06], fill: 'var(--text)', rows: () => [['Paid in', 'USDG']], note: 'Stablecoin yield inside a trading app.' },
-        { name: 'Carry', carry: true, rates: [0.065, 0.142, 0.15], rows: () => [['Paid in', 'USDG']], note: 'Onchain lending yield plus a share of Carry\'s trading fees.' },
+        { name: 'Onchain Lending', rates: [0.039, 0.039, 0.039], fill: 'var(--muted)', rows: () => [], note: 'Your dollars are lent to borrowers onchain.' },
+        { name: 'Neobank', rates: [0.06, 0.06, 0.06], fill: 'var(--text)', rows: () => [], note: 'Stablecoin yield inside a trading app.' },
+        { name: 'Carry', carry: true, rates: [0.065, 0.142, 0.15], rows: () => [], note: 'Onchain lending yield plus a share of Carry\'s trading fees.' },
       ],
     },
   };
@@ -105,10 +105,8 @@
   function mountCalc(root) {
     root.dataset.rt = '1';
     root.dataset.amtMstr = MODES.mstr.def; root.dataset.amtUsdg = MODES.usdg.def;
+    root.dataset.time = 4; root.dataset.market = 1;   // 1 year, Neutral
     root.innerHTML = CALC_HTML;
-    // Starting values are set here, not as value="" attributes: the runtime re-applies template attributes on its
-    // refreshes, which snapped the time and market sliders back to their start.
-    q(root, 'time').value = 1; q(root, 'market').value = 1;
     setMode(root, 'mstr');
   }
 
@@ -117,18 +115,26 @@
     root.dataset.mode = m;
     root.setAttribute('data-reg', M.reg);
     $('mstr').setAttribute('aria-pressed', String(m === 'mstr')); $('usdg').setAttribute('aria-pressed', String(m === 'usdg'));
-    const a = $('amount'); a.min = M.min; a.max = M.max; a.step = M.step; a.value = root.dataset[m === 'mstr' ? 'amtMstr' : 'amtUsdg'];
+    const a = $('amount'); a.min = M.min; a.max = M.max; a.step = M.step;
     $('amountLabel').textContent = M.label; $('minTick').textContent = M.minTick; $('maxTick').textContent = M.maxTick;
     $('cta').textContent = M.cta; $('lpNote').hidden = m !== 'mstr';
     $('cards').innerHTML = M.options.map((o, i) => '<div class="card' + (o.carry ? ' carry' : '') + '"><div class="name">' + o.name + '</div><div class="big" data-k="big' + i + '"></div>' +
-      '<div class="row"><span>Rate</span><b' + (o.carry ? ' class="up"' : '') + ' data-k="rate' + i + '"></b></div><div data-k="rows' + i + '"></div><div class="note">' + o.note + '</div></div>').join('');
+      '<div class="row"><span>Rate</span><b' + (o.carry ? ' class="up"' : '') + ' data-k="rate' + i + '"></b></div>' +
+      '<div class="row"><span>Per month</span><b' + (o.carry ? ' class="up"' : '') + ' data-k="mo' + i + '"></b></div><div data-k="rows' + i + '"></div><div class="note">' + o.note + '</div></div>').join('');
     $('legend').innerHTML = M.options.slice().reverse().map((o) => '<span style="--c: ' + (o.fill || 'var(--acc)') + '">' + o.name + '</span>').join('');
     render(root);
   }
 
+  // Slider positions live on the mount element and are pushed back into the inputs on every render, because the
+  // runtime's refreshes can reset an input's value without firing an input event.
+  const amtKey = (root) => (root.dataset.mode === 'mstr' ? 'amtMstr' : 'amtUsdg');
+  function syncInputs(root) {
+    const set = (k, v) => { const el = q(root, k); if (el && el.value !== String(v)) el.value = v; };
+    set('amount', root.dataset[amtKey(root)]); set('time', root.dataset.time); set('market', root.dataset.market);
+  }
   function render(root) {
-    const $ = (k) => q(root, k), mode = root.dataset.mode, M = MODES[mode], amt = +$('amount').value, [label, years] = STEPS[+$('time').value], mk = +$('market').value;
-    root.dataset[mode === 'mstr' ? 'amtMstr' : 'amtUsdg'] = amt;
+    syncInputs(root);
+    const $ = (k) => q(root, k), mode = root.dataset.mode, M = MODES[mode], amt = +root.dataset[amtKey(root)], [label, years] = STEPS[+root.dataset.time], mk = +root.dataset.market;
     const value = M.toUsd(amt), carry = M.options[M.options.length - 1];
     $('amountOut').textContent = M.fmt(amt);
     $('usdOut').textContent = mode === 'mstr' ? usd(value) : '';
@@ -138,6 +144,7 @@
       const r = o.rates[mk];
       $('big' + i).textContent = o.priceOnly ? 'Price gains only' : usd(earn(value, r, years), true);
       $('rate' + i).textContent = (Math.round(r * 1000) / 10) + '%' + (o.carry ? '*' : '');
+      $('mo' + i).textContent = usd(value * r / 12);
       $('rows' + i).innerHTML = o.rows(amt).map((row) => '<div class="row"><span>' + row[0] + '</span><b' + (row[2] ? ' class="' + row[2] + '"' : '') + '>' + row[1] + '</b></div>').join('');
     });
     const others = M.options.slice(0, -1).filter((o) => o.rates[mk] > 0);
@@ -149,7 +156,8 @@
   // Forecast curve: earnings from today to the chosen time; the dollar axis scales to the Carry total.
   // The viewBox matches the drawn width so axis text stays 12px; desktop is flatter so the calculator fits one screen.
   function drawChart(svg, value, years, opts, mk) {
-    const wide = WIDE.matches, W = Math.round(svg.getBoundingClientRect().width) || 960;
+    const box = svg.parentNode, cs = getComputedStyle(box), wide = WIDE.matches;
+    const W = Math.max(280, Math.round(box.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight)) || 960);
     const H = wide ? 350 : Math.round(Math.max(220, W * 0.6)), L = 4, R = wide ? 120 : 72, T = 36, B = 32, N = 60;
     const carry = opts[opts.length - 1], total = earn(value, carry.rates[mk], years), max = Math.max(total, 1) / 0.9;
     const x = (t) => L + (W - L - R) * t / years, y = (v) => T + (H - T - B) * (1 - v / max);
@@ -187,7 +195,7 @@
     out += '<text class="axis" x="' + L + '" y="' + (H - 8) + '">Today</text>';
     out += '<text class="axis" text-anchor="end" x="' + endX.toFixed(1) + '" y="' + (H - 8) + '">' + tl(mo) + '</text>';
     out += '<text class="axis" text-anchor="end" x="' + (endX - 10).toFixed(1) + '" y="' + (endY - 10).toFixed(1) + '" style="fill: var(--ink)">' + usd(total, true) + ' Carry</text>';
-    svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+    svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H); svg.setAttribute('width', W); svg.setAttribute('height', H);
     svg.innerHTML = out;
   }
 
@@ -212,7 +220,12 @@
   });
   document.addEventListener('pointermove', (e) => { if (sliding) { e.preventDefault(); slideTo(sliding, e); } });
   ['pointerup', 'pointercancel'].forEach((t) => document.addEventListener(t, () => { sliding = null; }));
-  document.addEventListener('input', (e) => { const root = e.target.closest && e.target.closest('[data-hm-calc]'); if (root && root.dataset.mode) render(root); });
+  document.addEventListener('input', (e) => {
+    const root = e.target.closest && e.target.closest('[data-hm-calc]'), k = e.target.dataset && e.target.dataset.k;
+    if (!root || !root.dataset.mode) return;
+    if (k === 'amount') root.dataset[amtKey(root)] = e.target.value; else if (k === 'time' || k === 'market') root.dataset[k] = e.target.value;
+    render(root);
+  });
   const renderAll = () => document.querySelectorAll('[data-hm-calc][data-mode]').forEach(render);
   let rz = 0;
   window.addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(renderAll, 120); });
@@ -226,9 +239,22 @@
     document.querySelectorAll('[data-hm-today]').forEach((e) => { e.textContent = today; });
   }
 
+  // The chart is drawn to its box's measured width, and the page can mount it before it has a size, so redraw
+  // whenever a chart box changes width.
+  const watched = new WeakSet(), widths = new WeakMap();
+  const sized = new ResizeObserver((entries) => entries.forEach((en) => {
+    const w = Math.round(en.contentRect.width), root = en.target.closest('[data-hm-calc]');
+    if (w && widths.get(en.target) !== w && root && root.dataset.mode) { widths.set(en.target, w); requestAnimationFrame(() => render(root)); }
+  }));
+
   function scan() {
     if (document.querySelector('[data-hm-receipt]:empty')) renderReceipts();
     document.querySelectorAll('[data-hm-calc]:not([data-rt])').forEach(mountCalc);
+    document.querySelectorAll('[data-hm-calc][data-mode]').forEach((r) => {
+      syncInputs(r);
+      const box = q(r, 'chart').parentNode;
+      if (!watched.has(box)) { watched.add(box); sized.observe(box); }
+    });
     if (document.querySelector('[data-hm-backstop]:empty, [data-hm-today]:empty')) fillLive();
   }
   new MutationObserver(scan).observe(document, { childList: true, subtree: true });
