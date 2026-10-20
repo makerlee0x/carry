@@ -85,9 +85,9 @@
     '<div class="field"><div class="field-head"><label for="hm-amount" data-k="amountLabel"></label><span class="val"><span data-k="amountOut"></span><small data-k="usdOut"></small></span></div>' +
     '<input id="hm-amount" type="range" data-k="amount"><div class="ticks"><span data-k="minTick"></span><span data-k="maxTick"></span></div></div>' +
     '<div class="field"><div class="field-head"><label for="hm-time">Time</label><span class="val" data-k="timeOut"></span></div>' +
-    '<input id="hm-time" type="range" min="0" max="13" step="1" value="1" data-k="time"><div class="ticks"><span>1m</span><span>30y</span></div></div>' +
+    '<input id="hm-time" type="range" min="0" max="13" step="1" data-k="time"><div class="ticks"><span>1m</span><span>30y</span></div></div>' +
     '<div class="field"><div class="field-head"><label for="hm-market">Market</label><span class="val" data-k="marketOut"></span></div>' +
-    '<input id="hm-market" type="range" min="0" max="2" step="1" value="1" data-k="market"><div class="ticks"><span>Bear</span><span>Neutral</span><span>Bull</span></div></div>' +
+    '<input id="hm-market" type="range" min="0" max="2" step="1" data-k="market"><div class="ticks"><span>Bear</span><span>Neutral</span><span>Bull</span></div></div>' +
     '<button class="cta" type="button" data-k="cta"></button></div>' +
     '<div class="chart"><div class="chart-label"><span>Est. earnings</span><span data-k="chartTime"></span></div>' +
     '<div class="chart-head"><div class="total" data-k="total"></div><div class="total-sub" data-k="totalSub"></div></div>' +
@@ -106,6 +106,9 @@
     root.dataset.rt = '1';
     root.dataset.amtMstr = MODES.mstr.def; root.dataset.amtUsdg = MODES.usdg.def;
     root.innerHTML = CALC_HTML;
+    // Starting values are set here, not as value="" attributes: the runtime re-applies template attributes on its
+    // refreshes, which snapped the time and market sliders back to their start.
+    q(root, 'time').value = 1; q(root, 'market').value = 1;
     setMode(root, 'mstr');
   }
 
@@ -163,6 +166,7 @@
     const tl = (m) => (m % 12 ? m + 'MO' : (m / 12) + 'YR');
     for (let m = tStep; m < mo; m += tStep) {
       const gx = x(m / 12).toFixed(1);
+      if (gx - L < 50 || x(years) - gx < 50) continue;   // keep clear of the "Today" and end labels
       out += '<line class="grid" stroke-dasharray="2 4" x1="' + gx + '" x2="' + gx + '" y1="' + T + '" y2="' + y(0) + '"/><text class="axis" text-anchor="middle" x="' + gx + '" y="' + (H - 8) + '">' + tl(m) + '</text>';
     }
     out += '<path d="' + area(carry.rates[mk]) + '" style="fill: var(--acc); fill-opacity: .16"/>';
@@ -194,6 +198,20 @@
     // The calculator's button opens the same deposit flow as the hero button for this side.
     else if (b.dataset.k === 'cta') { const dep = document.getElementById(MODES[root.dataset.mode].btn); if (dep) dep.click(); }
   });
+  // On touch screens, a slider follows the finger from wherever it lands on the track, instead of only when the thumb
+  // itself is grabbed (iOS Safari otherwise ignores drags that start off the thumb).
+  const slideTo = (el, e) => {
+    const r = el.getBoundingClientRect(), min = +el.min, max = +el.max, step = +el.step || 1;
+    const f = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)), v = min + Math.round(f * (max - min) / step) * step;
+    if (+el.value !== v) { el.value = v; el.dispatchEvent(new Event('input', { bubbles: true })); }
+  };
+  let sliding = null;
+  document.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'mouse' || !e.target.matches || !e.target.matches('[data-hm-calc] input[type=range]')) return;
+    sliding = e.target; e.preventDefault(); slideTo(sliding, e);
+  });
+  document.addEventListener('pointermove', (e) => { if (sliding) { e.preventDefault(); slideTo(sliding, e); } });
+  ['pointerup', 'pointercancel'].forEach((t) => document.addEventListener(t, () => { sliding = null; }));
   document.addEventListener('input', (e) => { const root = e.target.closest && e.target.closest('[data-hm-calc]'); if (root && root.dataset.mode) render(root); });
   const renderAll = () => document.querySelectorAll('[data-hm-calc][data-mode]').forEach(render);
   let rz = 0;

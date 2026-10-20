@@ -71,12 +71,18 @@
 .hm .val { font-family: var(--mono); font-size: 14px; color: var(--text); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .hm .val small { color: var(--muted); font-size: 12px; margin-left: 6px; }
 .hm .ticks { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 11px; color: var(--muted); }
-.hm input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 24px; background: transparent; margin: 0; }
+.hm input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 24px; background: transparent; margin: 0; touch-action: none; }
 .hm input[type=range]::-webkit-slider-runnable-track { height: 2px; background: var(--line-2); }
 .hm input[type=range]::-moz-range-track { height: 2px; background: var(--line-2); }
 .hm input[type=range]::-moz-range-progress { height: 2px; background: var(--acc); }
 .hm input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; margin-top: -6px; background: var(--acc); border: 0; border-radius: 0; }
 .hm input[type=range]::-moz-range-thumb { width: 14px; height: 14px; background: var(--acc); border: 0; border-radius: 0; }
+/* Touch screens get a taller hit strip and a bigger thumb. */
+@media (pointer: coarse) {
+  .hm input[type=range] { height: 36px; }
+  .hm input[type=range]::-webkit-slider-thumb { width: 22px; height: 22px; margin-top: -10px; }
+  .hm input[type=range]::-moz-range-thumb { width: 22px; height: 22px; }
+}
 .hm .cta { font-family: var(--body); font-size: 15px; font-weight: 500; background: var(--acc); color: var(--on-accent); border: 0; border-radius: 0; padding: 12px 20px; cursor: pointer; white-space: nowrap; }
 .hm .cta:hover { filter: brightness(1.08); }
 .hm .cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
@@ -154,6 +160,7 @@
 /* FAQ */
 .hm .faq { margin-top: 28px; border-top: 1px solid var(--line); max-width: 860px; }
 .hm .faq details { border-bottom: 1px solid var(--line); }
+.hm .faq details:last-child { border-bottom: 0; }
 .hm .faq summary { cursor: pointer; list-style: none; padding: 18px 0; display: flex; justify-content: space-between; gap: 16px; font-size: 17px; font-weight: 500; }
 .hm .faq summary::-webkit-details-marker { display: none; }
 .hm .faq summary::after { content: "+"; font-family: var(--mono); color: var(--muted); }
