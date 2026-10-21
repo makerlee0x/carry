@@ -610,16 +610,19 @@
       const bal = await pub.readContract({ address: token, abi: ERC20(), functionName: 'balanceOf', args: [S.account] });
       if (bal < wei) throw user(`Not enough ${name}. You have ${num(bal, dec)}.`);
       const have = await pub.readContract({ address: token, abi: ERC20(), functionName: 'allowance', args: [S.account, cfg.vault] });
-      if (have < wei) await send({ address: token, abi: ERC20(), functionName: 'approve', args: [cfg.vault, wei] }, onStep, 'Approve ' + name + ' in MetaMask…');
       // Auto-compound is a per-wallet vault setting (default off on-chain). The deposit form defaults it on;
       // send setAutoCompound first only when the wallet's setting differs from what the form asks for.
-      if (autoCompound != null && onChainFlag('autoCompound')) {
-        const cur = await pub.readContract({ address: cfg.vault, abi: vaultAbi, functionName: 'autoCompound', args: [S.account] }).catch(() => null);
-        if (cur != null && !!cur !== !!autoCompound) await send({ address: cfg.vault, abi: vaultAbi, functionName: 'setAutoCompound', args: [!!autoCompound] }, onStep, (autoCompound ? 'Turn on' : 'Turn off') + ' auto-compound in MetaMask…');
-      }
+      const cur = autoCompound != null && onChainFlag('autoCompound') ? await pub.readContract({ address: cfg.vault, abi: vaultAbi, functionName: 'autoCompound', args: [S.account] }).catch(() => null) : null;
+      const needApprove = have < wei, needAuto = cur != null && !!cur !== !!autoCompound, total = 1 + (needApprove ? 1 : 0) + (needAuto ? 1 : 0);
+      // Signing steps are numbered on the button ("Step 1 of 3: Approve MSTR") so the wallet pop-ups aren't a surprise.
+      let n = 0;
+      const stepped = label => { n += 1; const pre = total > 1 ? 'Step ' + n + ' of ' + total + ': ' : ''; return onStep ? (s => onStep(s === 'Waiting for confirmation…' ? pre + 'Confirming…' : pre + s)) : null; };
+      const tick = sym === 'USDG' ? 'USDG' : 'MSTR';
+      if (needApprove) await send({ address: token, abi: ERC20(), functionName: 'approve', args: [cfg.vault, wei] }, stepped(), 'Approve ' + tick);
+      if (needAuto) await send({ address: cfg.vault, abi: vaultAbi, functionName: 'setAutoCompound', args: [!!autoCompound] }, stepped(), (autoCompound ? 'Turn on' : 'Turn off') + ' auto-compound');
       const before = sig();
       const fn = sym === 'USDG' ? 'depositSenior' : 'depositJunior';
-      const hash = await send({ address: cfg.vault, abi: vaultAbi, functionName: fn, args: [wei] }, onStep, 'Confirm the deposit in MetaMask…');
+      const hash = await send({ address: cfg.vault, abi: vaultAbi, functionName: fn, args: [wei] }, stepped(), 'Deposit ' + amount + ' ' + tick);
       await settleAfterTx(before);
       return { ok: true, hash, msg: sym === 'USDG' ? 'USDG deposited. It matches waiting stock deposits first-in-first-out.' : 'Deposit confirmed. Your position opens once USDG matches it.' };
     } catch (e) { return fail(e); }
